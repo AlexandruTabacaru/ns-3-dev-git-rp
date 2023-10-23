@@ -94,6 +94,7 @@ set(source_files
     model/tcp-htcp.cc
     model/tcp-hybla.cc
     model/tcp-illinois.cc
+    model/tcp-prague.cc
     model/tcp-l4-protocol.cc
     model/tcp-ledbat.cc
     model/tcp-linux-reno.cc
@@ -220,6 +221,7 @@ set(header_files
     model/tcp-htcp.h
     model/tcp-hybla.h
     model/tcp-illinois.h
+    model/tcp-prague.h
     model/tcp-l4-protocol.h
     model/tcp-ledbat.h
     model/tcp-linux-reno.h
