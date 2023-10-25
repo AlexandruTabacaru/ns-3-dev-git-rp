@@ -112,3 +112,16 @@ build_example(
     ${libapplications}
     ${libtraffic-control}
 )
+
+build_example(
+  NAME tcp-prague-example
+  SOURCE_FILES tcp-prague-example.cc
+  LIBRARIES_TO_LINK
+    ${libapplications}
+    ${libcore}
+    ${libinternet}
+    ${libinternet-apps}
+    ${libnetwork}
+    ${libpoint-to-point}
+    ${libtraffic-control}
+)
