@@ -20,434 +20,450 @@
  *
  */
 
-#include <cmath>
-#include <cstddef>
-#include "ns3/log.h"
-#include "ns3/fatal-error.h"
-#include "ns3/assert.h"
-#include "ns3/enum.h"
-#include "ns3/uinteger.h"
-#include "ns3/double.h"
-#include "ns3/simulator.h"
-#include "ns3/abort.h"
-#include "ns3/object-factory.h"
-#include "ns3/string.h"
-#include "ns3/drop-tail-queue.h"
-#include "ns3/net-device-queue-interface.h"
 #include "dual-pi2-queue-disc.h"
 
-namespace ns3 {
+#include "ns3/abort.h"
+#include "ns3/assert.h"
+#include "ns3/double.h"
+#include "ns3/drop-tail-queue.h"
+#include "ns3/enum.h"
+#include "ns3/fatal-error.h"
+#include "ns3/log.h"
+#include "ns3/net-device-queue-interface.h"
+#include "ns3/object-factory.h"
+#include "ns3/simulator.h"
+#include "ns3/string.h"
+#include "ns3/uinteger.h"
 
-NS_LOG_COMPONENT_DEFINE ("DualPi2QueueDisc");
+#include <cmath>
+#include <cstddef>
 
-NS_OBJECT_ENSURE_REGISTERED (DualPi2QueueDisc);
+namespace ns3
+{
+
+NS_LOG_COMPONENT_DEFINE("DualPi2QueueDisc");
+
+NS_OBJECT_ENSURE_REGISTERED(DualPi2QueueDisc);
 
 const std::size_t CLASSIC = 0;
 const std::size_t L4S = 1;
 
-TypeId DualPi2QueueDisc::GetTypeId (void)
+TypeId
+DualPi2QueueDisc::GetTypeId(void)
 {
-  static TypeId tid = TypeId ("ns3::DualPi2QueueDisc")
-    .SetParent<QueueDisc> ()
-    .SetGroupName ("TrafficControl")
-    .AddConstructor<DualPi2QueueDisc> ()
-    .AddAttribute ("Mtu",
-                   "Device MTU (bytes); if zero, will be automatically configured",
-                   UintegerValue (0),
-                   MakeUintegerAccessor (&DualPi2QueueDisc::m_mtu),
-                   MakeUintegerChecker<uint32_t> ())
-    .AddAttribute ("A",
-                   "Value of alpha (Hz)",
-                   DoubleValue (0.15),
-                   MakeDoubleAccessor (&DualPi2QueueDisc::m_alpha),
-                   MakeDoubleChecker<double> ())
-    .AddAttribute ("B",
-                   "Value of beta (Hz)",
-                   DoubleValue (3),
-                   MakeDoubleAccessor (&DualPi2QueueDisc::m_beta),
-                   MakeDoubleChecker<double> ())
-    .AddAttribute ("Tupdate",
-                   "Time period to calculate drop probability",
-                   TimeValue (Seconds (0.015)),
-                   MakeTimeAccessor (&DualPi2QueueDisc::m_tUpdate),
-                   MakeTimeChecker ())
-    .AddAttribute ("Tshift",
-                   "Time offset for TS-FIFO scheduler",
-                   TimeValue (MilliSeconds (50)),
-                   MakeTimeAccessor (&DualPi2QueueDisc::m_tShift),
-                   MakeTimeChecker ())
-    .AddAttribute ("QueueLimit",
-                   "Queue limit in bytes",
-                   UintegerValue (1562500), // 250 ms at 50 Mbps
-                   MakeUintegerAccessor (&DualPi2QueueDisc::m_queueLimit),
-                   MakeUintegerChecker<uint32_t> ())
-    .AddAttribute ("Target",
-                   "PI AQM Classic queue delay target",
-                   TimeValue (MilliSeconds (15)),
-                   MakeTimeAccessor (&DualPi2QueueDisc::m_target),
-                   MakeTimeChecker ())
-    .AddAttribute ("L4SMarkThresold",
-                   "L4S marking threshold in Time",
-                   TimeValue (MicroSeconds (475)),
-                   MakeTimeAccessor (&DualPi2QueueDisc::m_minTh),
-                   MakeTimeChecker ())
-    .AddAttribute ("K",
-                   "Coupling factor",
-                   DoubleValue (2),
-                   MakeDoubleAccessor (&DualPi2QueueDisc::m_k),
-                   MakeDoubleChecker<double> ())
-    .AddAttribute ("StartTime",  // Only if user wants to change queue start time
-                   "Simulation time to start scheduling the update timer",
-                   TimeValue (Seconds (0.0)),
-                   MakeTimeAccessor (&DualPi2QueueDisc::m_startTime),
-                   MakeTimeChecker ())
-    .AddTraceSource ("ProbCL",
-                     "Coupled probability (p_CL)",
-                     MakeTraceSourceAccessor (&DualPi2QueueDisc::m_pCL),
-                     "ns3::TracedValueCallback::Double")
-    .AddTraceSource ("ProbL",
-                     "L4S mark probability (p_L)",
-                     MakeTraceSourceAccessor (&DualPi2QueueDisc::m_pL),
-                     "ns3::TracedValueCallback::Double")
-    .AddTraceSource ("ProbC",
-                     "Classic drop/mark probability (p_C)",
-                     MakeTraceSourceAccessor (&DualPi2QueueDisc::m_pC),
-                     "ns3::TracedValueCallback::Double")
-    .AddTraceSource ("ClassicSojournTime",
-                     "Sojourn time of the last packet dequeued from the Classic queue",
-                     MakeTraceSourceAccessor (&DualPi2QueueDisc::m_traceClassicSojourn),
-                     "ns3::Time::TracedCallback")
-    .AddTraceSource ("L4sSojournTime",
-                     "Sojourn time of the last packet dequeued from the L4S queue",
-                      MakeTraceSourceAccessor (&DualPi2QueueDisc::m_traceL4sSojourn),
-                     "ns3::Time::TracedCallback")
-  ;
-  return tid;
+    static TypeId tid =
+        TypeId("ns3::DualPi2QueueDisc")
+            .SetParent<QueueDisc>()
+            .SetGroupName("TrafficControl")
+            .AddConstructor<DualPi2QueueDisc>()
+            .AddAttribute("Mtu",
+                          "Device MTU (bytes); if zero, will be automatically configured",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&DualPi2QueueDisc::m_mtu),
+                          MakeUintegerChecker<uint32_t>())
+            .AddAttribute("A",
+                          "Value of alpha (Hz)",
+                          DoubleValue(0.15),
+                          MakeDoubleAccessor(&DualPi2QueueDisc::m_alpha),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("B",
+                          "Value of beta (Hz)",
+                          DoubleValue(3),
+                          MakeDoubleAccessor(&DualPi2QueueDisc::m_beta),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("Tupdate",
+                          "Time period to calculate drop probability",
+                          TimeValue(Seconds(0.015)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_tUpdate),
+                          MakeTimeChecker())
+            .AddAttribute("Tshift",
+                          "Time offset for TS-FIFO scheduler",
+                          TimeValue(MilliSeconds(50)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_tShift),
+                          MakeTimeChecker())
+            .AddAttribute("QueueLimit",
+                          "Queue limit in bytes",
+                          UintegerValue(1562500), // 250 ms at 50 Mbps
+                          MakeUintegerAccessor(&DualPi2QueueDisc::m_queueLimit),
+                          MakeUintegerChecker<uint32_t>())
+            .AddAttribute("Target",
+                          "PI AQM Classic queue delay target",
+                          TimeValue(MilliSeconds(15)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_target),
+                          MakeTimeChecker())
+            .AddAttribute("L4SMarkThresold",
+                          "L4S marking threshold in Time",
+                          TimeValue(MicroSeconds(475)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_minTh),
+                          MakeTimeChecker())
+            .AddAttribute("K",
+                          "Coupling factor",
+                          DoubleValue(2),
+                          MakeDoubleAccessor(&DualPi2QueueDisc::m_k),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("StartTime", // Only if user wants to change queue start time
+                          "Simulation time to start scheduling the update timer",
+                          TimeValue(Seconds(0.0)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_startTime),
+                          MakeTimeChecker())
+            .AddTraceSource("ProbCL",
+                            "Coupled probability (p_CL)",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCL),
+                            "ns3::TracedValueCallback::Double")
+            .AddTraceSource("ProbL",
+                            "L4S mark probability (p_L)",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pL),
+                            "ns3::TracedValueCallback::Double")
+            .AddTraceSource("ProbC",
+                            "Classic drop/mark probability (p_C)",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pC),
+                            "ns3::TracedValueCallback::Double")
+            .AddTraceSource("ClassicSojournTime",
+                            "Sojourn time of the last packet dequeued from the Classic queue",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_traceClassicSojourn),
+                            "ns3::Time::TracedCallback")
+            .AddTraceSource("L4sSojournTime",
+                            "Sojourn time of the last packet dequeued from the L4S queue",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_traceL4sSojourn),
+                            "ns3::Time::TracedCallback");
+    return tid;
 }
 
-DualPi2QueueDisc::DualPi2QueueDisc ()
-  : QueueDisc ()
+DualPi2QueueDisc::DualPi2QueueDisc()
+    : QueueDisc()
 {
-  NS_LOG_FUNCTION (this);
-  m_uv = CreateObject<UniformRandomVariable> ();
-  m_rtrsEvent = Simulator::Schedule (m_startTime, &DualPi2QueueDisc::DualPi2Update, this);
+    NS_LOG_FUNCTION(this);
+    m_uv = CreateObject<UniformRandomVariable>();
+    m_rtrsEvent = Simulator::Schedule(m_startTime, &DualPi2QueueDisc::DualPi2Update, this);
 }
 
-DualPi2QueueDisc::~DualPi2QueueDisc ()
+DualPi2QueueDisc::~DualPi2QueueDisc()
 {
-  NS_LOG_FUNCTION (this);
-}
-
-void
-DualPi2QueueDisc::DoDispose (void)
-{
-  NS_LOG_FUNCTION (this);
-  m_rtrsEvent.Cancel ();
-  QueueDisc::DoDispose ();
+    NS_LOG_FUNCTION(this);
 }
 
 void
-DualPi2QueueDisc::SetQueueLimit (uint32_t lim)
+DualPi2QueueDisc::DoDispose(void)
 {
-  NS_LOG_FUNCTION (this << lim);
-  m_queueLimit = lim;
+    NS_LOG_FUNCTION(this);
+    m_rtrsEvent.Cancel();
+    QueueDisc::DoDispose();
+}
+
+void
+DualPi2QueueDisc::SetQueueLimit(uint32_t lim)
+{
+    NS_LOG_FUNCTION(this << lim);
+    m_queueLimit = lim;
 }
 
 uint32_t
-DualPi2QueueDisc::GetQueueSize (void) const
+DualPi2QueueDisc::GetQueueSize(void) const
 {
-  NS_LOG_FUNCTION (this);
-  return (GetInternalQueue (CLASSIC)->GetNBytes () + GetInternalQueue (L4S)->GetNBytes ());
+    NS_LOG_FUNCTION(this);
+    return (GetInternalQueue(CLASSIC)->GetNBytes() + GetInternalQueue(L4S)->GetNBytes());
 }
 
 int64_t
-DualPi2QueueDisc::AssignStreams (int64_t stream)
+DualPi2QueueDisc::AssignStreams(int64_t stream)
 {
-  NS_LOG_FUNCTION (this << stream);
-  m_uv->SetStream (stream);
-  return 1;
+    NS_LOG_FUNCTION(this << stream);
+    m_uv->SetStream(stream);
+    return 1;
 }
 
 bool
-DualPi2QueueDisc::IsL4S (Ptr<QueueDiscItem> item)
+DualPi2QueueDisc::IsL4S(Ptr<QueueDiscItem> item)
 {
-  uint8_t tosByte = 0;
-  if (item->GetUint8Value (QueueItem::IP_DSFIELD, tosByte))
+    uint8_t tosByte = 0;
+    if (item->GetUint8Value(QueueItem::IP_DSFIELD, tosByte))
     {
-      // ECT(1) or CE
-      if ((tosByte & 0x3) == 1 || (tosByte & 0x3) == 3)
+        // ECT(1) or CE
+        if ((tosByte & 0x3) == 1 || (tosByte & 0x3) == 3)
         {
-          NS_LOG_DEBUG ("L4S detected: " << static_cast<uint16_t> (tosByte & 0x3));
-          return true;
+            NS_LOG_DEBUG("L4S detected: " << static_cast<uint16_t>(tosByte & 0x3));
+            return true;
         }
     }
-  NS_LOG_DEBUG ("Classic detected: " << static_cast<uint16_t> (tosByte & 0x3));
-  return false;
+    NS_LOG_DEBUG("Classic detected: " << static_cast<uint16_t>(tosByte & 0x3));
+    return false;
 }
 
 bool
-DualPi2QueueDisc::DoEnqueue (Ptr<QueueDiscItem> item)
+DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
 {
-  NS_LOG_FUNCTION (this << item);
-  std::size_t queueNumber = CLASSIC;
+    NS_LOG_FUNCTION(this << item);
+    std::size_t queueNumber = CLASSIC;
 
-  uint32_t nQueued = GetQueueSize ();
-  // in pseudocode, it compares to MTU, not packet size
-  if (nQueued + item->GetSize () > m_queueLimit)
+    uint32_t nQueued = GetQueueSize();
+    // in pseudocode, it compares to MTU, not packet size
+    if (nQueued + item->GetSize() > m_queueLimit)
     {
-      // Drops due to queue limit
-      DropBeforeEnqueue (item, FORCED_DROP);
-      return false;
+        // Drops due to queue limit
+        DropBeforeEnqueue(item, FORCED_DROP);
+        return false;
     }
-  else
+    else
     {
-      if (IsL4S (item))
+        if (IsL4S(item))
         {
-          queueNumber = L4S;
+            queueNumber = L4S;
         }
     }
 
-  bool retval = GetInternalQueue (queueNumber)->Enqueue (item);
-  NS_LOG_LOGIC ("Packets enqueued in queue-" << queueNumber << ": " << GetInternalQueue (queueNumber)->GetNPackets ());
-  return retval;
+    bool retval = GetInternalQueue(queueNumber)->Enqueue(item);
+    NS_LOG_LOGIC("Packets enqueued in queue-" << queueNumber << ": "
+                                              << GetInternalQueue(queueNumber)->GetNPackets());
+    return retval;
 }
 
 void
-DualPi2QueueDisc::InitializeParams (void)
+DualPi2QueueDisc::InitializeParams(void)
 {
-  if (m_mtu == 0)
+    if (m_mtu == 0)
     {
-      Ptr<NetDeviceQueueInterface> ndqi = GetNetDeviceQueueInterface ();
-      Ptr<NetDevice> dev;
-      // if the NetDeviceQueueInterface object is aggregated to a
-      // NetDevice, get the MTU of such NetDevice
-      if (ndqi && (dev = ndqi->GetObject<NetDevice> ()))
+        Ptr<NetDeviceQueueInterface> ndqi = GetNetDeviceQueueInterface();
+        Ptr<NetDevice> dev;
+        // if the NetDeviceQueueInterface object is aggregated to a
+        // NetDevice, get the MTU of such NetDevice
+        if (ndqi && (dev = ndqi->GetObject<NetDevice>()))
         {
-          m_mtu = dev->GetMtu ();
+            m_mtu = dev->GetMtu();
         }
     }
-  NS_ABORT_MSG_IF (m_mtu < 68, "Error: MTU does not meet RFC 791 minimum");
-  m_thLen = 2 * m_mtu;
-  m_prevQ = Time (Seconds (0));
-  m_pCL = 0;
-  m_pC = 0;
-  m_pL = 0;
+    NS_ABORT_MSG_IF(m_mtu < 68, "Error: MTU does not meet RFC 791 minimum");
+    m_thLen = 2 * m_mtu;
+    m_prevQ = Time(Seconds(0));
+    m_pCL = 0;
+    m_pC = 0;
+    m_pL = 0;
 }
 
 void
-DualPi2QueueDisc::DualPi2Update ()
+DualPi2QueueDisc::DualPi2Update()
 {
-  NS_LOG_FUNCTION (this);
+    NS_LOG_FUNCTION(this);
 
-  // Use queuing time of first-in Classic packet
-  Ptr<const QueueDiscItem> item;
-  Time curQ = Seconds (0);
+    // Use queuing time of first-in Classic packet
+    Ptr<const QueueDiscItem> item;
+    Time curQ = Seconds(0);
 
-  if (item = GetInternalQueue (CLASSIC)->Peek ())
+    if (item = GetInternalQueue(CLASSIC)->Peek())
     {
-      curQ = Simulator::Now () - item->GetTimeStamp ();
+        curQ = Simulator::Now() - item->GetTimeStamp();
     }
 
-  m_baseProb = m_baseProb + m_alpha * (curQ - m_target).GetSeconds () + m_beta * (curQ - m_prevQ).GetSeconds ();
-  // clamp p' to within [0,1]; page 34 of Internet-Draft
-  m_baseProb = std::max<double> (m_baseProb, 0);
-  m_baseProb = std::min<double> (m_baseProb, 1);
-  m_pCL = m_baseProb * m_k;
-  m_pCL = std::min<double> (m_pCL, 1);
-  m_pC = m_baseProb * m_baseProb;
-  m_prevQ = curQ;
-  m_rtrsEvent = Simulator::Schedule (m_tUpdate, &DualPi2QueueDisc::DualPi2Update, this);
+    m_baseProb = m_baseProb + m_alpha * (curQ - m_target).GetSeconds() +
+                 m_beta * (curQ - m_prevQ).GetSeconds();
+    // clamp p' to within [0,1]; page 34 of Internet-Draft
+    m_baseProb = std::max<double>(m_baseProb, 0);
+    m_baseProb = std::min<double>(m_baseProb, 1);
+    m_pCL = m_baseProb * m_k;
+    m_pCL = std::min<double>(m_pCL, 1);
+    m_pC = m_baseProb * m_baseProb;
+    m_prevQ = curQ;
+    m_rtrsEvent = Simulator::Schedule(m_tUpdate, &DualPi2QueueDisc::DualPi2Update, this);
 }
 
 Ptr<QueueDiscItem>
-DualPi2QueueDisc::DoDequeue ()
+DualPi2QueueDisc::DoDequeue()
 {
-  NS_LOG_FUNCTION (this);
-  Ptr<QueueDiscItem> item;
-  while (GetQueueSize () > 0)
+    NS_LOG_FUNCTION(this);
+    Ptr<QueueDiscItem> item;
+    while (GetQueueSize() > 0)
     {
-      if (Scheduler () == L4S)
+        if (Scheduler() == L4S)
         {
-          item = GetInternalQueue (L4S)->Dequeue ();
-          m_traceL4sSojourn (Simulator::Now () - item->GetTimeStamp ());
-          double pPrimeL = Laqm (Simulator::Now () - item->GetTimeStamp ());
-          if (pPrimeL > m_pCL)
+            item = GetInternalQueue(L4S)->Dequeue();
+            m_traceL4sSojourn(Simulator::Now() - item->GetTimeStamp());
+            double pPrimeL = Laqm(Simulator::Now() - item->GetTimeStamp());
+            if (pPrimeL > m_pCL)
             {
-              NS_LOG_DEBUG ("Laqm probability " << std::min<double> (pPrimeL, 1) << " is driving p_L");
+                NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1)
+                                                 << " is driving p_L");
             }
-          else
+            else
             {
-              NS_LOG_DEBUG ("coupled probability " << std::min<double> (m_pCL, 1) << " is driving p_L");
+                NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1)
+                                                    << " is driving p_L");
             }
-          double pL = std::max<double> (pPrimeL, m_pCL);
-          pL = std::min<double> (pL, 1); // clamp p_L at 1
-          m_pL = pL; // Trace the value of p_L
-          if (Recur (pL))
+            double pL = std::max<double>(pPrimeL, m_pCL);
+            pL = std::min<double>(pL, 1); // clamp p_L at 1
+            m_pL = pL;                    // Trace the value of p_L
+            if (Recur(pL))
             {
-              bool retval = Mark (item, UNFORCED_L4S_MARK);
-              NS_ASSERT_MSG (retval == true, "Make sure we can mark in L4S queue");
-              NS_LOG_DEBUG ("L-queue packet is marked");
+                bool retval = Mark(item, UNFORCED_L4S_MARK);
+                NS_ASSERT_MSG(retval == true, "Make sure we can mark in L4S queue");
+                NS_LOG_DEBUG("L-queue packet is marked");
             }
-          else
+            else
             {
-              NS_LOG_DEBUG ("L-queue packet is not marked");
+                NS_LOG_DEBUG("L-queue packet is not marked");
             }
-          return item;
+            return item;
         }
-      else
+        else
         {
-          item = GetInternalQueue (CLASSIC)->Dequeue ();
-          m_traceClassicSojourn (Simulator::Now () - item->GetTimeStamp ());
-          // Heuristic in Linux code; never drop if less than 2 MTU in queue
-          if (GetInternalQueue (CLASSIC)->GetNBytes () < 2 * m_mtu)
+            item = GetInternalQueue(CLASSIC)->Dequeue();
+            m_traceClassicSojourn(Simulator::Now() - item->GetTimeStamp());
+            // Heuristic in Linux code; never drop if less than 2 MTU in queue
+            if (GetInternalQueue(CLASSIC)->GetNBytes() < 2 * m_mtu)
             {
-              return item;
+                return item;
             }
-          if (m_pC > m_uv->GetValue ())
+            if (m_pC > m_uv->GetValue())
             {
-              if (!Mark (item, UNFORCED_CLASSIC_MARK))
+                if (!Mark(item, UNFORCED_CLASSIC_MARK))
                 {
-                  DropAfterDequeue (item, UNFORCED_CLASSIC_DROP);
-                  NS_LOG_DEBUG ("C-queue packet is dropped");
-                  continue;
+                    DropAfterDequeue(item, UNFORCED_CLASSIC_DROP);
+                    NS_LOG_DEBUG("C-queue packet is dropped");
+                    continue;
                 }
-              else
+                else
                 {
-                  NS_LOG_DEBUG ("C-queue packet is marked");
-                  return item;
+                    NS_LOG_DEBUG("C-queue packet is marked");
+                    return item;
                 }
             }
-          NS_LOG_DEBUG ("C-queue packet is neither marked nor dropped");
-          return item;
+            NS_LOG_DEBUG("C-queue packet is neither marked nor dropped");
+            return item;
         }
     }
-  return 0;
+    return 0;
 }
 
 std::size_t
-DualPi2QueueDisc::Scheduler () const
+DualPi2QueueDisc::Scheduler() const
 {
-  NS_LOG_FUNCTION (this);
-  Time cqTime = Seconds (0);
-  Time lqTime = Seconds (0);
-  Ptr<const QueueDiscItem> peekedItem;
-  if (peekedItem = GetInternalQueue (CLASSIC)->Peek ())
+    NS_LOG_FUNCTION(this);
+    Time cqTime = Seconds(0);
+    Time lqTime = Seconds(0);
+    Ptr<const QueueDiscItem> peekedItem;
+    if (peekedItem = GetInternalQueue(CLASSIC)->Peek())
     {
-      cqTime = Simulator::Now () - peekedItem->GetTimeStamp ();
+        cqTime = Simulator::Now() - peekedItem->GetTimeStamp();
     }
-  if (peekedItem = GetInternalQueue (L4S)->Peek ())
+    if (peekedItem = GetInternalQueue(L4S)->Peek())
     {
-      lqTime = Simulator::Now () - peekedItem->GetTimeStamp ();
+        lqTime = Simulator::Now() - peekedItem->GetTimeStamp();
     }
-  NS_ASSERT_MSG (GetQueueSize () > 0, "Trying to schedule an empty queue");
-  // return 0 if classic, 1 if L4S
-  if (GetInternalQueue (L4S)->Peek () && ((lqTime + m_tShift) > cqTime))
+    NS_ASSERT_MSG(GetQueueSize() > 0, "Trying to schedule an empty queue");
+    // return 0 if classic, 1 if L4S
+    if (GetInternalQueue(L4S)->Peek() && ((lqTime + m_tShift) > cqTime))
     {
-      return L4S;
+        return L4S;
     }
-  else if (GetInternalQueue (CLASSIC)->Peek ())
+    else if (GetInternalQueue(CLASSIC)->Peek())
     {
-      return CLASSIC;
+        return CLASSIC;
     }
-  else if (GetInternalQueue (L4S)->Peek ())
+    else if (GetInternalQueue(L4S)->Peek())
     {
-      NS_FATAL_ERROR ("Should be unreachable");
+        NS_FATAL_ERROR("Should be unreachable");
     }
-  return L4S;
+    return L4S;
 }
 
 double
-DualPi2QueueDisc::Laqm (Time lqTime) const
+DualPi2QueueDisc::Laqm(Time lqTime) const
 {
-  NS_LOG_FUNCTION (this << lqTime.GetSeconds ());
-  if (lqTime > m_minTh)
+    NS_LOG_FUNCTION(this << lqTime.GetSeconds());
+    if (lqTime > m_minTh)
     {
-      return 1;
+        return 1;
     }
-  return 0;
+    return 0;
 }
 
 bool
-DualPi2QueueDisc::Recur (double likelihood)
+DualPi2QueueDisc::Recur(double likelihood)
 {
-  NS_LOG_FUNCTION (this << likelihood);
-  m_count += likelihood;
-  if (m_count > 1)
+    NS_LOG_FUNCTION(this << likelihood);
+    m_count += likelihood;
+    if (m_count > 1)
     {
-      m_count -= 1;
-      return true;
+        m_count -= 1;
+        return true;
     }
-  return false;
+    return false;
 }
 
 Ptr<const QueueDiscItem>
-DualPi2QueueDisc::DoPeek () const
+DualPi2QueueDisc::DoPeek() const
 {
-  NS_LOG_FUNCTION (this);
-  Ptr<const QueueDiscItem> item;
+    NS_LOG_FUNCTION(this);
+    Ptr<const QueueDiscItem> item;
 
-  for (std::size_t i = 0; i < GetNInternalQueues (); i++)
+    for (std::size_t i = 0; i < GetNInternalQueues(); i++)
     {
-      if (item = GetInternalQueue (i)->Peek ())
+        if (item = GetInternalQueue(i)->Peek())
         {
-          NS_LOG_LOGIC ("Peeked from queue number " << i << ": " << item);
-          NS_LOG_LOGIC ("Number packets queue number " << i << ": " << GetInternalQueue (i)->GetNPackets ());
-          NS_LOG_LOGIC ("Number bytes queue number " << i << ": " << GetInternalQueue (i)->GetNBytes ());
-          return item;
+            NS_LOG_LOGIC("Peeked from queue number " << i << ": " << item);
+            NS_LOG_LOGIC("Number packets queue number " << i << ": "
+                                                        << GetInternalQueue(i)->GetNPackets());
+            NS_LOG_LOGIC("Number bytes queue number " << i << ": "
+                                                      << GetInternalQueue(i)->GetNBytes());
+            return item;
         }
     }
 
-  NS_LOG_LOGIC ("Queue empty");
-  return item;
+    NS_LOG_LOGIC("Queue empty");
+    return item;
 }
 
 bool
-DualPi2QueueDisc::CheckConfig (void)
+DualPi2QueueDisc::CheckConfig(void)
 {
-  NS_LOG_FUNCTION (this);
-  if (GetNQueueDiscClasses () > 0)
+    NS_LOG_FUNCTION(this);
+    if (GetNQueueDiscClasses() > 0)
     {
-      NS_LOG_ERROR ("DualPi2QueueDisc cannot have classes");
-      return false;
+        NS_LOG_ERROR("DualPi2QueueDisc cannot have classes");
+        return false;
     }
 
-  if (GetNPacketFilters () > 0)
+    if (GetNPacketFilters() > 0)
     {
-      NS_LOG_ERROR ("DualPi2QueueDisc cannot have packet filters");
-      return false;
+        NS_LOG_ERROR("DualPi2QueueDisc cannot have packet filters");
+        return false;
     }
 
-  if (GetNInternalQueues () == 0)
+    if (GetNInternalQueues() == 0)
     {
-      // Create 2 DropTail queues
-      Ptr<InternalQueue> queue0 = CreateObjectWithAttributes<DropTailQueue<QueueDiscItem> > ("MaxSize", QueueSizeValue (GetMaxSize ()));
-      Ptr<InternalQueue> queue1 = CreateObjectWithAttributes<DropTailQueue<QueueDiscItem> > ("MaxSize", QueueSizeValue (GetMaxSize ()));
-      QueueSize queueSize (BYTES, m_queueLimit);
-      queue0->SetMaxSize (queueSize);
-      queue1->SetMaxSize (queueSize);
-      AddInternalQueue (queue0);
-      AddInternalQueue (queue1);
+        // Create 2 DropTail queues
+        Ptr<InternalQueue> queue0 =
+            CreateObjectWithAttributes<DropTailQueue<QueueDiscItem>>("MaxSize",
+                                                                     QueueSizeValue(GetMaxSize()));
+        Ptr<InternalQueue> queue1 =
+            CreateObjectWithAttributes<DropTailQueue<QueueDiscItem>>("MaxSize",
+                                                                     QueueSizeValue(GetMaxSize()));
+        QueueSize queueSize(BYTES, m_queueLimit);
+        queue0->SetMaxSize(queueSize);
+        queue1->SetMaxSize(queueSize);
+        AddInternalQueue(queue0);
+        AddInternalQueue(queue1);
     }
 
-  if (GetNInternalQueues () != 2)
+    if (GetNInternalQueues() != 2)
     {
-      NS_LOG_ERROR ("DualPi2QueueDisc needs 2 internal queue");
-      return false;
+        NS_LOG_ERROR("DualPi2QueueDisc needs 2 internal queue");
+        return false;
     }
 
-  if (GetInternalQueue (CLASSIC)->GetMaxSize ().GetValue () < m_queueLimit)
+    if (GetInternalQueue(CLASSIC)->GetMaxSize().GetValue() < m_queueLimit)
     {
-      NS_LOG_ERROR ("The size of the internal Classic traffic queue is less than the queue disc limit");
-      return false;
+        NS_LOG_ERROR(
+            "The size of the internal Classic traffic queue is less than the queue disc limit");
+        return false;
     }
 
-  if (GetInternalQueue (L4S)->GetMaxSize ().GetValue() < m_queueLimit)
+    if (GetInternalQueue(L4S)->GetMaxSize().GetValue() < m_queueLimit)
     {
-      NS_LOG_ERROR ("The size of the internal L4S traffic queue is less than the queue disc limit");
-      return false;
+        NS_LOG_ERROR(
+            "The size of the internal L4S traffic queue is less than the queue disc limit");
+        return false;
     }
 
-  return true;
+    return true;
 }
 
-} //namespace ns3
+} // namespace ns3

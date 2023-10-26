@@ -10,7 +10,7 @@ improved variant of the PIE AQM [Pan16]_.  In |ns3|, it is named
 ``DualPi2`` to align with the Linux implementation name ``sch_dualpi2.c``.
 
 This chapter describes the DualPi2 queue disc implementation
-in |ns3|. 
+in |ns3|.
 
 Model Description
 *****************
@@ -19,7 +19,7 @@ The source code is located in ``src/traffic-control/model`` and consists of
 2 files: `dual-pi2-queue-disc.h` and
 `dual-pi2-queue-disc.cc` defining a DualPi2QueueDisc
 class. The code was ported to |ns3| by Shravya K.S. based on the IETF draft
-[Schepper17]_.  
+[Schepper17]_.
 
 * class :cpp:class:`DualPi2QueueDisc`: This class implements the main
 algorithm:
@@ -61,14 +61,14 @@ Attributes
 ==========
 
 The key attributes that the DualPi2QueueDisc class holds include
-the following: 
+the following:
 
-* ``Mode:`` DualPI2 operating mode (BYTES or PACKETS). The default mode is PACKETS. 
+* ``Mode:`` DualPI2 operating mode (BYTES or PACKETS). The default mode is PACKETS.
 * ``QueueLimit:`` The maximum number of bytes or packets the queue can hold.
 The default value is 25 bytes / packets.
 * ``MeanPktSize:`` Mean packet size in bytes. The default value is 1000 bytes.
-* ``Tupdate:`` Time period to calculate drop probability. The default value is 16 ms. 
-* ``Supdate:`` Start time of the update timer. The default value is 0 ms. 
+* ``Tupdate:`` Time period to calculate drop probability. The default value is 16 ms.
+* ``Supdate:`` Start time of the update timer. The default value is 0 ms.
 * ``A:`` Value of alpha. The default value is 10.
 * ``B:`` Value of beta. The default value is 100.
 * ``ClassicQueueDelayReference:`` Desired queue delay of Classic traffic.
@@ -83,7 +83,7 @@ The example for DualPI2 is `dual-pi2-example.cc` located in
 ``src/traffic-control/examples``. To run the file (the first invocation below
 shows the available command-line options):
 
-:: 
+::
 
    $ ./waf --run "dual-pi2-example --PrintHelp"
    $ ./waf --run "dual-pi2-example"
@@ -100,7 +100,7 @@ The suite includes 4 test cases:
 * Test 3: Send L4S traffic only
 * Test 4: Send Classic traffic only
 
-The test suite can be run using the following commands: 
+The test suite can be run using the following commands:
 
 ::
 
@@ -108,7 +108,7 @@ The test suite can be run using the following commands:
   $ ./waf
   $ ./test.py -s dual-pi2-queue-disc
 
-or  
+or
 
 ::
 
