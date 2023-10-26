@@ -87,3 +87,14 @@ build_lib_example(
     ${libflow-monitor}
     ${libtraffic-control}
 )
+
+build_example(
+  NAME dual-pi2-example
+  SOURCE_FILES dual-pi2-example.cc
+  LIBRARIES_TO_LINK
+    ${libinternet}
+    ${libpoint-to-point}
+    ${libapplications}
+    ${libtraffic-control}
+    ${libflow-monitor}
+)

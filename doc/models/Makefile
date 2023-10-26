@@ -90,6 +90,7 @@ SOURCES = \
 	$(SRC)/traffic-control/doc/red.rst \
 	$(SRC)/traffic-control/doc/codel.rst \
 	$(SRC)/traffic-control/doc/cobalt.rst \
+	$(SRC)/traffic-control/doc/dual-pi2.rst \
 	$(SRC)/traffic-control/doc/fq-codel.rst \
 	$(SRC)/traffic-control/doc/fq-cobalt.rst \
 	$(SRC)/traffic-control/doc/pie.rst \
