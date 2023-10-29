@@ -76,7 +76,15 @@ PacketSink::GetTypeId()
             .AddTraceSource("RxWithSeqTsSize",
                             "A packet with SeqTsSize header has been received",
                             MakeTraceSourceAccessor(&PacketSink::m_rxTraceWithSeqTsSize),
-                            "ns3::PacketSink::SeqTsSizeCallback");
+                            "ns3::PacketSink::SeqTsSizeCallback")
+            .AddTraceSource("PeerClose",
+                            "The peer closed the connection",
+                            MakeTraceSourceAccessor(&PacketSink::m_tracePeerClose),
+                            "ns3::PacketSink::SocketCallback")
+            .AddTraceSource("PeerError",
+                            "The peer closed the connection with an error",
+                            MakeTraceSourceAccessor(&PacketSink::m_tracePeerError),
+                            "ns3::PacketSink::SocketCallback");
     return tid;
 }
 
@@ -294,12 +302,14 @@ void
 PacketSink::HandlePeerClose(Ptr<Socket> socket)
 {
     NS_LOG_FUNCTION(this << socket);
+    m_tracePeerClose(socket);
 }
 
 void
 PacketSink::HandlePeerError(Ptr<Socket> socket)
 {
     NS_LOG_FUNCTION(this << socket);
+    m_tracePeerError(socket);
 }
 
 void

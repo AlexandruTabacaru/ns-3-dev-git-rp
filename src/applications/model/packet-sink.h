@@ -110,6 +110,12 @@ class PacketSink : public Application
                                       const Address& from,
                                       const Address& to,
                                       const SeqTsSizeHeader& header);
+    /**
+     * TracedCallback signature for a peer close or close-on-error event
+     *
+     * \param socket The socket reporting the event
+     */
+    typedef void (*SocketCallback)(Ptr<const Socket> socket);
 
   protected:
     void DoDispose() override;
@@ -208,6 +214,9 @@ class PacketSink : public Application
     /// headers
     TracedCallback<Ptr<const Packet>, const Address&, const Address&, const SeqTsSizeHeader&>
         m_rxTraceWithSeqTsSize;
+    /// Callbacks for tracing the peer close events
+    TracedCallback<Ptr<const Socket>> m_tracePeerClose;
+    TracedCallback<Ptr<const Socket>> m_tracePeerError;
 };
 
 } // namespace ns3
