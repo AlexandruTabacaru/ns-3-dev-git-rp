@@ -62,8 +62,8 @@ NS_LOG_COMPONENT_DEFINE("L4sWifi");
 // Declare trace functions that are defined later in this file
 std::ofstream g_fileBytesInAcBeQueue;
 void TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal);
-std::ofstream g_fileBytesInFifoQueue;
-void TraceBytesInFifoQueue(uint32_t oldVal, uint32_t newVal);
+std::ofstream g_fileBytesInDualPi2Queue;
+void TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal);
 
 uint32_t g_dequeuedData = 0;
 std::ofstream g_fileDequeue;
@@ -215,14 +215,15 @@ main(int argc, char* argv[])
 
     // By default, Ipv4AddressHelper below will configure a MqQueueDisc
     // with FqCoDelQueueDisc as child queue discs (one per AC)
-    // The following changes this configuration on the AP to an MqQueueDisc
-    // with a 500 packet FifoQueueDisc as child queue disc
+    // The following statements change this configuration on the AP to
+    // an MqQueueDisc with a DualPi2QueueDisc as child queue disc
     TrafficControlHelper tch;
     uint16_t handle = tch.SetRootQueueDisc("ns3::MqQueueDisc");
     TrafficControlHelper::ClassIdList cls =
         tch.AddQueueDiscClasses(handle, 4, "ns3::QueueDiscClass");
-    tch.AddChildQueueDiscs(handle, cls, "ns3::FifoQueueDisc");
-    Config::SetDefault("ns3::FifoQueueDisc::MaxSize", StringValue("500p"));
+    tch.AddChildQueueDiscs(handle, cls, "ns3::DualPi2QueueDisc");
+
+    // The next statements configure flow control between Wi-Fi and DualPi2
     if (flowControl)
     {
         tch.SetQueueLimits("ns3::DynamicQueueLimits",
@@ -233,7 +234,10 @@ main(int argc, char* argv[])
                            "MaxLimit",
                            UintegerValue(limit));
     }
-    tch.Install(apDevice.Get(0));
+    // Install the traffic control configuration on the AP Wi-Fi device
+    // and on STA devices
+    QueueDiscContainer apQueueDiscContainer = tch.Install(apDevice);
+    QueueDiscContainer staQueueDiscContainer = tch.Install(staDevices);
 
     // Configure IP addresses for all links
     Ipv4AddressHelper address;
@@ -343,19 +347,16 @@ main(int argc, char* argv[])
     g_fileCubicThroughput.open("wifi-cubic-throughput.dat", std::ofstream::out);
     Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
 
-    g_fileBytesInFifoQueue.open("wifi-fifo-bytes.dat", std::ofstream::out);
-    apNode.Get(0)
-        ->GetObject<TrafficControlLayer>()
-        ->GetRootQueueDiscOnDevice(apDevice.Get(0))
-        ->GetQueueDiscClass(0)
-        ->GetQueueDisc()
-        ->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInFifoQueue));
+    g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
+    apQueueDiscContainer.Get(0)->GetQueueDiscClass(0)->GetQueueDisc()->TraceConnectWithoutContext(
+        "BytesInQueue",
+        MakeCallback(&TraceBytesInDualPi2Queue));
 
     Simulator::Stop(duration);
     Simulator::Run();
 
     g_fileBytesInAcBeQueue.close();
-    g_fileBytesInFifoQueue.close();
+    g_fileBytesInDualPi2Queue.close();
     g_fileDequeue.close();
     g_fileDequeueThroughput.close();
     g_filePragueThroughput.close();
@@ -379,9 +380,9 @@ ConfigureCubicSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2)
 }
 
 void
-TraceBytesInFifoQueue(uint32_t oldVal, uint32_t newVal)
+TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal)
 {
-    g_fileBytesInFifoQueue << Now().GetSeconds() << " " << newVal << std::endl;
+    g_fileBytesInDualPi2Queue << Now().GetSeconds() << " " << newVal << std::endl;
 }
 
 void
