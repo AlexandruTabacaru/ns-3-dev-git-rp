@@ -24,18 +24,21 @@
 //                                   Fixed MCS                   # N/2 for classic flows
 //
 // One server with Prague and Cubic TCP connections to the STA under test
-// The first Wi-Fi STA (node 2) is the STA under test
-// Additional STA nodes (node 3+) for background load
+// The first Wi-Fi STA (node index 2) is the STA under test
+// Additional STA nodes (node indices 3+) for sending background load
 // 80 MHz 11ac (MCS 8) is initially configured in 5 GHz (channel 42)
 //
 // Configuration inputs:
-// - TCP under test (Prague, Cubic)
-// - number of bytes for TCP transfers
-// - number of background flows and STAs (one per flow)
+// - number of Cubic flows under test
+// - number of Prague flows under test
+// - number of background flows
+// - number of bytes for TCP flows
 // - whether to disable flow control
-// - Wi-Fi queue limit when flow control is enabled
+// - Wi-Fi queue limit when flow control is enabled (base limit and scale factor)
 //
-// Additional configuration on the traffic can be defined at a future date
+// Benavior:
+// - at simulation time 1 second, each flow starts
+// - simulation ends after last flow terminates
 //
 // Outputs (some of these are for future definition):
 // 1) one-way latency sample for each flow
@@ -96,6 +99,15 @@ void TraceCubicData(Ptr<const Packet> p,
                     const SeqTsSizeHeader& header);
 void TraceCubicThroughput(void);
 
+// Count the number of flows to wait for completion before stopping the simulation
+uint32_t g_flowsToClose = 0;
+// Hook these methods to the PacketSink objects
+void HandlePeerClose(Ptr<const Socket> socket);
+void HandlePeerError(Ptr<const Socket> socket);
+
+// These methods work around the lack of ability to configure different TCP socket types
+// on the same node on a per-socket (per-application) basis. Instead, these methods can
+// be scheduled (right before a socket creation) to change the default value
 void ConfigurePragueSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 void ConfigureCubicSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 
@@ -113,15 +125,17 @@ main(int argc, char* argv[])
     std::string delay = "10ms"; // base RTT is 20ms
     double staDistance = 10;    // meters
     const double pi = 3.1415927;
+    Time progressInterval = Seconds(5);
 
     // Variables that can be changed by command-line argument
-    uint32_t numBytes = 80e6; // default 80 MB
-    Time duration = Seconds(10);
+    uint32_t numBytes = 10e6;   // default 10 MB
+    Time duration = Seconds(0); // By default, close 1 second after last TCP flow closes
     uint16_t mcs = 2;
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
     double scale = 1.0;     // default flow control scale factor
     uint32_t numBackground = 0;
+    bool showProgress = false;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -144,6 +158,7 @@ main(int argc, char* argv[])
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
     cmd.AddValue("numBackground", "Number of background flows", numBackground);
+    cmd.AddValue("showProgress", "Show simulation progress every 10s", showProgress);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
@@ -291,6 +306,7 @@ main(int argc, char* argv[])
         PacketSinkHelper("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
     clientApp = sink.Install(staNodes.Get(0));
     clientApp.Start(Seconds(1.0));
+    g_flowsToClose++;
     Simulator::Schedule(
         Seconds(1.0) - TimeStep(1),
         MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
@@ -308,6 +324,7 @@ main(int argc, char* argv[])
                          InetSocketAddress(Ipv4Address::GetAny(), port + 1));
     clientAppCubic = sinkCubic.Install(staNodes.Get(0));
     clientAppCubic.Start(Seconds(1.1));
+    g_flowsToClose++;
     Simulator::Schedule(
         Seconds(1.1) - TimeStep(1),
         MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
@@ -332,6 +349,7 @@ main(int argc, char* argv[])
                              InetSocketAddress(Ipv4Address::GetAny(), port + 2 + i));
         clientAppBackground = sinkBackground.Install(staNodes.Get(1 + i));
         clientAppBackground.Start(Seconds(2 + i));
+        g_flowsToClose++;
     }
 
     // Control the random variable stream assignments for Wi-Fi models (the value 100 is arbitrary)
@@ -373,14 +391,49 @@ main(int argc, char* argv[])
     g_fileCubicLatency.open("wifi-cubic-latency.dat", std::ofstream::out);
     Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
 
+    // Keep track of the end of simulation flows
+    clientApp.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        "PeerClose",
+        MakeCallback(&HandlePeerClose));
+    clientApp.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        "PeerError",
+        MakeCallback(&HandlePeerError));
+    clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        "PeerClose",
+        MakeCallback(&HandlePeerClose));
+    clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        "PeerError",
+        MakeCallback(&HandlePeerError));
+
     g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
     apQueueDiscContainer.Get(0)->GetQueueDiscClass(0)->GetQueueDisc()->TraceConnectWithoutContext(
         "BytesInQueue",
         MakeCallback(&TraceBytesInDualPi2Queue));
 
-    Simulator::Stop(duration);
-    Simulator::Run();
+    if (duration > Seconds(0))
+    {
+        Simulator::Stop(duration);
+    }
+    else
+    {
+        // Keep the simulator from running forever in case Stop() is not triggered
+        Simulator::Stop(Seconds(1000));
+    }
+    if (showProgress)
+    {
+        // Keep progress object in scope of the Run() method
+        ShowProgress progress(progressInterval);
+        Simulator::Run();
+    }
+    else
+    {
+        Simulator::Run();
+    }
 
+    std::cout << std::endl
+              << "Simulation " << (duration == Seconds(0) ? "automatic" : "scheduled")
+              << " stop after " << Simulator::Now().GetSeconds() << " seconds" << std::endl
+              << std::endl;
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "Cubic flow 0 throughput (Mbps) mean: " << cubicThroughputCalculator.getMean()
               << " max: " << cubicThroughputCalculator.getMax()
@@ -500,4 +553,25 @@ TraceDequeueThroughput(void)
                                      1e6);
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
     g_dequeuedData = 0;
+}
+
+void
+HandlePeerClose(Ptr<const Socket> socket)
+{
+    if (--g_flowsToClose == 0)
+    {
+        // Close 1 second after last TCP flow closes
+        Simulator::Stop(Seconds(1));
+    }
+}
+
+void
+HandlePeerError(Ptr<const Socket> socket)
+{
+    std::cout << "Warning:  socket closed abnormally" << std::endl;
+    if (--g_flowsToClose == 0)
+    {
+        // Close 1 second after last TCP flow closes
+        Simulator::Stop(Seconds(1));
+    }
 }
