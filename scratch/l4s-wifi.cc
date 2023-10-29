@@ -119,7 +119,8 @@ main(int argc, char* argv[])
     Time duration = Seconds(10);
     uint16_t mcs = 2;
     bool flowControl = true;
-    uint32_t limit = 500 * 1500; // default flow control limit
+    uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
+    double scale = 1.0;     // default flow control scale factor
     uint32_t numBackground = 0;
 
     // Increase some defaults (command-line can override below)
@@ -141,6 +142,7 @@ main(int argc, char* argv[])
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
+    cmd.AddValue("scale", "Scaling factor for queue limit", scale);
     cmd.AddValue("numBackground", "Number of background flows", numBackground);
     cmd.Parse(argc, argv);
 
@@ -252,9 +254,9 @@ main(int argc, char* argv[])
                            "HoldTime",
                            StringValue("500ms"),
                            "MinLimit",
-                           UintegerValue(limit),
+                           UintegerValue(static_cast<uint32_t>(scale * limit)),
                            "MaxLimit",
-                           UintegerValue(limit));
+                           UintegerValue(static_cast<uint32_t>(scale * limit)));
     }
     // Install the traffic control configuration on the AP Wi-Fi device
     // and on STA devices
