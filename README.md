@@ -13,7 +13,7 @@ Once you've cloned this repo to your local machine, you can build ns3 by followi
 
 ```
 cd experiments/initial
-python3 run-l4s-wifi.py
+./run-l4s-wifi.py
 ```
 
 
