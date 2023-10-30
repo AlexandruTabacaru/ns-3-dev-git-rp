@@ -55,6 +55,11 @@ WifiMacQueue::GetTypeId()
                           TimeValue(MilliSeconds(500)),
                           MakeTimeAccessor(&WifiMacQueue::SetMaxDelay),
                           MakeTimeChecker())
+            .AddAttribute("ProcessingDelay",
+                          "Delay in making the MPDU available for transmission",
+                          TimeValue(MicroSeconds(0)),
+                          MakeTimeAccessor(&WifiMacQueue::m_processingDelay),
+                          MakeTimeChecker())
             .AddTraceSource("Expired",
                             "MPDU dropped because its lifetime expired.",
                             MakeTraceSourceAccessor(&WifiMacQueue::m_traceExpired),
@@ -117,6 +122,12 @@ WifiMacQueue::GetAlias(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         return aliasIt->second;
     }
     return nullptr;
+}
+
+Time
+WifiMacQueue::GetProcessingDelay() const
+{
+    return m_processingDelay;
 }
 
 void

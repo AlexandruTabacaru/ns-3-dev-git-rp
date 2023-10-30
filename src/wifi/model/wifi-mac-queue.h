@@ -299,6 +299,15 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
      */
     Ptr<WifiMpdu> GetAlias(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
 
+    /**
+     * Return the processing delay for MPDUs to be available for transmission
+     * (this value is available through GetAttribute(...) but this separate getter
+     * exists to avoid the indirection of frequent internal calls through attribute values
+     *
+     * \return Processing delay for MPDUs to be available for transmisssion
+     */
+    Time GetProcessingDelay() const;
+
   protected:
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetContainer;
 
@@ -348,6 +357,7 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
     Ptr<WifiMpdu> DoRemove(ConstIterator pos);
 
     Time m_maxDelay;                        //!< Time to live for packets in the queue
+    Time m_processingDelay;                 //!< Delay in making the MPDU available for transmission
     AcIndex m_ac;                           //!< the access category
     Ptr<WifiMacQueueScheduler> m_scheduler; //!< the MAC queue scheduler
 

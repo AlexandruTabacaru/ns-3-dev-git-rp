@@ -382,6 +382,13 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
     };
 
     auto item = peek();
+    if (item && item->GetTimestamp() + m_queue->GetProcessingDelay() > Simulator::Now())
+    {
+        NS_LOG_DEBUG("The item (timestamp " << item->GetTimestamp().As(Time::S)
+                                            << ") is still being processed");
+        item = nullptr;
+    }
+
     // remove old packets (must be retransmissions or in flight, otherwise they did
     // not get a sequence number assigned)
     while (item && !item->IsFragment())

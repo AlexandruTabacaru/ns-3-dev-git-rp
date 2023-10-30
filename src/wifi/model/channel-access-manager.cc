@@ -20,6 +20,7 @@
 #include "channel-access-manager.h"
 
 #include "txop.h"
+#include "wifi-mac-queue.h"
 #include "wifi-phy-listener.h"
 #include "wifi-phy.h"
 
@@ -477,8 +478,22 @@ ChannelAccessManager::RequestAccess(Ptr<Txop> txop)
         // The backoff start time reported by the EDCAF is more recent than the last
         // time the medium was busy plus an AIFS, hence we need to align it to the
         // next slot boundary.
-        Time diff = txop->GetBackoffStart(m_linkId) - accessGrantStart;
+        Time diff;
+        if (txop->GetBackoffStart(m_linkId) <
+            (Simulator::Now() + txop->GetWifiMacQueue()->GetProcessingDelay()))
+        {
+            // This code avoids the TXOP arriving too soon after an idle period
+            // causing the A-MPDU to possibly be empty
+            NS_LOG_DEBUG("Updating backoff due to processing delay");
+            diff = txop->GetBackoffStart(m_linkId) + txop->GetWifiMacQueue()->GetProcessingDelay() -
+                   accessGrantStart;
+        }
+        else
+        {
+            diff = txop->GetBackoffStart(m_linkId) - accessGrantStart;
+        }
         uint32_t nIntSlots = (diff / GetSlot()).GetHigh() + 1;
+        NS_LOG_INFO("Updating backoff time to " << (accessGrantStart + (nIntSlots * GetSlot())));
         txop->UpdateBackoffSlotsNow(0, accessGrantStart + (nIntSlots * GetSlot()), m_linkId);
     }
 
