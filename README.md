@@ -1,4 +1,4 @@
-# CableLabs L4S in W-Fi Experimental Model for ns3
+# CableLabs L4S in Wi-Fi Experimental Model for ns3
 
 This is a fork of ns-3 with experimental updates to enable L4S support in Wi-Fi.
 
