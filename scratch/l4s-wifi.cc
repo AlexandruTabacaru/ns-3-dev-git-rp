@@ -38,10 +38,11 @@
 //
 // Benavior:
 // - at simulation time 1 second, each flow starts
-// - simulation ends after last flow terminates
+// - simulation ends 1 second after last foreground flow terminates, unless
+//   a specific duration was configured
 //
 // Outputs (some of these are for future definition):
-// 1) one-way latency sample for each flow
+// 1) one-way latency sample for each flow measured at application layer
 // 2) queueing and medium access delay
 // 3) PCAP files at TCP endpoints
 // 4) PCAP files on Wifi endpoints
@@ -128,21 +129,23 @@ main(int argc, char* argv[])
     Time progressInterval = Seconds(5);
 
     // Variables that can be changed by command-line argument
+    uint32_t numCubic = 1;
+    uint32_t numPrague = 1;
+    uint32_t numBackground = 0;
     uint32_t numBytes = 10e6;   // default 10 MB
-    Time duration = Seconds(0); // By default, close 1 second after last TCP flow closes
+    Time duration = Seconds(0); // By default, close one second after last TCP flow closes
     uint16_t mcs = 2;
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
     double scale = 1.0;     // default flow control scale factor
-    uint32_t numBackground = 0;
     bool showProgress = false;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
-    // ns-3 TCP socket buffer sizes do not dynamically grow
-    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(512000));
-    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(512000));
+    // ns-3 TCP socket buffer sizes do not dynamically grow, so set to tcp_rmem max value
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(6291456));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(6291456));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
     Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
@@ -151,17 +154,21 @@ main(int argc, char* argv[])
 
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
-    cmd.AddValue("numBytes", "Number of bytes for TCP transfer", numBytes);
-    cmd.AddValue("duration", "Simulation duration", duration);
+    cmd.AddValue("numCubic", "Number of foreground Cubic flows", numCubic);
+    cmd.AddValue("numPrague", "Number of foreground Prague flows", numPrague);
+    cmd.AddValue("numBackground", "Number of background flows", numBackground);
+    cmd.AddValue("numBytes", "Number of bytes for each TCP transfer", numBytes);
+    cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
-    cmd.AddValue("numBackground", "Number of background flows", numBackground);
-    cmd.AddValue("showProgress", "Show simulation progress every 10s", showProgress);
+    cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
+    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
+                    "Error: configure at least one foreground flow");
     std::ostringstream ossDataMode;
     ossDataMode << "HeMcs" << mcs;
 
@@ -273,6 +280,11 @@ main(int argc, char* argv[])
                            "MaxLimit",
                            UintegerValue(static_cast<uint32_t>(scale * limit)));
     }
+    else
+    {
+        // Leave a very small queue at the AQM layer
+        Config::SetDefault("ns3::DualPi2QueueDisc::QueueLimit", UintegerValue(1500));
+    }
     // Install the traffic control configuration on the AP Wi-Fi device
     // and on STA devices
     QueueDiscContainer apQueueDiscContainer = tch.Install(apDevice);
@@ -294,62 +306,69 @@ main(int argc, char* argv[])
     // Set the TCP type for the TCP under test
 
     // Application configuration for Prague flow under test
-    uint16_t port = 9;
+    uint16_t port = 100;
     ApplicationContainer serverApp;
-    BulkSendHelper bulk("ns3::TcpSocketFactory",
-                        InetSocketAddress(wifiInterfaces.GetAddress(1), port));
-    bulk.SetAttribute("MaxBytes", UintegerValue(numBytes));
-    serverApp = bulk.Install(serverNode.Get(0));
-    serverApp.Start(Seconds(1.0));
     ApplicationContainer clientApp;
-    PacketSinkHelper sink =
-        PacketSinkHelper("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
-    clientApp = sink.Install(staNodes.Get(0));
-    clientApp.Start(Seconds(1.0));
-    g_flowsToClose++;
-    Simulator::Schedule(
-        Seconds(1.0) - TimeStep(1),
-        MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+    for (auto i = 0u; i < numPrague; i++)
+    {
+        BulkSendHelper bulk("ns3::TcpSocketFactory",
+                            InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
+        bulk.SetAttribute("MaxBytes", UintegerValue(numBytes));
+        serverApp = bulk.Install(serverNode.Get(0));
+        serverApp.Start(Seconds(1.0));
+        PacketSinkHelper sink =
+            PacketSinkHelper("ns3::TcpSocketFactory",
+                             InetSocketAddress(Ipv4Address::GetAny(), port + i));
+        clientApp = sink.Install(staNodes.Get(0));
+        clientApp.Start(Seconds(1.0));
+        g_flowsToClose++;
+        Simulator::Schedule(
+            Seconds(1.0) - TimeStep(1),
+            MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+    }
 
     // Application configuration for background flows
+    port = 200;
     ApplicationContainer serverAppCubic;
-    BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
-                             InetSocketAddress(wifiInterfaces.GetAddress(1), port + 1));
-    bulkCubic.SetAttribute("MaxBytes", UintegerValue(numBytes));
-    serverAppCubic = bulkCubic.Install(serverNode.Get(0));
-    serverAppCubic.Start(Seconds(1.1));
     ApplicationContainer clientAppCubic;
-    PacketSinkHelper sinkCubic =
-        PacketSinkHelper("ns3::TcpSocketFactory",
-                         InetSocketAddress(Ipv4Address::GetAny(), port + 1));
-    clientAppCubic = sinkCubic.Install(staNodes.Get(0));
-    clientAppCubic.Start(Seconds(1.1));
-    g_flowsToClose++;
-    Simulator::Schedule(
-        Seconds(1.1) - TimeStep(1),
-        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+    for (auto i = 0u; i < numCubic; i++)
+    {
+        BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
+                                 InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
+        bulkCubic.SetAttribute("MaxBytes", UintegerValue(numBytes));
+        serverAppCubic = bulkCubic.Install(serverNode.Get(0));
+        serverAppCubic.Start(Seconds(1.05));
+        PacketSinkHelper sinkCubic =
+            PacketSinkHelper("ns3::TcpSocketFactory",
+                             InetSocketAddress(Ipv4Address::GetAny(), port + i));
+        clientAppCubic = sinkCubic.Install(staNodes.Get(0));
+        clientAppCubic.Start(Seconds(1.05));
+        g_flowsToClose++;
+        Simulator::Schedule(
+            Seconds(1.05) - TimeStep(1),
+            MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+    }
 
     // Add a cubic application on the server for each background flow
-    // Send the traffic to a different STA.  Offset start times
+    // Send the traffic from a different STA.
+    port = 300;
     Simulator::Schedule(
-        Seconds(2) - TimeStep(1),
+        Seconds(1.1) - TimeStep(1),
         MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
     for (auto i = 0u; i < numBackground; i++)
     {
         ApplicationContainer serverAppBackground;
-        BulkSendHelper bulkBackground(
-            "ns3::TcpSocketFactory",
-            InetSocketAddress(wifiInterfaces.GetAddress(2 + i), port + 2 + i));
+        BulkSendHelper bulkBackground("ns3::TcpSocketFactory",
+                                      InetSocketAddress(interfaces1.GetAddress(0), port + i));
         bulkBackground.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        serverAppBackground = bulkBackground.Install(serverNode.Get(0));
-        serverAppBackground.Start(Seconds(2 + i));
+        serverAppBackground = bulkBackground.Install(staNodes.Get(1 + i));
+        serverAppBackground.Start(Seconds(1.1));
         ApplicationContainer clientAppBackground;
         PacketSinkHelper sinkBackground =
             PacketSinkHelper("ns3::TcpSocketFactory",
-                             InetSocketAddress(Ipv4Address::GetAny(), port + 2 + i));
-        clientAppBackground = sinkBackground.Install(staNodes.Get(1 + i));
-        clientAppBackground.Start(Seconds(2 + i));
-        g_flowsToClose++;
+                             InetSocketAddress(Ipv4Address::GetAny(), port + i));
+        clientAppBackground = sinkBackground.Install(serverNode.Get(0));
+        clientAppBackground.Start(Seconds(1.1));
     }
 
     // Control the random variable stream assignments for Wi-Fi models (the value 100 is arbitrary)
@@ -360,7 +379,7 @@ main(int argc, char* argv[])
     wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
 
     // Set up traces
-    // Bytes in WifiMacQueue
+    // Bytes and throughput in WifiMacQueue
     g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
     apDevice.Get(0)
         ->GetObject<WifiNetDevice>()
@@ -373,38 +392,43 @@ main(int argc, char* argv[])
         ->GetMac()
         ->GetTxopQueue(AC_BE)
         ->TraceConnectWithoutContext("Dequeue", MakeCallback(&TraceDequeue));
-
     g_fileDequeueThroughput.open("wifi-dequeue-throughput.dat", std::ofstream::out);
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
 
-    clientApp.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "RxWithSeqTsSize",
-        MakeCallback(&TracePragueData));
-    g_filePragueThroughput.open("wifi-prague-throughput.dat", std::ofstream::out);
-    g_filePragueLatency.open("wifi-prague-latency.dat", std::ofstream::out);
-    Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+    // Throughput and latency for foreground flows, and set up close callbacks
+    for (auto i = 0u; i < clientApp.GetN(); i++)
+    {
+        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "RxWithSeqTsSize",
+            MakeCallback(&TracePragueData));
+        g_filePragueThroughput.open("wifi-prague-throughput.dat", std::ofstream::out);
+        g_filePragueLatency.open("wifi-prague-latency.dat", std::ofstream::out);
+        Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "PeerClose",
+            MakeCallback(&HandlePeerClose));
+        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "PeerError",
+            MakeCallback(&HandlePeerError));
+    }
 
-    clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "RxWithSeqTsSize",
-        MakeCallback(&TraceCubicData));
-    g_fileCubicThroughput.open("wifi-cubic-throughput.dat", std::ofstream::out);
-    g_fileCubicLatency.open("wifi-cubic-latency.dat", std::ofstream::out);
-    Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+    for (auto i = 0u; i < clientAppCubic.GetN(); i++)
+    {
+        clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "RxWithSeqTsSize",
+            MakeCallback(&TraceCubicData));
+        g_fileCubicThroughput.open("wifi-cubic-throughput.dat", std::ofstream::out);
+        g_fileCubicLatency.open("wifi-cubic-latency.dat", std::ofstream::out);
+        Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+        clientAppCubic.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "PeerClose",
+            MakeCallback(&HandlePeerClose));
+        clientAppCubic.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "PeerError",
+            MakeCallback(&HandlePeerError));
+    }
 
-    // Keep track of the end of simulation flows
-    clientApp.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "PeerClose",
-        MakeCallback(&HandlePeerClose));
-    clientApp.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "PeerError",
-        MakeCallback(&HandlePeerError));
-    clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "PeerClose",
-        MakeCallback(&HandlePeerClose));
-    clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-        "PeerError",
-        MakeCallback(&HandlePeerError));
-
+    // Trace bytes in DualPi2 queue
     g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
     apQueueDiscContainer.Get(0)->GetQueueDiscClass(0)->GetQueueDisc()->TraceConnectWithoutContext(
         "BytesInQueue",
@@ -416,11 +440,15 @@ main(int argc, char* argv[])
     }
     else
     {
-        // Keep the simulator from running forever in case Stop() is not triggered
+        // Keep the simulator from running forever in case Stop() is not triggered.
+        // However, the simulation should stop on the basis of the close callbacks.
         Simulator::Stop(Seconds(1000));
     }
+    std::cout << "Foreground flows: Cubic: " << numCubic << " Prague: " << numPrague << std::endl;
+    std::cout << "Background flows: " << numBackground << std::endl;
     if (showProgress)
     {
+        std::cout << std::endl;
         // Keep progress object in scope of the Run() method
         ShowProgress progress(progressInterval);
         Simulator::Run();
@@ -430,23 +458,39 @@ main(int argc, char* argv[])
         Simulator::Run();
     }
 
+    std::string stopReason = "automatic";
+    if (duration == Seconds(0) && Simulator::Now() >= Seconds(1000))
+    {
+        stopReason = "fail-safe";
+    }
+    else if (duration > Seconds(0))
+    {
+        stopReason = "scheduled";
+    }
     std::cout << std::endl
-              << "Simulation " << (duration == Seconds(0) ? "automatic" : "scheduled")
-              << " stop after " << Simulator::Now().GetSeconds() << " seconds" << std::endl
+              << "Reached simulation " << stopReason << " stop time after "
+              << Simulator::Now().GetSeconds() << " seconds" << std::endl
               << std::endl;
+
     std::cout << std::fixed << std::setprecision(2);
-    std::cout << "Cubic flow 0 throughput (Mbps) mean: " << cubicThroughputCalculator.getMean()
-              << " max: " << cubicThroughputCalculator.getMax()
-              << " min: " << cubicThroughputCalculator.getMin() << std::endl;
-    std::cout << "Cubic flow 0 latency (ms) mean: " << cubicLatencyCalculator.getMean()
-              << " max: " << cubicLatencyCalculator.getMax()
-              << " min: " << cubicLatencyCalculator.getMin() << std::endl;
-    std::cout << "Prague flow 0 throughput (Mbps) mean: " << pragueThroughputCalculator.getMean()
-              << " max: " << pragueThroughputCalculator.getMax()
-              << " min: " << pragueThroughputCalculator.getMin() << std::endl;
-    std::cout << "Prague flow 0 latency (ms) mean: " << pragueLatencyCalculator.getMean()
-              << " max: " << pragueLatencyCalculator.getMax()
-              << " min: " << pragueLatencyCalculator.getMin() << std::endl;
+    if (numCubic)
+    {
+        std::cout << "Cubic throughput (Mbps) mean: " << cubicThroughputCalculator.getMean()
+                  << " max: " << cubicThroughputCalculator.getMax()
+                  << " min: " << cubicThroughputCalculator.getMin() << std::endl;
+        std::cout << "Cubic latency (ms) mean: " << cubicLatencyCalculator.getMean()
+                  << " max: " << cubicLatencyCalculator.getMax()
+                  << " min: " << cubicLatencyCalculator.getMin() << std::endl;
+    }
+    if (numPrague)
+    {
+        std::cout << "Prague throughput (Mbps) mean: " << pragueThroughputCalculator.getMean()
+                  << " max: " << pragueThroughputCalculator.getMax()
+                  << " min: " << pragueThroughputCalculator.getMin() << std::endl;
+        std::cout << "Prague latency (ms) mean: " << pragueLatencyCalculator.getMean()
+                  << " max: " << pragueLatencyCalculator.getMax()
+                  << " min: " << pragueLatencyCalculator.getMin() << std::endl;
+    }
 
     g_fileBytesInAcBeQueue.close();
     g_fileBytesInDualPi2Queue.close();
