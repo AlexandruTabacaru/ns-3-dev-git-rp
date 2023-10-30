@@ -119,6 +119,7 @@ TcpPrrRecovery::DoRecovery(Ptr<TcpSocketState> tcb, uint32_t deliveredBytes)
     /* Force a fast retransmit upon entering fast recovery */
     sendCount = std::max(sendCount, static_cast<int>(m_prrOut > 0 ? 0 : tcb->m_segmentSize));
     tcb->m_cWnd = tcb->m_bytesInFlight + sendCount;
+    tcb->m_cWnd = std::max(tcb->m_cWnd.Get(), tcb->m_segmentSize);
     tcb->m_cWndInfl = tcb->m_cWnd;
 }
 
