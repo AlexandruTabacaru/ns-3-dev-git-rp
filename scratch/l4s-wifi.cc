@@ -147,6 +147,7 @@ main(int argc, char* argv[])
     double staDistance = 10;              // meters
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
+    Time processingDelay = MicroSeconds(0); // disabled by default
 
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
@@ -185,12 +186,17 @@ main(int argc, char* argv[])
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
+    cmd.AddValue("processingDelay", "Notional packet processing delay", processingDelay);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
     NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
                     "Error: configure at least one foreground flow");
+    if (processingDelay > Seconds(0))
+    {
+        Config::SetDefault("ns3::WifiMacQueue::ProcessingDelay", TimeValue(processingDelay));
+    }
     std::ostringstream ossDataMode;
     ossDataMode << "HeMcs" << mcs;
 
