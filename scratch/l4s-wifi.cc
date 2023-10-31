@@ -81,24 +81,46 @@ Time g_dequeueThroughputInterval = MilliSeconds(100);
 void TraceDequeueThroughput(void);
 
 uint32_t g_pragueData = 0;
+Time g_lastSeenPrague = Seconds(0);
 std::ofstream g_filePragueThroughput;
-std::ofstream g_filePragueLatency;
+std::ofstream g_filePragueCwnd;
+std::ofstream g_filePragueSsthresh;
+std::ofstream g_filePragueSendInterval;
+std::ofstream g_filePraguePacingRate;
+std::ofstream g_filePragueCongState;
+std::ofstream g_filePragueEcnState;
 Time g_pragueThroughputInterval = MilliSeconds(100);
-void TracePragueData(Ptr<const Packet> p,
-                     const Address& from [[maybe_unused]],
-                     const Address& to [[maybe_unused]],
-                     const SeqTsSizeHeader& header);
-void TracePragueThroughput(void);
+void TracePragueThroughput();
+void TracePragueTx(Ptr<const Packet> packet,
+                   const TcpHeader& header,
+                   Ptr<const TcpSocketBase> socket);
+void TracePragueCwnd(uint32_t oldVal, uint32_t newVal);
+void TracePragueSsthresh(uint32_t oldVal, uint32_t newVal);
+void TracePraguePacingRate(DataRate oldVal, DataRate newVal);
+void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
+                          TcpSocketState::TcpCongState_t newVal);
+void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
+void TracePragueSocket(Ptr<Application>, uint32_t);
 
 uint32_t g_cubicData = 0;
+Time g_lastSeenCubic = Seconds(0);
 std::ofstream g_fileCubicThroughput;
-std::ofstream g_fileCubicLatency;
+std::ofstream g_fileCubicCwnd;
+std::ofstream g_fileCubicSsthresh;
+std::ofstream g_fileCubicSendInterval;
+std::ofstream g_fileCubicPacingRate;
+std::ofstream g_fileCubicCongState;
 Time g_cubicThroughputInterval = MilliSeconds(100);
-void TraceCubicData(Ptr<const Packet> p,
-                    const Address& from [[maybe_unused]],
-                    const Address& to [[maybe_unused]],
-                    const SeqTsSizeHeader& header);
-void TraceCubicThroughput(void);
+void TraceCubicThroughput();
+void TraceCubicTx(Ptr<const Packet> packet,
+                  const TcpHeader& header,
+                  Ptr<const TcpSocketBase> socket);
+void TraceCubicCwnd(uint32_t oldVal, uint32_t newVal);
+void TraceCubicSsthresh(uint32_t oldVal, uint32_t newVal);
+void TraceCubicPacingRate(DataRate oldVal, DataRate newVal);
+void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
+                         TcpSocketState::TcpCongState_t newVal);
+void TraceCubicSocket(Ptr<Application>, uint32_t);
 
 // Count the number of flows to wait for completion before stopping the simulation
 uint32_t g_flowsToClose = 0;
@@ -113,9 +135,7 @@ void ConfigurePragueSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 void ConfigureCubicSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 
 // Declare some statistics counters here so that they are updated in traces
-MinMaxAvgTotalCalculator<double> pragueLatencyCalculator;      // units of ms
 MinMaxAvgTotalCalculator<uint32_t> pragueThroughputCalculator; // units of Mbps
-MinMaxAvgTotalCalculator<double> cubicLatencyCalculator;       // units of ms
 MinMaxAvgTotalCalculator<uint32_t> cubicThroughputCalculator;  // units of Mbps
 
 int
@@ -123,8 +143,8 @@ main(int argc, char* argv[])
 {
     // Variable declaration, and constants
     std::string wifiControlMode = "OfdmRate24Mbps";
-    std::string delay = "10ms"; // base RTT is 20ms
-    double staDistance = 10;    // meters
+    Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
+    double staDistance = 10;              // meters
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
 
@@ -143,9 +163,11 @@ main(int argc, char* argv[])
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
-    // ns-3 TCP socket buffer sizes do not dynamically grow, so set to tcp_rmem max value
-    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(6291456));
-    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(6291456));
+    // ns-3 TCP socket buffer sizes do not dynamically grow, so set to ~3 * BWD product
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(750000));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(750000));
+    // Enable pacing for Cubic
+    Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
     Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
@@ -187,7 +209,7 @@ main(int argc, char* argv[])
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("1Gbps"));
-    pointToPoint.SetChannelAttribute("Delay", StringValue(delay));
+    pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), apNode.Get(0));
 
     // Wifi configuration; use the simpler Yans physical layer model
@@ -303,9 +325,8 @@ main(int argc, char* argv[])
     // Get pointers to the TcpL4Protocol instances of the primary nodes
     Ptr<TcpL4Protocol> tcpL4ProtocolServer = serverNode.Get(0)->GetObject<TcpL4Protocol>();
     Ptr<TcpL4Protocol> tcpL4ProtocolSta = staNodes.Get(0)->GetObject<TcpL4Protocol>();
-    // Set the TCP type for the TCP under test
 
-    // Application configuration for Prague flow under test
+    // Application configuration for Prague flows under test
     uint16_t port = 100;
     ApplicationContainer serverApp;
     ApplicationContainer clientApp;
@@ -327,7 +348,7 @@ main(int argc, char* argv[])
             MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
     }
 
-    // Application configuration for background flows
+    // Application configuration for Cubic flows under test
     port = 200;
     ApplicationContainer serverAppCubic;
     ApplicationContainer clientAppCubic;
@@ -396,14 +417,21 @@ main(int argc, char* argv[])
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
 
     // Throughput and latency for foreground flows, and set up close callbacks
+    if (clientApp.GetN())
+    {
+        g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
+        g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
+        g_filePragueSsthresh.open("prague-ssthresh.dat", std::ofstream::out);
+        g_filePragueSendInterval.open("prague-send-interval.dat", std::ofstream::out);
+        g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
+        g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
+        g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
+    }
     for (auto i = 0u; i < clientApp.GetN(); i++)
     {
-        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-            "RxWithSeqTsSize",
-            MakeCallback(&TracePragueData));
-        g_filePragueThroughput.open("wifi-prague-throughput.dat", std::ofstream::out);
-        g_filePragueLatency.open("wifi-prague-latency.dat", std::ofstream::out);
-        Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+        // The TCP sockets that we want to connect
+        Simulator::Schedule(Seconds(1.0) + TimeStep(1),
+                            MakeBoundCallback(&TracePragueSocket, serverApp.Get(i), i));
         clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
             "PeerClose",
             MakeCallback(&HandlePeerClose));
@@ -412,14 +440,20 @@ main(int argc, char* argv[])
             MakeCallback(&HandlePeerError));
     }
 
+    if (clientAppCubic.GetN())
+    {
+        g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
+        g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
+        g_fileCubicSsthresh.open("cubic-ssthresh.dat", std::ofstream::out);
+        g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
+        g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
+        g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
+    }
     for (auto i = 0u; i < clientAppCubic.GetN(); i++)
     {
-        clientAppCubic.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-            "RxWithSeqTsSize",
-            MakeCallback(&TraceCubicData));
-        g_fileCubicThroughput.open("wifi-cubic-throughput.dat", std::ofstream::out);
-        g_fileCubicLatency.open("wifi-cubic-latency.dat", std::ofstream::out);
-        Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+        // The TCP sockets that we want to connect
+        Simulator::Schedule(Seconds(1.05) + TimeStep(1),
+                            MakeBoundCallback(&TraceCubicSocket, serverAppCubic.Get(i), i));
         clientAppCubic.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
             "PeerClose",
             MakeCallback(&HandlePeerClose));
@@ -478,18 +512,12 @@ main(int argc, char* argv[])
         std::cout << "Cubic throughput (Mbps) mean: " << cubicThroughputCalculator.getMean()
                   << " max: " << cubicThroughputCalculator.getMax()
                   << " min: " << cubicThroughputCalculator.getMin() << std::endl;
-        std::cout << "Cubic latency (ms) mean: " << cubicLatencyCalculator.getMean()
-                  << " max: " << cubicLatencyCalculator.getMax()
-                  << " min: " << cubicLatencyCalculator.getMin() << std::endl;
     }
     if (numPrague)
     {
         std::cout << "Prague throughput (Mbps) mean: " << pragueThroughputCalculator.getMean()
                   << " max: " << pragueThroughputCalculator.getMax()
                   << " min: " << pragueThroughputCalculator.getMin() << std::endl;
-        std::cout << "Prague latency (ms) mean: " << pragueLatencyCalculator.getMean()
-                  << " max: " << pragueLatencyCalculator.getMax()
-                  << " min: " << pragueLatencyCalculator.getMin() << std::endl;
     }
 
     g_fileBytesInAcBeQueue.close();
@@ -497,9 +525,19 @@ main(int argc, char* argv[])
     g_fileDequeue.close();
     g_fileDequeueThroughput.close();
     g_filePragueThroughput.close();
-    g_filePragueLatency.close();
+    g_filePragueCwnd.close();
+    g_filePragueSsthresh.close();
+    g_filePragueSendInterval.close();
+    g_filePraguePacingRate.close();
+    g_filePragueCongState.close();
+    g_filePragueEcnState.close();
     g_fileCubicThroughput.close();
-    g_fileCubicLatency.close();
+    g_fileCubicCwnd.close();
+    g_fileCubicSsthresh.close();
+    g_fileCubicSendInterval.close();
+    g_fileCubicPacingRate.close();
+    g_fileCubicCongState.close();
+    g_fileCubicCongState.close();
     Simulator::Destroy();
     return 0;
 }
@@ -542,15 +580,15 @@ TraceDequeue(Ptr<const WifiMpdu> mpdu)
 }
 
 void
-TracePragueData(Ptr<const Packet> p,
-                const Address& from [[maybe_unused]],
-                const Address& to [[maybe_unused]],
-                const SeqTsSizeHeader& header)
+TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    pragueLatencyCalculator.Update((Now().GetSeconds() - header.GetTs().GetSeconds()) * 1000);
-    g_filePragueLatency << Now().GetSeconds() << " " << std::fixed
-                        << (Now().GetSeconds() - header.GetTs().GetSeconds()) * 1000 << std::endl;
-    g_pragueData += p->GetSize();
+    g_pragueData += packet->GetSize();
+    if (g_lastSeenPrague > Seconds(0))
+    {
+        g_filePragueSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
+                                 << (Now() - g_lastSeenPrague).GetSeconds() << std::endl;
+    }
+    g_lastSeenPrague = Now();
 }
 
 void
@@ -566,15 +604,68 @@ TracePragueThroughput(void)
 }
 
 void
-TraceCubicData(Ptr<const Packet> p,
-               const Address& from [[maybe_unused]],
-               const Address& to [[maybe_unused]],
-               const SeqTsSizeHeader& header)
+TracePragueCwnd(uint32_t oldVal, uint32_t newVal)
 {
-    cubicLatencyCalculator.Update((Now().GetSeconds() - header.GetTs().GetSeconds()) * 1000);
-    g_fileCubicLatency << Now().GetSeconds() << " " << std::fixed
-                       << (Now().GetSeconds() - header.GetTs().GetSeconds()) * 1000 << std::endl;
-    g_cubicData += p->GetSize();
+    g_filePragueCwnd << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TracePragueSsthresh(uint32_t oldVal, uint32_t newVal)
+{
+    g_filePragueSsthresh << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TracePraguePacingRate(DataRate oldVal, DataRate newVal)
+{
+    g_filePraguePacingRate << Now().GetSeconds() << " " << newVal.GetBitRate() << std::endl;
+}
+
+void
+TracePragueCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCongState_t newVal)
+{
+    g_filePragueCongState << Now().GetSeconds() << " " << TcpSocketState::TcpCongStateName[newVal]
+                          << std::endl;
+}
+
+void
+TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal)
+{
+    g_filePragueEcnState << Now().GetSeconds() << " " << TcpSocketState::EcnStateName[newVal]
+                         << std::endl;
+}
+
+void
+TracePragueSocket(Ptr<Application> a, uint32_t i)
+{
+    Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
+    NS_ASSERT_MSG(bulk, "Application failed");
+    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
+    NS_ASSERT_MSG(s, "Socket downcast failed");
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
+    NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
+    tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TracePragueTx));
+    if (i == 0)
+    {
+        tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TracePragueCwnd));
+        tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TracePragueSsthresh));
+        tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TracePraguePacingRate));
+        tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TracePragueCongState));
+        tcp->TraceConnectWithoutContext("EcnState", MakeCallback(&TracePragueEcnState));
+        Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+    }
+}
+
+void
+TraceCubicTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    g_cubicData += packet->GetSize();
+    if (g_lastSeenCubic > Seconds(0))
+    {
+        g_fileCubicSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
+                                << (Now() - g_lastSeenCubic).GetSeconds() << std::endl;
+    }
+    g_lastSeenCubic = Now();
 }
 
 void
@@ -583,8 +674,55 @@ TraceCubicThroughput(void)
     g_fileCubicThroughput << Now().GetSeconds() << " " << std::fixed
                           << (g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() / 1e6
                           << std::endl;
+    cubicThroughputCalculator.Update((g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() /
+                                     1e6);
     Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
     g_cubicData = 0;
+}
+
+void
+TraceCubicCwnd(uint32_t oldVal, uint32_t newVal)
+{
+    g_fileCubicCwnd << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TraceCubicSsthresh(uint32_t oldVal, uint32_t newVal)
+{
+    g_fileCubicSsthresh << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TraceCubicPacingRate(DataRate oldVal, DataRate newVal)
+{
+    g_fileCubicPacingRate << Now().GetSeconds() << " " << newVal.GetBitRate() << std::endl;
+}
+
+void
+TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCongState_t newVal)
+{
+    g_fileCubicCongState << Now().GetSeconds() << " " << TcpSocketState::TcpCongStateName[newVal]
+                         << std::endl;
+}
+
+void
+TraceCubicSocket(Ptr<Application> a, uint32_t i)
+{
+    Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
+    NS_ASSERT_MSG(bulk, "Application failed");
+    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
+    NS_ASSERT_MSG(s, "Socket downcast failed");
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
+    NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
+    tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TraceCubicTx));
+    if (i == 0)
+    {
+        tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TraceCubicCwnd));
+        tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TraceCubicSsthresh));
+        tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TraceCubicPacingRate));
+        tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceCubicCongState));
+        Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+    }
 }
 
 void
@@ -593,8 +731,6 @@ TraceDequeueThroughput(void)
     g_fileDequeueThroughput << Now().GetSeconds() << " " << std::fixed
                             << (g_dequeuedData * 8) / g_dequeueThroughputInterval.GetSeconds() / 1e6
                             << std::endl;
-    cubicThroughputCalculator.Update((g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() /
-                                     1e6);
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
     g_dequeuedData = 0;
 }
