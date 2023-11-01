@@ -58,7 +58,11 @@ WifiMacQueue::GetTypeId()
             .AddTraceSource("Expired",
                             "MPDU dropped because its lifetime expired.",
                             MakeTraceSourceAccessor(&WifiMacQueue::m_traceExpired),
-                            "ns3::WifiMpdu::TracedCallback");
+                            "ns3::WifiMpdu::TracedCallback")
+            .AddTraceSource("PendingDequeue",
+                            "Number of bytes about to be dequeued.",
+                            MakeTraceSourceAccessor(&WifiMacQueue::m_tracePendingDequeue),
+                            "ns3::TracedValueCallback::Uint32");
     return tid;
 }
 
@@ -285,6 +289,7 @@ WifiMacQueue::DequeueIfQueued(const std::list<Ptr<const WifiMpdu>>& mpdus)
 
     std::list<ConstIterator> iterators;
 
+    uint32_t bytesToDequeue = 0;
     for (const auto& mpdu : mpdus)
     {
         if (mpdu->IsQueued())
@@ -293,9 +298,14 @@ WifiMacQueue::DequeueIfQueued(const std::list<Ptr<const WifiMpdu>>& mpdus)
             NS_ASSERT(it->ac == m_ac);
             NS_ASSERT(it->mpdu == mpdu->GetOriginal());
             iterators.emplace_back(it);
+            bytesToDequeue += it->mpdu->GetSize();
         }
     }
-
+    if (bytesToDequeue)
+    {
+        NS_LOG_DEBUG("About to dequeue " << bytesToDequeue << " bytes");
+        m_tracePendingDequeue = bytesToDequeue;
+    }
     DoDequeue(iterators);
 }
 
