@@ -402,17 +402,14 @@ main(int argc, char* argv[])
     // Set up traces
     // Bytes and throughput in WifiMacQueue
     g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
-    apDevice.Get(0)
-        ->GetObject<WifiNetDevice>()
-        ->GetMac()
-        ->GetTxopQueue(AC_BE)
-        ->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInAcBeQueue));
+    Ptr<WifiMacQueue> apWifiMacQueue =
+        apDevice.Get(0)->GetObject<WifiNetDevice>()->GetMac()->GetTxopQueue(AC_BE);
+    NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
+    apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
+                                               MakeCallback(&TraceBytesInAcBeQueue));
+
     g_fileDequeue.open("wifi-dequeue-events.dat", std::ofstream::out);
-    apDevice.Get(0)
-        ->GetObject<WifiNetDevice>()
-        ->GetMac()
-        ->GetTxopQueue(AC_BE)
-        ->TraceConnectWithoutContext("Dequeue", MakeCallback(&TraceDequeue));
+    apWifiMacQueue->TraceConnectWithoutContext("Dequeue", MakeCallback(&TraceDequeue));
     g_fileDequeueThroughput.open("wifi-dequeue-throughput.dat", std::ofstream::out);
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
 
@@ -463,10 +460,19 @@ main(int argc, char* argv[])
     }
 
     // Trace bytes in DualPi2 queue
+    Ptr<DualPi2QueueDisc> dualPi2 = apQueueDiscContainer.Get(0)
+                                        ->GetQueueDiscClass(0)
+                                        ->GetQueueDisc()
+                                        ->GetObject<DualPi2QueueDisc>();
+    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
-    apQueueDiscContainer.Get(0)->GetQueueDiscClass(0)->GetQueueDisc()->TraceConnectWithoutContext(
-        "BytesInQueue",
-        MakeCallback(&TraceBytesInDualPi2Queue));
+    dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
+
+    // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
+    bool connected = apWifiMacQueue->TraceConnectWithoutContext(
+        "PendingDequeue",
+        MakeCallback(&DualPi2QueueDisc::PendingDequeueCallback, dualPi2));
+    NS_ASSERT_MSG(connected, "Could not hook DualPi2 queue to AP WifiMacQueue trace source");
 
     if (duration > Seconds(0))
     {
