@@ -172,6 +172,38 @@ DualPi2QueueDisc::AssignStreams(int64_t stream)
     return 1;
 }
 
+void
+DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
+{
+    NS_LOG_FUNCTION(this << newBytes);
+    if (!GetNetDeviceQueueInterface() || !GetNetDeviceQueueInterface()->GetTxQueue(0)->IsStopped())
+    {
+        NS_LOG_DEBUG("Queue is not stopped so no need to process the value");
+        return;
+    }
+    else
+    {
+        NS_LOG_DEBUG("Queue is stopped; process the reported value " << newBytes);
+        // newBytes represents the Wi-Fi framed value of any packet
+        // For every QueueDiscItem packet in this queue, add 38 bytes
+        // for its queue size below.
+        NS_LOG_DEBUG("QueueDisc holds " << GetNBytes() << " bytes in " << GetNPackets()
+                                        << " packets");
+        uint32_t queueDiscPending = GetNBytes() + 38 * GetNPackets();
+        NS_LOG_DEBUG("The amount to be queued at WifiMacQueue is " << queueDiscPending);
+        if (newBytes > queueDiscPending)
+        {
+            NS_LOG_DEBUG("Add logic to mark excess of " << newBytes - queueDiscPending);
+        }
+        else
+        {
+            NS_LOG_DEBUG("WifiMacQueue can handle the pending " << newBytes);
+            return;
+        }
+    }
+    // TODO:  complete logic for marking excess
+}
+
 bool
 DualPi2QueueDisc::IsL4S(Ptr<QueueDiscItem> item)
 {
