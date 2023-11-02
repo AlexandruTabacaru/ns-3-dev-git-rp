@@ -64,11 +64,11 @@ except subprocess.CalledProcessError as e:
 
 # Run l4s-wifi
 with open('run.out', 'w') as out:
-    result = subprocess.run([path_to_ns3_script, 'run', '--no-build', '--cwd', os.getcwd(), 'l4s-wifi', '--', arguments], stdout=out, text=True)
+    result = subprocess.run([path_to_ns3_script, 'run', '--no-build', '--cwd', os.getcwd(), 'l4s-wifi', '--'] + arguments.split(), stdout=out, text=True)
 
 # Save the parameters used in a 'commandlog.out' file
 with open('commandlog.out', 'w') as out:
-    out.write('ns3 run l4s-wifi' + arguments + '\n')
+    out.write('ns3 run l4s-wifi' + ' -- ' + arguments + '\n')
     out.close()
 
 # Unused for now-- for future reference
