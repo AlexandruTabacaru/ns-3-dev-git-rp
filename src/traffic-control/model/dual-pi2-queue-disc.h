@@ -57,7 +57,7 @@ class DualPi2QueueDisc : public QueueDisc
      * \brief Get the type ID.
      * \return the object TypeId
      */
-    static TypeId GetTypeId(void);
+    static TypeId GetTypeId();
     /**
      * \brief Constructor
      */
@@ -65,7 +65,7 @@ class DualPi2QueueDisc : public QueueDisc
     /**
      * \brief  Destructor
      */
-    virtual ~DualPi2QueueDisc();
+    ~DualPi2QueueDisc() override;
     /**
      * \brief Get the current value of the queue in bytes.
      *
@@ -108,19 +108,19 @@ class DualPi2QueueDisc : public QueueDisc
 
   protected:
     // Documented in base class
-    virtual void DoDispose(void);
+    void DoDispose(void) override;
 
   private:
     // Documented in base class
-    virtual bool DoEnqueue(Ptr<QueueDiscItem> item);
-    virtual Ptr<QueueDiscItem> DoDequeue(void);
-    virtual Ptr<const QueueDiscItem> DoPeek(void) const;
-    virtual bool CheckConfig(void);
+    bool DoEnqueue(Ptr<QueueDiscItem> item) override;
+    Ptr<QueueDiscItem> DoDequeue(void) override;
+    Ptr<const QueueDiscItem> DoPeek(void) override;
+    bool CheckConfig(void) override;
 
     /**
      * \brief Initialize the queue parameters.
      */
-    virtual void InitializeParams(void);
+    void InitializeParams(void) override;
     /**
      * \brief check if traffic is classified as L4S (ECT(1) or CE)
      * \param item the QueueDiscItem to check

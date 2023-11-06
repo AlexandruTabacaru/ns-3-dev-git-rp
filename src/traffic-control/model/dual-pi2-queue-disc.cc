@@ -280,7 +280,7 @@ DualPi2QueueDisc::DualPi2Update()
     Ptr<const QueueDiscItem> item;
     Time curQ = Seconds(0);
 
-    if (item = GetInternalQueue(CLASSIC)->Peek())
+    if ((item = GetInternalQueue(CLASSIC)->Peek()))
     {
         curQ = Simulator::Now() - item->GetTimeStamp();
     }
@@ -371,11 +371,11 @@ DualPi2QueueDisc::Scheduler() const
     Time cqTime = Seconds(0);
     Time lqTime = Seconds(0);
     Ptr<const QueueDiscItem> peekedItem;
-    if (peekedItem = GetInternalQueue(CLASSIC)->Peek())
+    if ((peekedItem = GetInternalQueue(CLASSIC)->Peek()))
     {
         cqTime = Simulator::Now() - peekedItem->GetTimeStamp();
     }
-    if (peekedItem = GetInternalQueue(L4S)->Peek())
+    if ((peekedItem = GetInternalQueue(L4S)->Peek()))
     {
         lqTime = Simulator::Now() - peekedItem->GetTimeStamp();
     }
@@ -421,14 +421,14 @@ DualPi2QueueDisc::Recur(double likelihood)
 }
 
 Ptr<const QueueDiscItem>
-DualPi2QueueDisc::DoPeek() const
+DualPi2QueueDisc::DoPeek()
 {
     NS_LOG_FUNCTION(this);
     Ptr<const QueueDiscItem> item;
 
     for (std::size_t i = 0; i < GetNInternalQueues(); i++)
     {
-        if (item = GetInternalQueue(i)->Peek())
+        if ((item = GetInternalQueue(i)->Peek()))
         {
             NS_LOG_LOGIC("Peeked from queue number " << i << ": " << item);
             NS_LOG_LOGIC("Number packets queue number " << i << ": "
