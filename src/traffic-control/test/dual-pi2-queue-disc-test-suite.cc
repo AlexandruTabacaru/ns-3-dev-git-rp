@@ -34,9 +34,9 @@ class DualQueueL4SQueueDiscTestItem : public QueueDiscItem
 {
   public:
     DualQueueL4SQueueDiscTestItem(Ptr<Packet> p, const Address& addr, uint16_t protocol);
-    virtual ~DualQueueL4SQueueDiscTestItem();
-    virtual void AddHeader(void);
-    virtual bool Mark(void);
+    ~DualQueueL4SQueueDiscTestItem() override;
+    void AddHeader(void) override;
+    bool Mark(void) override;
     bool GetUint8Value(Uint8Values field, uint8_t& value) const override;
 
   private:
@@ -89,9 +89,9 @@ class DualQueueClassicQueueDiscTestItem : public QueueDiscItem
 {
   public:
     DualQueueClassicQueueDiscTestItem(Ptr<Packet> p, const Address& addr, uint16_t protocol);
-    virtual ~DualQueueClassicQueueDiscTestItem();
-    virtual void AddHeader(void);
-    virtual bool Mark(void);
+    ~DualQueueClassicQueueDiscTestItem() override;
+    void AddHeader(void) override;
+    bool Mark(void) override;
     bool GetUint8Value(Uint8Values field, uint8_t& value) const override;
 
   private:
