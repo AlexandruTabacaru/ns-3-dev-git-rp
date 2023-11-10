@@ -162,6 +162,11 @@ class TcpSocketState : public Object
     static const char* const TcpCongStateName[TcpSocketState::CA_LAST_STATE];
 
     /**
+     * \brief Literal names of TCP congestion avoidance states for use in log messages
+     */
+    static const char* const TcpCongAvoidName[TcpSocketState::CA_EVENT_NON_DELAYED_ACK + 1];
+
+    /**
      * \brief Literal names of ECN states for use in log messages
      */
     static const char* const EcnStateName[TcpSocketState::ECN_CWR_SENT + 1];

@@ -136,6 +136,17 @@ const char* const TcpSocketState::TcpCongStateName[TcpSocketState::CA_LAST_STATE
     "CA_LOSS",
 };
 
+const char* const TcpSocketState::TcpCongAvoidName[TcpSocketState::CA_EVENT_NON_DELAYED_ACK + 1] = {
+    "CA_EVENT_TX_START",
+    "CA_EVENT_CWND_RESTART",
+    "CA_EVENT_COMPLETE_CWR",
+    "CA_EVENT_LOSS",
+    "CA_EVENT_ECN_NO_CE",
+    "CA_EVENT_ECN_IS_CE",
+    "CA_EVENT_DELAYED_ACK",
+    "CA_EVENT_NON_DELAYED_ACK",
+};
+
 const char* const TcpSocketState::EcnStateName[TcpSocketState::ECN_CWR_SENT + 1] = {
     "ECN_DISABLED",
     "ECN_IDLE",
