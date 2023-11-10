@@ -78,7 +78,7 @@ void TraceDequeue(Ptr<const WifiMpdu> mpdu);
 
 std::ofstream g_fileDequeueThroughput;
 Time g_dequeueThroughputInterval = MilliSeconds(100);
-void TraceDequeueThroughput(void);
+void TraceDequeueThroughput();
 
 uint32_t g_pragueData = 0;
 Time g_lastSeenPrague = Seconds(0);
@@ -336,7 +336,7 @@ main(int argc, char* argv[])
     uint16_t port = 100;
     ApplicationContainer serverApp;
     ApplicationContainer clientApp;
-    for (auto i = 0u; i < numPrague; i++)
+    for (auto i = 0U; i < numPrague; i++)
     {
         BulkSendHelper bulk("ns3::TcpSocketFactory",
                             InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
@@ -358,7 +358,7 @@ main(int argc, char* argv[])
     port = 200;
     ApplicationContainer serverAppCubic;
     ApplicationContainer clientAppCubic;
-    for (auto i = 0u; i < numCubic; i++)
+    for (auto i = 0U; i < numCubic; i++)
     {
         BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
                                  InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
@@ -382,7 +382,7 @@ main(int argc, char* argv[])
     Simulator::Schedule(
         Seconds(1.1) - TimeStep(1),
         MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
-    for (auto i = 0u; i < numBackground; i++)
+    for (auto i = 0U; i < numBackground; i++)
     {
         ApplicationContainer serverAppBackground;
         BulkSendHelper bulkBackground("ns3::TcpSocketFactory",
@@ -430,7 +430,7 @@ main(int argc, char* argv[])
         g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
         g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
     }
-    for (auto i = 0u; i < clientApp.GetN(); i++)
+    for (auto i = 0U; i < clientApp.GetN(); i++)
     {
         // The TCP sockets that we want to connect
         Simulator::Schedule(Seconds(1.0) + TimeStep(1),
@@ -452,7 +452,7 @@ main(int argc, char* argv[])
         g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
         g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
     }
-    for (auto i = 0u; i < clientAppCubic.GetN(); i++)
+    for (auto i = 0U; i < clientAppCubic.GetN(); i++)
     {
         // The TCP sockets that we want to connect
         Simulator::Schedule(Seconds(1.05) + TimeStep(1),
@@ -604,7 +604,7 @@ TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSo
 }
 
 void
-TracePragueThroughput(void)
+TracePragueThroughput()
 {
     g_filePragueThroughput << Now().GetSeconds() << " " << std::fixed
                            << (g_pragueData * 8) / g_pragueThroughputInterval.GetSeconds() / 1e6
@@ -681,7 +681,7 @@ TraceCubicTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSoc
 }
 
 void
-TraceCubicThroughput(void)
+TraceCubicThroughput()
 {
     g_fileCubicThroughput << Now().GetSeconds() << " " << std::fixed
                           << (g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() / 1e6
@@ -738,7 +738,7 @@ TraceCubicSocket(Ptr<Application> a, uint32_t i)
 }
 
 void
-TraceDequeueThroughput(void)
+TraceDequeueThroughput()
 {
     g_fileDequeueThroughput << Now().GetSeconds() << " " << std::fixed
                             << (g_dequeuedData * 8) / g_dequeueThroughputInterval.GetSeconds() / 1e6
