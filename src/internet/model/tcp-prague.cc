@@ -420,7 +420,7 @@ TcpPrague::UpdateAckReserved(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpC
 void
 TcpPrague::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event)
 {
-    NS_LOG_FUNCTION(this << tcb << event);
+    NS_LOG_FUNCTION(this << tcb << TcpSocketState::TcpCongAvoidName[event]);
 
     switch (event)
     {
@@ -434,14 +434,31 @@ TcpPrague::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t
     case TcpSocketState::CA_EVENT_NON_DELAYED_ACK:
         UpdateAckReserved(tcb, event);
         break;
-    case TcpSocketState::CA_RECOVERY:
-        EnterLoss(tcb);
+    case TcpSocketState::CA_EVENT_CWND_RESTART:
+    case TcpSocketState::CA_EVENT_LOSS:
+    case TcpSocketState::CA_EVENT_TX_START:
+    default:
         break;
+    }
+}
+
+void
+TcpPrague::CongestionStateSet(Ptr<TcpSocketState> tcb,
+                              const TcpSocketState::TcpCongState_t newState)
+{
+    NS_LOG_FUNCTION(this << tcb << TcpSocketState::TcpCongStateName[newState]);
+    switch (newState)
+    {
     case TcpSocketState::CA_OPEN:
         m_inLoss = false;
         break;
+    case TcpSocketState::CA_RECOVERY:
+        EnterLoss(tcb);
+        break;
+    case TcpSocketState::CA_DISORDER:
+    case TcpSocketState::CA_CWR:
+    case TcpSocketState::CA_LOSS:
     default:
-        /* Don't care for the rest. */
         break;
     }
 }
