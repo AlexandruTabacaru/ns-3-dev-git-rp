@@ -35,14 +35,17 @@ class DualQueueL4SQueueDiscTestItem : public QueueDiscItem
   public:
     DualQueueL4SQueueDiscTestItem(Ptr<Packet> p, const Address& addr, uint16_t protocol);
     ~DualQueueL4SQueueDiscTestItem() override;
-    void AddHeader(void) override;
-    bool Mark(void) override;
+
+    // Delete default constructor, copy constructor and assignment operator to avoid misuse
+    DualQueueL4SQueueDiscTestItem() = delete;
+    DualQueueL4SQueueDiscTestItem(const DualQueueL4SQueueDiscTestItem&) = delete;
+    DualQueueL4SQueueDiscTestItem& operator=(const DualQueueL4SQueueDiscTestItem&) = delete;
+
+    void AddHeader() override;
+    bool Mark() override;
     bool GetUint8Value(Uint8Values field, uint8_t& value) const override;
 
   private:
-    DualQueueL4SQueueDiscTestItem();
-    DualQueueL4SQueueDiscTestItem(const DualQueueL4SQueueDiscTestItem&);
-    DualQueueL4SQueueDiscTestItem& operator=(const DualQueueL4SQueueDiscTestItem&);
     bool m_isMarked{false};
 };
 
@@ -58,12 +61,12 @@ DualQueueL4SQueueDiscTestItem::~DualQueueL4SQueueDiscTestItem()
 }
 
 void
-DualQueueL4SQueueDiscTestItem::AddHeader(void)
+DualQueueL4SQueueDiscTestItem::AddHeader()
 {
 }
 
 bool
-DualQueueL4SQueueDiscTestItem::Mark(void)
+DualQueueL4SQueueDiscTestItem::Mark()
 {
     m_isMarked = true;
     return true;
@@ -90,14 +93,17 @@ class DualQueueClassicQueueDiscTestItem : public QueueDiscItem
   public:
     DualQueueClassicQueueDiscTestItem(Ptr<Packet> p, const Address& addr, uint16_t protocol);
     ~DualQueueClassicQueueDiscTestItem() override;
-    void AddHeader(void) override;
-    bool Mark(void) override;
+
+    // Delete default constructor, copy constructor and assignment operator to avoid misuse
+    DualQueueClassicQueueDiscTestItem() = delete;
+    DualQueueClassicQueueDiscTestItem(const DualQueueClassicQueueDiscTestItem&) = delete;
+    DualQueueClassicQueueDiscTestItem& operator=(const DualQueueClassicQueueDiscTestItem&) = delete;
+
+    void AddHeader() override;
+    bool Mark() override;
     bool GetUint8Value(Uint8Values field, uint8_t& value) const override;
 
   private:
-    DualQueueClassicQueueDiscTestItem();
-    DualQueueClassicQueueDiscTestItem(const DualQueueClassicQueueDiscTestItem&);
-    DualQueueClassicQueueDiscTestItem& operator=(const DualQueueClassicQueueDiscTestItem&);
     bool m_isMarked{false};
 };
 
@@ -113,12 +119,12 @@ DualQueueClassicQueueDiscTestItem::~DualQueueClassicQueueDiscTestItem()
 }
 
 void
-DualQueueClassicQueueDiscTestItem::AddHeader(void)
+DualQueueClassicQueueDiscTestItem::AddHeader()
 {
 }
 
 bool
-DualQueueClassicQueueDiscTestItem::Mark(void)
+DualQueueClassicQueueDiscTestItem::Mark()
 {
     m_isMarked = true;
     return true;
@@ -144,7 +150,7 @@ class DualPi2QueueDiscTestCase : public TestCase
 {
   public:
     DualPi2QueueDiscTestCase();
-    virtual void DoRun(void);
+    void DoRun() override;
 
   private:
     void Enqueue(Ptr<DualPi2QueueDisc> queue,
@@ -157,7 +163,7 @@ class DualPi2QueueDiscTestCase : public TestCase
                           StringValue trafficType);
     void Dequeue(Ptr<DualPi2QueueDisc> queue, uint32_t nPkt);
     void DequeueWithDelay(Ptr<DualPi2QueueDisc> queue, double delay, uint32_t nPkt);
-    void RunPiSquareTest(void);
+    void RunPiSquareTest();
 };
 
 DualPi2QueueDiscTestCase::DualPi2QueueDiscTestCase()
@@ -166,7 +172,7 @@ DualPi2QueueDiscTestCase::DualPi2QueueDiscTestCase()
 }
 
 void
-DualPi2QueueDiscTestCase::RunPiSquareTest(void)
+DualPi2QueueDiscTestCase::RunPiSquareTest()
 {
     uint32_t pktSize = 1000;
 
@@ -185,7 +191,14 @@ DualPi2QueueDiscTestCase::RunPiSquareTest(void)
                           true,
                           "Verify that we can actually set the attribute QueueLimit");
 
-    Ptr<Packet> p1, p2, p3, p4, p5, p6, p7, p8;
+    Ptr<Packet> p1;
+    Ptr<Packet> p2;
+    Ptr<Packet> p3;
+    Ptr<Packet> p4;
+    Ptr<Packet> p5;
+    Ptr<Packet> p6;
+    Ptr<Packet> p7;
+    Ptr<Packet> p8;
     p1 = Create<Packet>(pktSize);
     p2 = Create<Packet>(pktSize);
     p3 = Create<Packet>(pktSize);
@@ -449,7 +462,7 @@ DualPi2QueueDiscTestCase::DequeueWithDelay(Ptr<DualPi2QueueDisc> queue, double d
 }
 
 void
-DualPi2QueueDiscTestCase::DoRun(void)
+DualPi2QueueDiscTestCase::DoRun()
 {
     RunPiSquareTest();
     Simulator::Destroy();
