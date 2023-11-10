@@ -56,7 +56,7 @@ class TcpPrague : public TcpCongestionOps
      * \brief Get the type ID.
      * \return the object TypeId
      */
-    static TypeId GetTypeId(void);
+    static TypeId GetTypeId();
 
     TcpPrague();
 
@@ -66,9 +66,9 @@ class TcpPrague : public TcpCongestionOps
      */
     TcpPrague(const TcpPrague& sock);
 
-    ~TcpPrague(void);
+    ~TcpPrague() override;
 
-    std::string GetName() const;
+    std::string GetName() const override;
 
     /**
      * \brief Set configuration required by congestion control algorithm.
@@ -78,7 +78,7 @@ class TcpPrague : public TcpCongestionOps
      *
      * \param tcb internal congestion state
      */
-    virtual void Init(Ptr<TcpSocketState> tcb);
+    void Init(Ptr<TcpSocketState> tcb) override;
 
     /**
      * \brief Return target RTT, equivalent to prague_target_rtt in Linux
@@ -125,13 +125,13 @@ class TcpPrague : public TcpCongestionOps
      * \param tcb internal congestion state
      * \return The congestion window counter
      */
-    double_t GetCwndCnt(void);
+    double_t GetCwndCnt() const;
 
     /** \brief Return the default RTT target
      *
      * \return The default RTT target
      */
-    Time GetDefaultRttTarget(void) const;
+    Time GetDefaultRttTarget() const;
 
     /**
      * \brief Sets the default target RTT
@@ -157,11 +157,11 @@ class TcpPrague : public TcpCongestionOps
     void UpdateAlpha(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
     // documented in base class
-    virtual Ptr<TcpCongestionOps> Fork();
+    Ptr<TcpCongestionOps> Fork() override;
     virtual void ReduceCwnd(Ptr<TcpSocketState> tcb);
-    virtual void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event);
-    virtual uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight);
-    virtual void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt);
+    void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event) override;
+    uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight) override;
+    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
 
   private:
     /**

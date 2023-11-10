@@ -36,7 +36,7 @@ NS_LOG_COMPONENT_DEFINE("TcpPrague");
 NS_OBJECT_ENSURE_REGISTERED(TcpPrague);
 
 TypeId
-TcpPrague::GetTypeId(void)
+TcpPrague::GetTypeId()
 {
     static TypeId tid =
         TypeId("ns3::TcpPrague")
@@ -122,13 +122,13 @@ TcpPrague::TcpPrague(const TcpPrague& sock)
     NS_LOG_FUNCTION(this);
 }
 
-TcpPrague::~TcpPrague(void)
+TcpPrague::~TcpPrague()
 {
     NS_LOG_FUNCTION(this);
 }
 
 Ptr<TcpCongestionOps>
-TcpPrague::Fork(void)
+TcpPrague::Fork()
 {
     NS_LOG_FUNCTION(this);
     return CopyObject<TcpPrague>(this);
@@ -238,7 +238,7 @@ TcpPrague::UpdateAlpha(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 
     if (m_sawCE)
     {
-        if (m_nextSeqFlag == false)
+        if (!m_nextSeqFlag)
         {
             m_nextSeq = tcb->m_nextTxSequence;
             m_nextSeqFlag = true;
@@ -350,7 +350,7 @@ TcpPrague::CeState0to1(Ptr<TcpSocketState> tcb)
         tcb->m_rxBuffer->SetNextRxSequence(tmpRcvNxt);
     }
 
-    if (m_priorRcvNxtFlag == false)
+    if (!m_priorRcvNxtFlag)
     {
         m_priorRcvNxtFlag = true;
     }
@@ -378,7 +378,7 @@ TcpPrague::CeState1to0(Ptr<TcpSocketState> tcb)
         tcb->m_rxBuffer->SetNextRxSequence(tmpRcvNxt);
     }
 
-    if (m_priorRcvNxtFlag == false)
+    if (!m_priorRcvNxtFlag)
     {
         m_priorRcvNxtFlag = true;
     }
@@ -470,22 +470,18 @@ TcpPrague::IsRttIndependent(Ptr<TcpSocketState> tcb)
     // This method is similar to prague_is_rtt_indep in Linux
     NS_LOG_FUNCTION(this << tcb);
 
-    if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE &&
-        !(tcb->m_cWnd < tcb->m_ssThresh) && m_round >= m_rttTransitionDelay)
-    {
-        return true;
-    }
-    return false;
+    return m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE &&
+        !(tcb->m_cWnd < tcb->m_ssThresh) && m_round >= m_rttTransitionDelay;
 }
 
 double_t
-TcpPrague::GetCwndCnt(void)
+TcpPrague::GetCwndCnt() const
 {
     return m_cWndCnt;
 }
 
 Time
-TcpPrague::GetDefaultRttTarget(void) const
+TcpPrague::GetDefaultRttTarget() const
 {
     return m_rttTarget;
 }
@@ -563,7 +559,8 @@ TcpPrague::AiAckIncrease(Ptr<TcpSocketState> tcb)
     else
     {
         // Linux would call prague_scalable_ai_ack_increase
-        Time R0 = Seconds(0.016), R1 = Seconds(0.0015); // 16ms and 1.5ms
+        Time R0 = Seconds(0.016);
+        Time R1 = Seconds(0.0015); // 16ms and 1.5ms
         double_t increase =
             R0.GetSeconds() / 8 +
             std::min(std::max(lastRtt.GetSeconds() - R1.GetSeconds(), 0.0), R0.GetSeconds());
