@@ -71,7 +71,7 @@ class DualPi2QueueDisc : public QueueDisc
      *
      * \returns The queue size in bytes.
      */
-    uint32_t GetQueueSize(void) const;
+    uint32_t GetQueueSize() const;
     /**
      * \brief Set the limit of the queue in bytes.
      *
@@ -108,19 +108,19 @@ class DualPi2QueueDisc : public QueueDisc
 
   protected:
     // Documented in base class
-    void DoDispose(void) override;
+    void DoDispose() override;
 
   private:
     // Documented in base class
     bool DoEnqueue(Ptr<QueueDiscItem> item) override;
-    Ptr<QueueDiscItem> DoDequeue(void) override;
-    Ptr<const QueueDiscItem> DoPeek(void) override;
-    bool CheckConfig(void) override;
+    Ptr<QueueDiscItem> DoDequeue() override;
+    Ptr<const QueueDiscItem> DoPeek() override;
+    bool CheckConfig() override;
 
     /**
      * \brief Initialize the queue parameters.
      */
-    void InitializeParams(void) override;
+    void InitializeParams() override;
     /**
      * \brief check if traffic is classified as L4S (ECT(1) or CE)
      * \param item the QueueDiscItem to check
@@ -136,7 +136,7 @@ class DualPi2QueueDisc : public QueueDisc
     /**
      * \brief Periodically calculate the drop probability
      */
-    void DualPi2Update(void);
+    void DualPi2Update();
     /**
      * L4S AQM function
      * \param lqTime Delay to evaluate against threshold
@@ -150,7 +150,7 @@ class DualPi2QueueDisc : public QueueDisc
      * \param cqTime Classic sojourn time
      * \return either 0 (Classic) or 1 (L4S)
      */
-    std::size_t Scheduler(void) const;
+    std::size_t Scheduler() const;
 
     // Values supplied by user
     Time m_target;         //!< Queue delay target for Classic traffic

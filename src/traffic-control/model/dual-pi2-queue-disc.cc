@@ -49,7 +49,7 @@ const std::size_t CLASSIC = 0;
 const std::size_t L4S = 1;
 
 TypeId
-DualPi2QueueDisc::GetTypeId(void)
+DualPi2QueueDisc::GetTypeId()
 {
     static TypeId tid =
         TypeId("ns3::DualPi2QueueDisc")
@@ -143,7 +143,7 @@ DualPi2QueueDisc::~DualPi2QueueDisc()
 }
 
 void
-DualPi2QueueDisc::DoDispose(void)
+DualPi2QueueDisc::DoDispose()
 {
     NS_LOG_FUNCTION(this);
     m_rtrsEvent.Cancel();
@@ -158,7 +158,7 @@ DualPi2QueueDisc::SetQueueLimit(uint32_t lim)
 }
 
 uint32_t
-DualPi2QueueDisc::GetQueueSize(void) const
+DualPi2QueueDisc::GetQueueSize() const
 {
     NS_LOG_FUNCTION(this);
     return (GetInternalQueue(CLASSIC)->GetNBytes() + GetInternalQueue(L4S)->GetNBytes());
@@ -250,7 +250,7 @@ DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
 }
 
 void
-DualPi2QueueDisc::InitializeParams(void)
+DualPi2QueueDisc::InitializeParams()
 {
     if (m_mtu == 0)
     {
@@ -361,7 +361,7 @@ DualPi2QueueDisc::DoDequeue()
             return item;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 std::size_t
@@ -444,7 +444,7 @@ DualPi2QueueDisc::DoPeek()
 }
 
 bool
-DualPi2QueueDisc::CheckConfig(void)
+DualPi2QueueDisc::CheckConfig()
 {
     NS_LOG_FUNCTION(this);
     if (GetNQueueDiscClasses() > 0)
