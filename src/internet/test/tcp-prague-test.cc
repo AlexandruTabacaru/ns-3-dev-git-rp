@@ -60,12 +60,12 @@ class TcpPragueSlowStartTest : public TestCase
                            const std::string& name);
 
   private:
-    virtual void DoRun(void);
+    void DoRun() override;
 
     /**
      * \brief Execute the test.
      */
-    void ExecuteTest(void);
+    void ExecuteTest();
 
     uint32_t m_cWnd;                 //!< cWnd
     uint32_t m_segmentSize;          //!< segment size
@@ -168,12 +168,12 @@ class TcpPragueCongestionAvoidanceTest : public TestCase
                                      const std::string& name);
 
   private:
-    virtual void DoRun(void);
+    void DoRun() override;
 
     /**
      * \brief Execute the test.
      */
-    void ExecuteTest(void);
+    void ExecuteTest();
 
     uint32_t m_cWnd;                 //!< cWnd
     uint32_t m_segmentSize;          //!< segment size
@@ -288,18 +288,18 @@ class TcpPragueRttIndependenceTest : public TestCase
                                  const std::string& name);
 
   private:
-    virtual void DoRun(void);
+    void DoRun() override;
 
     /**
      * \brief Execute the test.
      */
-    void ExecuteTest(void);
+    void ExecuteTest();
 
     /**
      * \brief Return the additive increase factor
      * \returns Additive increase factor
      */
-    double_t GetAdditiveFactor(void);
+    double_t GetAdditiveFactor();
 
     uint32_t m_cWnd;                    //!< cWnd
     uint32_t m_segmentSize;             //!< segment size
@@ -381,7 +381,7 @@ TcpPragueRttIndependenceTest::ExecuteTest()
 }
 
 double_t
-TcpPragueRttIndependenceTest::GetAdditiveFactor(void)
+TcpPragueRttIndependenceTest::GetAdditiveFactor()
 {
     Time lastRtt = m_rtt;
     Time maxScaledRtt = MilliSeconds(100);
@@ -407,7 +407,8 @@ TcpPragueRttIndependenceTest::GetAdditiveFactor(void)
     }
     else
     {
-        Time R0 = Seconds(0.016), R1 = Seconds(0.0015);
+        Time R0 = Seconds(0.016);
+        Time R1 = Seconds(0.0015);
         double_t increase =
             R0.GetSeconds() / 8 +
             std::min(std::max(lastRtt.GetSeconds() - R1.GetSeconds(), 0.0), R0.GetSeconds());

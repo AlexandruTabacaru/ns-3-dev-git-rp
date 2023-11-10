@@ -471,7 +471,7 @@ TcpPrague::IsRttIndependent(Ptr<TcpSocketState> tcb)
     NS_LOG_FUNCTION(this << tcb);
 
     return m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE &&
-        !(tcb->m_cWnd < tcb->m_ssThresh) && m_round >= m_rttTransitionDelay;
+           !(tcb->m_cWnd < tcb->m_ssThresh) && m_round >= m_rttTransitionDelay;
 }
 
 double_t
