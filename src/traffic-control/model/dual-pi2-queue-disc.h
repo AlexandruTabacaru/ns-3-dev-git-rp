@@ -36,6 +36,7 @@
 #include "ns3/traced-value.h"
 
 #include <queue>
+#include <set>
 
 namespace ns3
 {
@@ -118,6 +119,30 @@ class DualPi2QueueDisc : public QueueDisc
     bool CheckConfig() override;
 
     /**
+     * \brief Add a QueueDiscItem to the internal L4S staging queue
+     * \param qdItem The QueueDiscItem to add
+     */
+    void AddToL4sStagingQueue(Ptr<QueueDiscItem> qdItem);
+    /**
+     * \brief Add a QueueDiscItem to the internal CLASSIC staging queue
+     * \param qdItem The QueueDiscItem to add
+     */
+    void AddToClassicStagingQueue(Ptr<QueueDiscItem> qdItem);
+    /**
+     * \brief Dequeue from the internal L4S staging queue
+     * \return The next QueueDiscItem if available, or nullptr
+     */
+    Ptr<QueueDiscItem> DequeueFromL4sStagingQueue();
+    /**
+     * \brief Dequeue from the internal CLASSIC staging queue
+     * \return The next QueueDiscItem if available, or nullptr
+     */
+    Ptr<QueueDiscItem> DequeueFromClassicStagingQueue();
+
+    Ptr<QueueDiscItem> DequeueFromL4sQueue(bool& marked);
+
+    Ptr<QueueDiscItem> DequeueFromClassicQueue(bool& dropped);
+    /**
      * \brief Initialize the queue parameters.
      */
     void InitializeParams() override;
@@ -126,7 +151,7 @@ class DualPi2QueueDisc : public QueueDisc
      * \param item the QueueDiscItem to check
      * \return true if ECT(1) or CE, false otherwise
      */
-    bool IsL4S(Ptr<QueueDiscItem> item);
+    bool IsL4s(Ptr<QueueDiscItem> item);
     /**
      * \brief Implement the L4S recur function for probabilistic marking
      * \param likelihood the likelihood of marking
@@ -144,25 +169,29 @@ class DualPi2QueueDisc : public QueueDisc
      */
     double Laqm(Time lqTime) const;
     /**
-     * Simple time-shifted FIFO (TS-FIFO).  Must be at least one packet
-     * in the queue.
-     * \param lqTime L4S sojourn time
-     * \param cqTime Classic sojourn time
+     * Deficit round robin (DRR)-based
+     * \note The return type is based on the parameter type for GetInternalQueue()
+     * \param byteLimit Byte limit (not to exceed)
      * \return either 0 (Classic) or 1 (L4S)
      */
-    std::size_t Scheduler() const;
+    std::size_t Scheduler(uint32_t byteLimit);
 
     // Values supplied by user
-    Time m_target;         //!< Queue delay target for Classic traffic
-    Time m_tUpdate;        //!< Time period after which CalculateP () is called
-    Time m_tShift;         //!< Scheduler time bias
-    uint32_t m_mtu;        //!< Device MTU (bytes)
-    double m_alpha;        //!< Parameter to PI Square controller
-    double m_beta;         //!< Parameter to PI Square controller
-    Time m_minTh;          //!< L4S marking threshold (in time)
-    double m_k;            //!< Coupling factor
-    uint32_t m_queueLimit; //!< Queue limit in bytes / packets
-    Time m_startTime;      //!< Start time of the update timer
+    Time m_target;              //!< Queue delay target for Classic traffic
+    Time m_tUpdate;             //!< Time period after which CalculateP () is called
+    Time m_tShift;              //!< Scheduler time bias
+    uint32_t m_mtu;             //!< Device MTU (bytes)
+    double m_alpha;             //!< Parameter to PI Square controller
+    double m_beta;              //!< Parameter to PI Square controller
+    Time m_minTh;               //!< L4S marking threshold (in time)
+    double m_k;                 //!< Coupling factor
+    uint32_t m_classicDeficit;  //!< deficit counter for DRR
+    uint32_t m_llDeficit;       //!< deficit counter for DRR
+    double m_schedulingWeight;  //!< Scheduling weight
+    std::bitset<2> m_drrQueues; //!< bitset for weighted DRR
+    uint32_t m_drrQuantum;      //!< DRR quantum
+    uint32_t m_queueLimit;      //!< Queue limit in bytes / packets
+    Time m_startTime;           //!< Start time of the update timer
 
     // Variables maintained by DualQ Coupled PI2
     Time m_classicQueueTime;   //!< Arrival time of a packet of Classic Traffic
@@ -177,8 +206,10 @@ class DualPi2QueueDisc : public QueueDisc
     Time m_prevQ;                               //!< Old value of queue delay
     EventId m_rtrsEvent; //!< Event used to decide the decision of interval of drop probability
                          //!< calculation
-    Ptr<UniformRandomVariable> m_uv; //!< Rng stream
-    double m_count{0};               //! Count for likelihood recur
+    Ptr<UniformRandomVariable> m_uv;                     //!< Rng stream
+    double m_count{0};                                   //! Count for likelihood recur
+    std::list<Ptr<QueueDiscItem>> m_classicStagingQueue; //!< staging queue for CLASSIC
+    std::list<Ptr<QueueDiscItem>> m_l4sStagingQueue;     //!< staging queue for L4S
 };
 
 } // namespace ns3

@@ -45,8 +45,10 @@ NS_LOG_COMPONENT_DEFINE("DualPi2QueueDisc");
 
 NS_OBJECT_ENSURE_REGISTERED(DualPi2QueueDisc);
 
-const std::size_t CLASSIC = 0;
-const std::size_t L4S = 1;
+// Used as an index into the GetInternalQueue() method
+constexpr std::size_t CLASSIC = 0;
+constexpr std::size_t L4S = 1;
+constexpr std::size_t NONE = 2;
 
 TypeId
 DualPi2QueueDisc::GetTypeId()
@@ -76,11 +78,6 @@ DualPi2QueueDisc::GetTypeId()
                           TimeValue(Seconds(0.015)),
                           MakeTimeAccessor(&DualPi2QueueDisc::m_tUpdate),
                           MakeTimeChecker())
-            .AddAttribute("Tshift",
-                          "Time offset for TS-FIFO scheduler",
-                          TimeValue(MilliSeconds(50)),
-                          MakeTimeAccessor(&DualPi2QueueDisc::m_tShift),
-                          MakeTimeChecker())
             .AddAttribute("QueueLimit",
                           "Queue limit in bytes",
                           UintegerValue(1562500), // 250 ms at 50 Mbps
@@ -106,6 +103,16 @@ DualPi2QueueDisc::GetTypeId()
                           TimeValue(Seconds(0.0)),
                           MakeTimeAccessor(&DualPi2QueueDisc::m_startTime),
                           MakeTimeChecker())
+            .AddAttribute("SchedulingWeight",
+                          "Scheduling weight to apply to DRR dequeue (L4S closer to 1)",
+                          DoubleValue(0.9),
+                          MakeDoubleAccessor(&DualPi2QueueDisc::m_schedulingWeight),
+                          MakeDoubleChecker<double>(0, 1))
+            .AddAttribute("DrrQuantum",
+                          "Quantum used in weighted DRR policy (bytes)",
+                          UintegerValue(1500),
+                          MakeUintegerAccessor(&DualPi2QueueDisc::m_drrQuantum),
+                          MakeUintegerChecker<uint32_t>())
             .AddTraceSource("ProbCL",
                             "Coupled probability (p_CL)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCL),
@@ -193,19 +200,84 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
         NS_LOG_DEBUG("The amount to be queued at WifiMacQueue is " << queueDiscPending);
         if (newBytes > queueDiscPending)
         {
-            NS_LOG_DEBUG("Add logic to mark excess of " << newBytes - queueDiscPending);
-        }
-        else
-        {
             NS_LOG_DEBUG("WifiMacQueue can handle the pending " << newBytes);
             return;
         }
     }
-    // TODO:  complete logic for marking excess
+    // The current queue size exceeds the pending dequeue.  Determine which
+    // packets will be dequeued, and which packets should be marked.
+    uint32_t lBytes [[maybe_unused]] = GetInternalQueue(L4S)->GetNBytes();
+    uint32_t lPackets [[maybe_unused]] = GetInternalQueue(L4S)->GetNPackets();
+    uint32_t cBytes [[maybe_unused]] = GetInternalQueue(CLASSIC)->GetNBytes();
+    uint32_t cPackets [[maybe_unused]] = GetInternalQueue(CLASSIC)->GetNPackets();
+
+    NS_LOG_DEBUG("State before PendingDequeue logic: pendingBytes "
+                 << newBytes << " l4sBytes " << lBytes << " l4sPackets " << lPackets
+                 << " classicBytes " << cBytes << " cPackets " << cPackets);
+
+    // Dequeue enough packets to use up to queueDiscPending bytes, and add to staging queues
+    // Keep track of how many of these are L4S packets and are marked
+    // Dequeue using the scheduler logic which will apply Laqm and coupled marking, and drops
+
+    uint32_t pendingBytes = newBytes;
+    uint32_t markedCount = 0; // How many of those L4S packets are marked
+    while (pendingBytes)
+    {
+        auto scheduled = Scheduler(pendingBytes);
+        if (scheduled == L4S)
+        {
+            bool marked = false;
+            auto qdItem = DequeueFromL4sQueue(marked);
+            if (qdItem)
+            {
+                NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
+                AddToL4sStagingQueue(qdItem);
+                pendingBytes -= qdItem->GetSize();
+                if (marked)
+                {
+                    markedCount++;
+                }
+            }
+        }
+        else if (scheduled == CLASSIC)
+        {
+            bool dropped [[maybe_unused]] = false;
+            auto qdItem = DequeueFromClassicQueue(dropped);
+            AddToClassicStagingQueue(qdItem);
+            pendingBytes -= qdItem->GetSize();
+        }
+        else
+        {
+            break;
+        }
+    }
+    // There are 'M' markedCount packets marked in the staging queue.  There are 'N' packets
+    // remaining.  If N <= M, then do nothing; at least N are already marked.  Otherwise,
+    // traverse the L4S staging queue and mark up to (N-M) more packets.
+    if (GetInternalQueue(L4S)->GetNPackets() > markedCount)
+    {
+        uint32_t pendingMarks = GetInternalQueue(L4S)->GetNPackets() - markedCount;
+        NS_LOG_DEBUG("After PendingDequeue logic:  Apply " << pendingMarks << " more marks");
+        auto it = m_l4sStagingQueue.begin();
+        while (it != m_l4sStagingQueue.end() && pendingMarks)
+        {
+            uint8_t tosByte = 0;
+            if ((*it)->GetUint8Value(QueueItem::IP_DSFIELD, tosByte) && ((tosByte & 0x3) == 1))
+            {
+                (*it)->Mark();
+                pendingMarks--;
+            }
+            it++;
+        }
+    }
+    else
+    {
+        NS_LOG_DEBUG("After PendingDequeue logic:  No further marks needed");
+    }
 }
 
 bool
-DualPi2QueueDisc::IsL4S(Ptr<QueueDiscItem> item)
+DualPi2QueueDisc::IsL4s(Ptr<QueueDiscItem> item)
 {
     uint8_t tosByte = 0;
     if (item->GetUint8Value(QueueItem::IP_DSFIELD, tosByte))
@@ -225,9 +297,9 @@ bool
 DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
 {
     NS_LOG_FUNCTION(this << item);
-    std::size_t queueNumber = CLASSIC;
+    auto queueNumber = CLASSIC;
 
-    uint32_t nQueued = GetQueueSize();
+    auto nQueued = GetQueueSize();
     // in pseudocode, it compares to MTU, not packet size
     if (nQueued + item->GetSize() > m_queueLimit)
     {
@@ -237,7 +309,7 @@ DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
     }
     else
     {
-        if (IsL4S(item))
+        if (IsL4s(item))
         {
             queueNumber = L4S;
         }
@@ -297,103 +369,247 @@ DualPi2QueueDisc::DualPi2Update()
     m_rtrsEvent = Simulator::Schedule(m_tUpdate, &DualPi2QueueDisc::DualPi2Update, this);
 }
 
-Ptr<QueueDiscItem>
-DualPi2QueueDisc::DoDequeue()
+void
+DualPi2QueueDisc::AddToL4sStagingQueue(Ptr<QueueDiscItem> qdItem)
 {
-    NS_LOG_FUNCTION(this);
-    Ptr<QueueDiscItem> item;
-    while (GetQueueSize() > 0)
+    NS_ASSERT_MSG(qdItem, "Error, tried to add a null QueueDiscItem to staging queue");
+    m_l4sStagingQueue.push_back(qdItem);
+}
+
+void
+DualPi2QueueDisc::AddToClassicStagingQueue(Ptr<QueueDiscItem> qdItem)
+{
+    NS_ASSERT_MSG(qdItem, "Error, tried to add a null QueueDiscItem to staging queue");
+    m_classicStagingQueue.push_back(qdItem);
+}
+
+Ptr<QueueDiscItem>
+DualPi2QueueDisc::DequeueFromL4sStagingQueue()
+{
+    if (!m_l4sStagingQueue.empty())
     {
-        if (Scheduler() == L4S)
-        {
-            item = GetInternalQueue(L4S)->Dequeue();
-            m_traceL4sSojourn(Simulator::Now() - item->GetTimeStamp());
-            double pPrimeL = Laqm(Simulator::Now() - item->GetTimeStamp());
-            if (pPrimeL > m_pCL)
-            {
-                NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1)
-                                                 << " is driving p_L");
-            }
-            else
-            {
-                NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1)
-                                                    << " is driving p_L");
-            }
-            double pL = std::max<double>(pPrimeL, m_pCL);
-            pL = std::min<double>(pL, 1); // clamp p_L at 1
-            m_pL = pL;                    // Trace the value of p_L
-            if (Recur(pL))
-            {
-                bool retval = Mark(item, UNFORCED_L4S_MARK);
-                NS_ASSERT_MSG(retval == true, "Make sure we can mark in L4S queue");
-                NS_LOG_DEBUG("L-queue packet is marked");
-            }
-            else
-            {
-                NS_LOG_DEBUG("L-queue packet is not marked");
-            }
-            return item;
-        }
-        else
-        {
-            item = GetInternalQueue(CLASSIC)->Dequeue();
-            m_traceClassicSojourn(Simulator::Now() - item->GetTimeStamp());
-            // Heuristic in Linux code; never drop if less than 2 MTU in queue
-            if (GetInternalQueue(CLASSIC)->GetNBytes() < 2 * m_mtu)
-            {
-                return item;
-            }
-            if (m_pC > m_uv->GetValue())
-            {
-                if (!Mark(item, UNFORCED_CLASSIC_MARK))
-                {
-                    DropAfterDequeue(item, UNFORCED_CLASSIC_DROP);
-                    NS_LOG_DEBUG("C-queue packet is dropped");
-                    continue;
-                }
-                else
-                {
-                    NS_LOG_DEBUG("C-queue packet is marked");
-                    return item;
-                }
-            }
-            NS_LOG_DEBUG("C-queue packet is neither marked nor dropped");
-            return item;
-        }
+        auto qdItem = m_l4sStagingQueue.front();
+        m_l4sStagingQueue.pop_front();
+        return qdItem;
+    }
+    return nullptr;
+}
+
+Ptr<QueueDiscItem>
+DualPi2QueueDisc::DequeueFromClassicStagingQueue()
+{
+    if (!m_l4sStagingQueue.empty())
+    {
+        auto qdItem = m_classicStagingQueue.front();
+        m_classicStagingQueue.pop_front();
+        return qdItem;
     }
     return nullptr;
 }
 
 std::size_t
-DualPi2QueueDisc::Scheduler() const
+DualPi2QueueDisc::Scheduler(uint32_t byteLimit)
 {
     NS_LOG_FUNCTION(this);
-    Time cqTime = Seconds(0);
-    Time lqTime = Seconds(0);
-    Ptr<const QueueDiscItem> peekedItem;
-    if ((peekedItem = GetInternalQueue(CLASSIC)->Peek()))
+    while (GetCurrentSize().GetValue() > 0)
     {
-        cqTime = Simulator::Now() - peekedItem->GetTimeStamp();
+        if (m_drrQueues.none())
+        {
+            NS_LOG_LOGIC("Start new round; LL deficit: " << m_llDeficit << " classic deficit: "
+                                                         << m_classicDeficit);
+            m_drrQueues.set(L4S);
+            m_drrQueues.set(CLASSIC);
+            m_llDeficit += (m_drrQuantum * m_schedulingWeight);
+            m_classicDeficit += m_drrQuantum;
+            NS_LOG_LOGIC("Starting state: LL front, LL deficit "
+                         << m_llDeficit << " classic deficit " << m_classicDeficit);
+        }
+        if (m_drrQueues.test(L4S))
+        {
+            if (GetInternalQueue(L4S)->Peek() &&
+                GetInternalQueue(L4S)->Peek()->GetSize() <= byteLimit)
+            {
+                uint32_t size = GetInternalQueue(L4S)->Peek()->GetSize();
+                if (size <= m_llDeficit)
+                {
+                    NS_LOG_LOGIC("Selecting LL queue");
+                    m_llDeficit -= size;
+                    NS_LOG_LOGIC("State after LL selection: LL deficit << "
+                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
+                    return L4S;
+                }
+                else
+                {
+                    NS_LOG_LOGIC("Not enough deficit to send LL packet, LL deficit "
+                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
+                    m_drrQueues.reset(L4S);
+                    if (!GetInternalQueue(CLASSIC)->Peek())
+                    {
+                        NS_LOG_LOGIC("Send LL packet due to no CLASSIC packet");
+                        m_llDeficit = 0;
+                        return L4S;
+                    }
+                }
+            }
+            else
+            {
+                NS_LOG_LOGIC("LL has no packet, fall through to consider CLASSIC");
+            }
+        }
+        else
+        {
+            if (!GetInternalQueue(CLASSIC)->Peek() && GetInternalQueue(L4S)->Peek() &&
+                GetInternalQueue(L4S)->Peek()->GetSize() <= byteLimit)
+            {
+                NS_LOG_LOGIC("Send LL packet due to no CLASSIC packet");
+                m_llDeficit = 0;
+                return L4S;
+            }
+        }
+        if (m_drrQueues.test(CLASSIC) ||
+            (GetInternalQueue(CLASSIC)->Peek() &&
+             GetInternalQueue(CLASSIC)->Peek()->GetSize() <= byteLimit))
+        {
+            if (GetInternalQueue(CLASSIC)->Peek())
+            {
+                uint32_t size = GetInternalQueue(CLASSIC)->Peek()->GetSize();
+                if (size <= m_classicDeficit)
+                {
+                    NS_LOG_LOGIC("Selecting Classic queue");
+                    m_classicDeficit -= size;
+                    NS_LOG_LOGIC("State after Classic selection: LL deficit << "
+                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
+                    return CLASSIC;
+                }
+                else if (size)
+                {
+                    NS_LOG_LOGIC("Not enough deficit to send Classic packet");
+                    m_drrQueues.reset(CLASSIC);
+                    if (!GetInternalQueue(L4S)->Peek())
+                    {
+                        // Send anyway since there is no LL packet
+                        NS_LOG_LOGIC("Send CLASSIC packet due to no LL packet");
+                        m_classicDeficit = 0;
+                        return CLASSIC;
+                    }
+                    // Fall through to return to top of loop and reset
+                }
+            }
+            else
+            {
+                // no classic packet either; will fall through and reset above
+            }
+        }
     }
-    if ((peekedItem = GetInternalQueue(L4S)->Peek()))
+    return NONE;
+}
+
+Ptr<QueueDiscItem>
+DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
+{
+    NS_LOG_FUNCTION(this);
+    auto qdItem = GetInternalQueue(L4S)->Dequeue();
+    double pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
+    if (pPrimeL > m_pCL)
     {
-        lqTime = Simulator::Now() - peekedItem->GetTimeStamp();
+        NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
     }
-    NS_ASSERT_MSG(GetQueueSize() > 0, "Trying to schedule an empty queue");
-    // return 0 if classic, 1 if L4S
-    if (GetInternalQueue(L4S)->Peek() && ((lqTime + m_tShift) > cqTime))
+    else
     {
-        return L4S;
+        NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
     }
-    else if (GetInternalQueue(CLASSIC)->Peek())
+    double pL = std::max<double>(pPrimeL, m_pCL);
+    pL = std::min<double>(pL, 1); // clamp p_L at 1
+    m_pL = pL;                    // Trace the value of p_L
+    if (Recur(pL))
     {
-        return CLASSIC;
+        marked = Mark(qdItem, UNFORCED_L4S_MARK);
+        NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
+        NS_LOG_DEBUG("L-queue packet is marked");
     }
-    else if (GetInternalQueue(L4S)->Peek())
+    else
     {
-        NS_FATAL_ERROR("Should be unreachable");
+        NS_LOG_DEBUG("L-queue packet is not marked");
     }
-    return L4S;
+    return qdItem;
+}
+
+Ptr<QueueDiscItem>
+DualPi2QueueDisc::DequeueFromClassicQueue(bool& dropped)
+{
+    NS_LOG_FUNCTION(this);
+    auto qdItem = GetInternalQueue(CLASSIC)->Dequeue();
+    // Heuristic in Linux code; never drop if less than 2 MTU in queue
+    if (GetInternalQueue(CLASSIC)->GetNBytes() < 2 * m_mtu)
+    {
+        return qdItem;
+    }
+    while (qdItem)
+    {
+        if (m_pC > m_uv->GetValue())
+        {
+            DropAfterDequeue(qdItem, UNFORCED_CLASSIC_DROP);
+            dropped = true;
+            NS_LOG_DEBUG("C-queue packet is dropped");
+            qdItem = GetInternalQueue(CLASSIC)->Dequeue();
+            continue;
+        }
+        else
+        {
+            NS_LOG_DEBUG("C-queue packet is dequeued and returned");
+            return qdItem;
+        }
+    }
+    return nullptr;
+}
+
+Ptr<QueueDiscItem>
+DualPi2QueueDisc::DoDequeue()
+{
+    NS_LOG_FUNCTION(this);
+    auto qdItem = DequeueFromL4sStagingQueue();
+    if (qdItem)
+    {
+        // Packets in staging queue have already been marked or not
+        // and internal Laqm probabilities have been updated
+        NS_LOG_DEBUG("Dequeue from L4S staging queue");
+        m_traceL4sSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+        return qdItem;
+    }
+    qdItem = DequeueFromClassicStagingQueue();
+    if (qdItem)
+    {
+        m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+        return qdItem;
+    }
+    while (GetQueueSize() > 0)
+    {
+        auto selected = Scheduler(GetQueueSize());
+        if (selected == L4S)
+        {
+            bool marked [[maybe_unused]];
+            qdItem = DequeueFromL4sQueue(marked);
+            m_traceL4sSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+            return qdItem;
+        }
+        else if (selected == CLASSIC)
+        {
+            bool dropped [[maybe_unused]];
+            qdItem = DequeueFromClassicQueue(dropped);
+            // Since the CLASSIC queue can drop in DequeueFromClassicDequeue(), check
+            // that an item was actually returned before tracing it
+            if (qdItem)
+            {
+                m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+            }
+            return qdItem;
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+    return nullptr;
 }
 
 double
