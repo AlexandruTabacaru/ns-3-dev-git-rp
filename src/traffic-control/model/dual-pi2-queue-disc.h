@@ -90,16 +90,6 @@ class DualPi2QueueDisc : public QueueDisc
     static constexpr const char* UNFORCED_L4S_MARK = "Unforced mark in L4S queue";
 
     /**
-     * Assign a fixed random variable stream number to the random variables
-     * used by this model.  Return the number of streams (possibly zero) that
-     * have been assigned.
-     *
-     * \param stream first stream index to use
-     * \return the number of stream indices assigned by this model
-     */
-    int64_t AssignStreams(int64_t stream);
-
-    /**
      * Callback to be notified of pending bytes about to be dequeued.
      *
      * \param oldBytes Old value of the quantity (ignore)
@@ -160,11 +150,12 @@ class DualPi2QueueDisc : public QueueDisc
      */
     bool IsL4s(Ptr<QueueDiscItem> item);
     /**
-     * \brief Implement the L4S recur function for probabilistic marking
-     * \param likelihood the likelihood of marking
-     * \return true if the queue should mark the packet
+     * \brief Implement the L4S recur function for probabilistic marking/dropping
+     * \param [in] count the count variable (updated by the method)
+     * \param likelihood the likelihood of marking or dropping
+     * \return true if the queue should mark or drop the packet
      */
-    bool Recur(double likelihood);
+    bool Recur(double& count, double likelihood);
     /**
      * \brief Periodically calculate the drop probability
      */
@@ -227,10 +218,10 @@ class DualPi2QueueDisc : public QueueDisc
     TracedCallback<Time> m_traceClassicSojourn; //!< Classic sojourn time
     TracedCallback<Time> m_traceL4sSojourn;     //!< L4S sojourn time
     Time m_prevQ;                               //!< Old value of queue delay
-    EventId m_rtrsEvent; //!< Event used to decide the decision of interval of drop probability
-                         //!< calculation
-    Ptr<UniformRandomVariable> m_uv;                     //!< Rng stream
-    double m_count{0};                                   //! Count for likelihood recur
+    EventId m_rtrsEvent;      //!< Event used to decide the decision of interval of drop probability
+                              //!< calculation
+    double m_l4sCount{0};     //! L queue count for likelihood recur
+    double m_classicCount{0}; //! C queue count for likelihood recur
     std::list<Ptr<QueueDiscItem>> m_classicStagingQueue; //!< staging queue for CLASSIC
     std::list<Ptr<QueueDiscItem>> m_l4sStagingQueue;     //!< staging queue for L4S
 };

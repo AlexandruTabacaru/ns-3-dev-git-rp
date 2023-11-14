@@ -141,7 +141,6 @@ DualPi2QueueDisc::DualPi2QueueDisc()
     : QueueDisc()
 {
     NS_LOG_FUNCTION(this);
-    m_uv = CreateObject<UniformRandomVariable>();
     m_rtrsEvent = Simulator::Schedule(m_startTime, &DualPi2QueueDisc::DualPi2Update, this);
 }
 
@@ -170,14 +169,6 @@ DualPi2QueueDisc::GetQueueSize() const
 {
     NS_LOG_FUNCTION(this);
     return (GetInternalQueue(CLASSIC)->GetNBytes() + GetInternalQueue(L4S)->GetNBytes());
-}
-
-int64_t
-DualPi2QueueDisc::AssignStreams(int64_t stream)
-{
-    NS_LOG_FUNCTION(this << stream);
-    m_uv->SetStream(stream);
-    return 1;
 }
 
 void
@@ -572,7 +563,7 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
     double pL = std::max<double>(pPrimeL, m_pCL);
     pL = std::min<double>(pL, 1); // clamp p_L at 1
     m_pL = pL;                    // Trace the value of p_L
-    if (Recur(pL))
+    if (Recur(m_l4sCount, pL))
     {
         marked = Mark(qdItem, UNFORCED_L4S_MARK);
         NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
@@ -597,7 +588,7 @@ DualPi2QueueDisc::DequeueFromClassicQueue(bool& dropped)
     }
     while (qdItem)
     {
-        if (m_pC > m_uv->GetValue())
+        if (Recur(m_classicCount, m_pC))
         {
             DropAfterDequeue(qdItem, UNFORCED_CLASSIC_DROP);
             dropped = true;
@@ -675,13 +666,13 @@ DualPi2QueueDisc::Laqm(Time lqTime) const
 }
 
 bool
-DualPi2QueueDisc::Recur(double likelihood)
+DualPi2QueueDisc::Recur(double& count, double likelihood)
 {
     NS_LOG_FUNCTION(this << likelihood);
-    m_count += likelihood;
-    if (m_count > 1)
+    count += likelihood;
+    if (count > 1)
     {
-        m_count -= 1;
+        count -= 1;
         return true;
     }
     return false;
