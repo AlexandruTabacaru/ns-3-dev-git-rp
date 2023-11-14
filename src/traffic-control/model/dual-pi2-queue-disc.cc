@@ -233,7 +233,7 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             {
                 NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
                 AddToL4sStagingQueue(qdItem);
-                pendingBytes -= qdItem->GetSize();
+                pendingBytes -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
                 if (marked)
                 {
                     markedCount++;
@@ -246,16 +246,23 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             auto qdItem = DequeueFromClassicQueue(dropped);
             NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
             AddToClassicStagingQueue(qdItem);
-            pendingBytes -= qdItem->GetSize();
+            pendingBytes -= (qdItem->GetSize() + 38);
         }
         else
         {
             break;
         }
     }
-    // There are 'M' markedCount packets marked in the staging queue.  There are 'N' packets
-    // remaining.  If N <= M, then do nothing; at least N are already marked.  Otherwise,
-    // traverse the L4S staging queue and mark up to (N-M) more packets.
+    // There are 'markedCount' packets marked in the staging queue.  These will have been
+    // marked if there is any coupled marking probability.
+    if (markedCount)
+    {
+        NS_ASSERT_MSG(m_pCL > 0, "There should not be any marks if coupling probability is zero");
+    }
+    // We want the number of marks in the pending queue to at least equal the number of
+    // remaining packets in the L queue.  If markedCount >= remainingPackets already,
+    // do nothing; otherwise, traverse the L staging queue and mark until 'remainingPackets'
+    // worth of marks are made in the staging queue.
     if (GetInternalQueue(L4S)->GetNPackets() > markedCount)
     {
         uint32_t pendingMarks = GetInternalQueue(L4S)->GetNPackets() - markedCount;
@@ -473,8 +480,8 @@ DualPi2QueueDisc::Scheduler()
     {
         if (m_drrQueues.none())
         {
-            NS_LOG_LOGIC("Start new round; LL deficit residual before increment: "
-                         << m_llDeficit << " classic deficit residual: " << m_classicDeficit);
+            NS_LOG_LOGIC("Start new round; LL deficit remaining before increment: "
+                         << m_llDeficit << " classic deficit remaining: " << m_classicDeficit);
             m_drrQueues.set(L4S);
             m_drrQueues.set(CLASSIC);
             m_llDeficit += (m_drrQuantum * m_schedulingWeight);
@@ -494,7 +501,7 @@ DualPi2QueueDisc::Scheduler()
             }
             else
             {
-                NS_LOG_LOGIC("End the L4S round; residual deficit: " << m_llDeficit);
+                NS_LOG_LOGIC("End the L4S round; remaining deficit: " << m_llDeficit);
                 m_drrQueues.reset(L4S);
             }
         }
@@ -516,7 +523,7 @@ DualPi2QueueDisc::Scheduler()
             }
             else
             {
-                NS_LOG_LOGIC("End the classic round; residual deficit: " << m_classicDeficit);
+                NS_LOG_LOGIC("End the classic round; remaining deficit: " << m_classicDeficit);
                 m_drrQueues.reset(CLASSIC);
             }
         }
@@ -533,19 +540,19 @@ DualPi2QueueDisc::Scheduler()
     return NONE;
 }
 
-// In RFC 9332 pseudocode: 
+// In RFC 9332 pseudocode:
 // 5a:         if (lq.len()>Th_len)                   % >1 packet queued
 // 5b:           p'_L = laqm(lq.time())                    % Native LAQM
 // 5c:         else
 // 5d:           p'_L = 0                 % Suppress marking 1 pkt queue
 // In the L4S Wi-Fi use, however, we suppress the Laqm marking and ensure
-// that we mark packets corresponding to any residual queue after a
+// that we mark packets corresponding to any remaining queue after a
 // Ack or Block Ack-induced drain event occurs.
 double
 DualPi2QueueDisc::GetNativeLaqmProbability(Ptr<const QueueDiscItem> qdItem [[maybe_unused]]) const
 {
     // RFC 9332 behavior: return (Laqm(Simulator::Now() - qdItem->GetTimeStamp());
-    return 0;  
+    return 0;
 }
 
 Ptr<QueueDiscItem>
