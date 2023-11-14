@@ -169,12 +169,28 @@ class DualPi2QueueDisc : public QueueDisc
      */
     double Laqm(Time lqTime) const;
     /**
-     * Deficit round robin (DRR)-based
-     * \note The return type is based on the parameter type for GetInternalQueue()
-     * \param byteLimit Byte limit (not to exceed)
-     * \return either 0 (Classic) or 1 (L4S)
+     * \brief Check whether a subsequent call to Scheduler() will return
+     * a packet with size <= byteLimit
+     *
+     * Checks that there exists at least one packet in the queue, and that
+     * the size of the head-of-line packet in either (or both) of the L4S
+     * and Classic queues is less than the specified limit.
+     *
+     * \param byteLimit The byte limit to check against
+     * \return true if the above conditions hold, false otherwise
      */
-    std::size_t Scheduler(uint32_t byteLimit);
+    bool CanSchedule(uint32_t byteLimit) const;
+    /**
+     * A two-band weighted deficit round robin (WDRR) queue.  If there
+     * is no packet in the queue, returns the value NONE.  If at least
+     * one packet is in the queue, it will return the value L4S or CLASSIC
+     * corresponding to which packet should be dequeued next.  Note that this
+     * method does not actually dequeue anything; the individual internal
+     * queue that is selected must subsequently be dequeued from.
+     *
+     * \return either 0 (Classic), 1 (L4S), or 2 (NONE)
+     */
+    std::size_t Scheduler();
 
     // Values supplied by user
     Time m_target;              //!< Queue delay target for Classic traffic

@@ -104,10 +104,11 @@ DualPi2QueueDisc::GetTypeId()
                           MakeTimeAccessor(&DualPi2QueueDisc::m_startTime),
                           MakeTimeChecker())
             .AddAttribute("SchedulingWeight",
-                          "Scheduling weight to apply to DRR dequeue (L4S closer to 1)",
-                          DoubleValue(0.9),
+                          "Scheduling weight to apply to WDRR L4S quantum (number of L4S quantums "
+                          "per CLASSIC quantum)",
+                          DoubleValue(9), // 90% weight (9/(9+1))
                           MakeDoubleAccessor(&DualPi2QueueDisc::m_schedulingWeight),
-                          MakeDoubleChecker<double>(0, 1))
+                          MakeDoubleChecker<double>(1, std::numeric_limits<double>::max()))
             .AddAttribute("DrrQuantum",
                           "Quantum used in weighted DRR policy (bytes)",
                           UintegerValue(1500),
@@ -221,9 +222,9 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
 
     uint32_t pendingBytes = newBytes;
     uint32_t markedCount = 0; // How many of those L4S packets are marked
-    while (pendingBytes)
+    while (CanSchedule(pendingBytes))
     {
-        auto scheduled = Scheduler(pendingBytes);
+        auto scheduled = Scheduler();
         if (scheduled == L4S)
         {
             bool marked = false;
@@ -243,6 +244,7 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
         {
             bool dropped [[maybe_unused]] = false;
             auto qdItem = DequeueFromClassicQueue(dropped);
+            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
             AddToClassicStagingQueue(qdItem);
             pendingBytes -= qdItem->GetSize();
         }
@@ -289,7 +291,7 @@ DualPi2QueueDisc::IsL4s(Ptr<QueueDiscItem> item)
             return true;
         }
     }
-    NS_LOG_DEBUG("Classic detected: " << static_cast<uint16_t>(tosByte & 0x3));
+    NS_LOG_DEBUG("Classic detected; TOS byte: " << static_cast<uint16_t>(tosByte & 0x3));
     return false;
 }
 
@@ -407,100 +409,127 @@ DualPi2QueueDisc::DequeueFromClassicStagingQueue()
     return nullptr;
 }
 
+bool
+DualPi2QueueDisc::CanSchedule(uint32_t byteLimit) const
+{
+    NS_LOG_FUNCTION(this << byteLimit);
+    if (GetNPackets() == 0)
+    {
+        NS_LOG_DEBUG("Cannot schedule from an empty queue");
+        return false;
+    }
+    uint32_t l4sHolSize = 0; // Head of line size
+    if (GetInternalQueue(L4S)->Peek())
+    {
+        l4sHolSize = GetInternalQueue(L4S)->Peek()->GetSize();
+    }
+    uint32_t classicHolSize = 0; // Head of line size
+    if (GetInternalQueue(CLASSIC)->Peek())
+    {
+        classicHolSize = GetInternalQueue(CLASSIC)->Peek()->GetSize();
+    }
+    if (l4sHolSize > byteLimit && classicHolSize > byteLimit)
+    {
+        // If there is not an eligible classic packet, return NONE
+        NS_LOG_DEBUG("Neither L4S (" << l4sHolSize << ") nor Classic (" << classicHolSize
+                                     << ") have a small enough packet");
+        return false;
+    }
+    if ((classicHolSize > byteLimit && l4sHolSize == 0) ||
+        (l4sHolSize > byteLimit && classicHolSize == 0))
+    {
+        // If there is not an eligible L4S packet, return NONE
+        NS_LOG_DEBUG("L4S (" << l4sHolSize << ") or Classic (" << classicHolSize
+                             << ") have a large packet, and one of the two is empty");
+        return false;
+    }
+    return true;
+}
+
 std::size_t
-DualPi2QueueDisc::Scheduler(uint32_t byteLimit)
+DualPi2QueueDisc::Scheduler()
 {
     NS_LOG_FUNCTION(this);
-    while (GetCurrentSize().GetValue() > 0)
+    // A generic weighted deficit round robin queue with two bands.  If the
+    // queue is non-empy, it should iterate until returning either L4S or
+    // CLASSIC.
+    uint32_t l4sHolSize = 0; // Head of line size
+    if (GetInternalQueue(L4S)->Peek())
+    {
+        l4sHolSize = GetInternalQueue(L4S)->Peek()->GetSize();
+    }
+    uint32_t classicHolSize = 0; // Head of line size
+    if (GetInternalQueue(CLASSIC)->Peek())
+    {
+        classicHolSize = GetInternalQueue(CLASSIC)->Peek()->GetSize();
+    }
+    if (GetNPackets() == 0)
+    {
+        NS_LOG_DEBUG("Trying to schedule from an empty queue");
+        return NONE;
+    }
+    uint32_t maxIterations = 1000; // Prevent a deadlock simulation loop
+    for (uint32_t i = 0; i < maxIterations; i++)
     {
         if (m_drrQueues.none())
         {
-            NS_LOG_LOGIC("Start new round; LL deficit: " << m_llDeficit << " classic deficit: "
-                                                         << m_classicDeficit);
+            NS_LOG_LOGIC("Start new round; LL deficit residual before increment: "
+                         << m_llDeficit << " classic deficit residual: " << m_classicDeficit);
             m_drrQueues.set(L4S);
             m_drrQueues.set(CLASSIC);
             m_llDeficit += (m_drrQuantum * m_schedulingWeight);
             m_classicDeficit += m_drrQuantum;
-            NS_LOG_LOGIC("Starting state: LL front, LL deficit "
+            NS_LOG_LOGIC("Deficit after increment: LL deficit "
                          << m_llDeficit << " classic deficit " << m_classicDeficit);
         }
-        if (m_drrQueues.test(L4S))
+        if (l4sHolSize) // queue not empty
         {
-            if (GetInternalQueue(L4S)->Peek() &&
-                GetInternalQueue(L4S)->Peek()->GetSize() <= byteLimit)
+            if (l4sHolSize <= m_llDeficit)
             {
-                uint32_t size = GetInternalQueue(L4S)->Peek()->GetSize();
-                if (size <= m_llDeficit)
-                {
-                    NS_LOG_LOGIC("Selecting LL queue");
-                    m_llDeficit -= size;
-                    NS_LOG_LOGIC("State after LL selection: LL deficit << "
-                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
-                    return L4S;
-                }
-                else
-                {
-                    NS_LOG_LOGIC("Not enough deficit to send LL packet, LL deficit "
-                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
-                    m_drrQueues.reset(L4S);
-                    if (!GetInternalQueue(CLASSIC)->Peek())
-                    {
-                        NS_LOG_LOGIC("Send LL packet due to no CLASSIC packet");
-                        m_llDeficit = 0;
-                        return L4S;
-                    }
-                }
+                NS_LOG_LOGIC("Selecting LL queue");
+                m_llDeficit -= l4sHolSize;
+                NS_LOG_LOGIC("State after LL selection: LL deficit << "
+                             << m_llDeficit << " classic deficit " << m_classicDeficit);
+                return L4S;
             }
             else
             {
-                NS_LOG_LOGIC("LL has no packet, fall through to consider CLASSIC");
+                NS_LOG_LOGIC("End the L4S round; residual deficit: " << m_llDeficit);
+                m_drrQueues.reset(L4S);
             }
         }
         else
         {
-            if (!GetInternalQueue(CLASSIC)->Peek() && GetInternalQueue(L4S)->Peek() &&
-                GetInternalQueue(L4S)->Peek()->GetSize() <= byteLimit)
-            {
-                NS_LOG_LOGIC("Send LL packet due to no CLASSIC packet");
-                m_llDeficit = 0;
-                return L4S;
-            }
+            NS_LOG_LOGIC("L4S queue empty; end the L4S round");
+            m_llDeficit = 0;
+            m_drrQueues.reset(L4S);
         }
-        if (m_drrQueues.test(CLASSIC) ||
-            (GetInternalQueue(CLASSIC)->Peek() &&
-             GetInternalQueue(CLASSIC)->Peek()->GetSize() <= byteLimit))
+        if (classicHolSize) // queue not empty
         {
-            if (GetInternalQueue(CLASSIC)->Peek())
+            if (classicHolSize <= m_classicDeficit)
             {
-                uint32_t size = GetInternalQueue(CLASSIC)->Peek()->GetSize();
-                if (size <= m_classicDeficit)
-                {
-                    NS_LOG_LOGIC("Selecting Classic queue");
-                    m_classicDeficit -= size;
-                    NS_LOG_LOGIC("State after Classic selection: LL deficit << "
-                                 << m_llDeficit << " classic deficit " << m_classicDeficit);
-                    return CLASSIC;
-                }
-                else if (size)
-                {
-                    NS_LOG_LOGIC("Not enough deficit to send Classic packet");
-                    m_drrQueues.reset(CLASSIC);
-                    if (!GetInternalQueue(L4S)->Peek())
-                    {
-                        // Send anyway since there is no LL packet
-                        NS_LOG_LOGIC("Send CLASSIC packet due to no LL packet");
-                        m_classicDeficit = 0;
-                        return CLASSIC;
-                    }
-                    // Fall through to return to top of loop and reset
-                }
+                NS_LOG_LOGIC("Selecting classic queue");
+                m_classicDeficit -= classicHolSize;
+                NS_LOG_LOGIC("State after classic selection: LL deficit << "
+                             << m_llDeficit << " classic deficit " << m_classicDeficit);
+                return CLASSIC;
             }
             else
             {
-                // no classic packet either; will fall through and reset above
+                NS_LOG_LOGIC("End the classic round; residual deficit: " << m_classicDeficit);
+                m_drrQueues.reset(CLASSIC);
             }
         }
+        else
+        {
+            NS_LOG_LOGIC("classic queue empty; end the classic round");
+            m_classicDeficit = 0;
+            m_drrQueues.reset(CLASSIC);
+        }
+        maxIterations++;
     }
+    // If the queue has a packet, 1000 rounds should be enough to select it
+    NS_FATAL_ERROR("Error in DRR logic (should be unreachable)");
     return NONE;
 }
 
@@ -584,7 +613,7 @@ DualPi2QueueDisc::DoDequeue()
     }
     while (GetQueueSize() > 0)
     {
-        auto selected = Scheduler(GetQueueSize());
+        auto selected = Scheduler();
         if (selected == L4S)
         {
             bool marked [[maybe_unused]];
