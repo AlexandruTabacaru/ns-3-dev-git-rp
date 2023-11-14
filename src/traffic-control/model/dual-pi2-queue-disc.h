@@ -139,6 +139,13 @@ class DualPi2QueueDisc : public QueueDisc
      */
     Ptr<QueueDiscItem> DequeueFromClassicStagingQueue();
 
+    /**
+     * \brief Return the Laqm probability of marking
+     * \param The QueueDiscItem to evaluate
+     * \return The probability of mark, p'L
+     */
+    double GetNativeLaqmProbability(Ptr<const QueueDiscItem> qdItem) const;
+
     Ptr<QueueDiscItem> DequeueFromL4sQueue(bool& marked);
 
     Ptr<QueueDiscItem> DequeueFromClassicQueue(bool& dropped);

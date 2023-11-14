@@ -533,12 +533,27 @@ DualPi2QueueDisc::Scheduler()
     return NONE;
 }
 
+// In RFC 9332 pseudocode: 
+// 5a:         if (lq.len()>Th_len)                   % >1 packet queued
+// 5b:           p'_L = laqm(lq.time())                    % Native LAQM
+// 5c:         else
+// 5d:           p'_L = 0                 % Suppress marking 1 pkt queue
+// In the L4S Wi-Fi use, however, we suppress the Laqm marking and ensure
+// that we mark packets corresponding to any residual queue after a
+// Ack or Block Ack-induced drain event occurs.
+double
+DualPi2QueueDisc::GetNativeLaqmProbability(Ptr<const QueueDiscItem> qdItem [[maybe_unused]]) const
+{
+    // RFC 9332 behavior: return (Laqm(Simulator::Now() - qdItem->GetTimeStamp());
+    return 0;  
+}
+
 Ptr<QueueDiscItem>
 DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
 {
     NS_LOG_FUNCTION(this);
     auto qdItem = GetInternalQueue(L4S)->Dequeue();
-    double pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
+    double pPrimeL = GetNativeLaqmProbability(qdItem);
     if (pPrimeL > m_pCL)
     {
         NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
