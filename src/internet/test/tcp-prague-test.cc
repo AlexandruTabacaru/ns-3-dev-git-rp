@@ -361,7 +361,7 @@ TcpPragueRttIndependenceTest::ExecuteTest()
 
     Ptr<TcpPrague> congPrague = CreateObject<TcpPrague>();
     TimeValue rttTarget;
-    congPrague->GetAttribute("RttTarget", rttTarget);
+    congPrague->GetAttribute("RttVirt", rttTarget);
     m_rttTarget = rttTarget.Get();
     congPrague->SetRttScalingMode(m_mode);
     congPrague->SetRttTransitionDelay(
