@@ -43,12 +43,12 @@ TcpPrague::GetTypeId()
             .SetParent<TcpCongestionOps>()
             .AddConstructor<TcpPrague>()
             .SetGroupName("Internet")
-            .AddAttribute("PragueShiftG",
-                          "Parameter G for updating prague_alpha",
+            .AddAttribute("Gain",
+                          "Parameter g (EWMA gain) for updating alpha",
                           DoubleValue(0.0625),
                           MakeDoubleAccessor(&TcpPrague::m_g),
                           MakeDoubleChecker<double>(0, 1))
-            .AddAttribute("PragueAlphaOnInit",
+            .AddAttribute("AlphaOnInit",
                           "Initial alpha value",
                           DoubleValue(1.0),
                           MakeDoubleAccessor(&TcpPrague::SetPragueAlpha),
@@ -58,12 +58,11 @@ TcpPrague::GetTypeId()
                           BooleanValue(false),
                           MakeBooleanAccessor(&TcpPrague::m_useEct0),
                           MakeBooleanChecker())
-            .AddAttribute(
-                "RttTarget",
-                "Target RTT to achieve",
-                TimeValue(MilliSeconds(15)),
-                MakeTimeAccessor(&TcpPrague::GetDefaultRttTarget, &TcpPrague::SetDefaultRttTarget),
-                MakeTimeChecker())
+            .AddAttribute("RttVirt",
+                          "Virtual RTT",
+                          TimeValue(MilliSeconds(25)),
+                          MakeTimeAccessor(&TcpPrague::m_rttVirt),
+                          MakeTimeChecker())
             .AddAttribute(
                 "RttTransitionDelay",
                 "Number of rounds post Slow Start after which RTT independence is enabled",
@@ -464,12 +463,6 @@ TcpPrague::CongestionStateSet(Ptr<TcpSocketState> tcb,
 }
 
 void
-TcpPrague::SetDefaultRttTarget(Time targetRtt)
-{
-    m_rttTarget = targetRtt;
-}
-
-void
 TcpPrague::SetRttTransitionDelay(uint32_t rounds)
 {
     m_rttTransitionDelay = rounds;
@@ -498,19 +491,13 @@ TcpPrague::GetCwndCnt() const
 }
 
 Time
-TcpPrague::GetDefaultRttTarget() const
-{
-    return m_rttTarget;
-}
-
-Time
 TcpPrague::GetTargetRtt(Ptr<TcpSocketState> tcb)
 {
     // This method is similar to prague_target_rtt in Linux
     NS_LOG_FUNCTION(this << tcb);
 
     /* Referred from TcpOptionTS::NowToTsValue */
-    Time target = m_rttTarget;
+    Time target = m_rttVirt;
     if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_ADDITIVE)
     {
         return target;

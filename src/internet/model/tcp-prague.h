@@ -127,19 +127,6 @@ class TcpPrague : public TcpCongestionOps
      */
     double_t GetCwndCnt() const;
 
-    /** \brief Return the default RTT target
-     *
-     * \return The default RTT target
-     */
-    Time GetDefaultRttTarget() const;
-
-    /**
-     * \brief Sets the default target RTT
-     *
-     * \param rttTarget The target RTT
-     */
-    void SetDefaultRttTarget(Time targetRtt);
-
     /**
      * \brief Update the congestion window
      *
@@ -268,7 +255,7 @@ class TcpPrague : public TcpCongestionOps
     RttScalingMode_t m_rttScalingMode{RTT_CONTROL_NONE}; //!< RTT independence scaling mode
     uint32_t m_rttTransitionDelay; //!< Amount of post-SS rounds to transition to be RTT independent
     Time m_alphaStamp;             //!< EWMA update timestamp
-    Time m_rttTarget;              //!< RTT scaling target
+    Time m_rttVirt;                //!< virtual RTT
     double_t m_aiAckIncrease;      //!< AI increase per non-CE ACKed MSS
 };
 
