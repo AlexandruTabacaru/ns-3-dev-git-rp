@@ -155,7 +155,7 @@ TcpPrague::GetSsThresh(Ptr<const TcpSocketState> state, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << state << bytesInFlight);
 
-    return state->m_ssThresh;
+    return std::max(2 * state->m_segmentSize, bytesInFlight / 2);
 }
 
 void
