@@ -34,6 +34,11 @@ arguments += ' --limit=' + str(limit)
 arguments += ' --scale=' + str(scale)
 arguments += ' --showProgress=' + str(showProgress)
 
+# Build a plot title; customize as needed
+plotTitle = 'Cubic=' + str(numCubic)
+plotTitle += ' Prague=' + str(numPrague)
+plotTitle += ' Background=' + str(numBackground)
+
 # Make a unique timestamped results directory
 formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
 resultsdir = 'results-' + formatted_date
@@ -93,6 +98,6 @@ with open('version.diff', 'w') as out:
 # Make a plot 
 
 # Make a plot 
-subprocess.run(['python3', 'plot-l4s-wifi.py'], stdout=subprocess.PIPE, text=True)
+subprocess.run(['python3', 'plot-l4s-wifi.py', plotTitle], stdout=subprocess.PIPE, text=True)
 
 sys.exit()
