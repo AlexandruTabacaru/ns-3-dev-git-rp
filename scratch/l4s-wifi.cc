@@ -143,7 +143,7 @@ main(int argc, char* argv[])
 {
     // Variable declaration, and constants
     std::string wifiControlMode = "OfdmRate24Mbps";
-    double staDistance = 10;              // meters
+    double staDistance = 10; // meters
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
 
@@ -151,8 +151,8 @@ main(int argc, char* argv[])
     uint32_t numCubic = 1;
     uint32_t numPrague = 1;
     uint32_t numBackground = 0;
-    uint32_t numBytes = 10e6;   // default 10 MB
-    Time duration = Seconds(0); // By default, close one second after last TCP flow closes
+    uint32_t numBytes = 50e6;             // default 50 MB
+    Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     uint16_t mcs = 2;
     bool flowControl = true;
