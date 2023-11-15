@@ -146,7 +146,6 @@ main(int argc, char* argv[])
     double staDistance = 10;              // meters
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
-    Time processingDelay = MicroSeconds(0); // disabled by default
 
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
@@ -159,6 +158,7 @@ main(int argc, char* argv[])
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
     double scale = 1.0;     // default flow control scale factor
+    Time processingDelay = MicroSeconds(10);
     bool showProgress = false;
 
     // Increase some defaults (command-line can override below)
