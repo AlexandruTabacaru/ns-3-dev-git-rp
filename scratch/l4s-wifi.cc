@@ -26,7 +26,7 @@
 // One server with Prague and Cubic TCP connections to the STA under test
 // The first Wi-Fi STA (node index 2) is the STA under test
 // Additional STA nodes (node indices 3+) for sending background load
-// 80 MHz 11ac (MCS 8) is initially configured in 5 GHz (channel 42)
+// 80 MHz 11ax (MCS 8) is initially configured in 5 GHz (channel 42)
 //
 // Configuration inputs:
 // - number of Cubic flows under test
@@ -143,7 +143,6 @@ main(int argc, char* argv[])
 {
     // Variable declaration, and constants
     std::string wifiControlMode = "OfdmRate24Mbps";
-    Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     double staDistance = 10;              // meters
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
@@ -155,6 +154,7 @@ main(int argc, char* argv[])
     uint32_t numBackground = 0;
     uint32_t numBytes = 10e6;   // default 10 MB
     Time duration = Seconds(0); // By default, close one second after last TCP flow closes
+    Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     uint16_t mcs = 2;
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
@@ -182,6 +182,7 @@ main(int argc, char* argv[])
     cmd.AddValue("numBackground", "Number of background flows", numBackground);
     cmd.AddValue("numBytes", "Number of bytes for each TCP transfer", numBytes);
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
+    cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
@@ -222,7 +223,6 @@ main(int argc, char* argv[])
     YansWifiPhyHelper wifiPhy;
     YansWifiChannelHelper wifiChannel;
     wifiChannel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-    // Reference Loss for Friss at 1 m with 5.15 GHz
     wifiChannel.AddPropagationLoss("ns3::LogDistancePropagationLossModel",
                                    "Exponent",
                                    DoubleValue(2.0),
