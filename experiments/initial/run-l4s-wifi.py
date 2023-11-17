@@ -16,7 +16,7 @@ numCubic = 1
 numPrague = 1
 numBackground = 0
 numBytes = 50000000
-duration = 0
+duration = 30
 mcs = 2
 flowControl = 1
 limit = 65535
@@ -61,16 +61,16 @@ with open(os.path.join(os.getcwd(), script_filename), "w") as destination_file:
     destination_file.write(script_content)
 
 try:
-    with open("build.out", "w") as out:
+    with open("build.txt", "w") as out:
         subprocess.run(
             [path_to_ns3_script, "build"], stdout=out, stderr=out, check=True
         )
 except subprocess.CalledProcessError as e:
-    print(f"Build error: {e}:  Check build.out file for error.")
+    print(f"Build error: {e}:  Check build.txt file for error.")
     sys.exit(e.returncode)
 
 # Run l4s-wifi
-with open("run.out", "w") as out:
+with open("run.txt", "w") as out:
     result = subprocess.run(
         [
             path_to_ns3_script,
@@ -86,8 +86,8 @@ with open("run.out", "w") as out:
         text=True,
     )
 
-# Save the parameters used in a 'commandlog.out' file
-with open("commandlog.out", "w") as out:
+# Save the parameters used in a 'commandlog.txt' file
+with open("commandlog.txt", "w") as out:
     out.write("ns3 run l4s-wifi" + " -- " + arguments + "\n")
     out.close()
 
@@ -96,7 +96,7 @@ command_get_repo_time = "git rev-parse --abbrev-ref HEAD"
 command_get_repo_commit = "git rev-parse --short HEAD"
 
 branch_output = subprocess.check_output(["git", "branch", "-vvv"])
-with open("version.out", "w") as out:
+with open("version.txt", "w") as out:
     command_output = branch_output.decode("utf-8").strip()
     command_output.split("\n")[0:1]
     out.write(
@@ -116,5 +116,10 @@ with open("version.diff", "w") as out:
 subprocess.run(
     ["python3", "plot-l4s-wifi.py", plotTitle], stdout=subprocess.PIPE, text=True
 )
+
+subprocess.run(
+    ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
+)
+
 
 sys.exit()
