@@ -118,7 +118,7 @@ subprocess.run(
 )
 
 subprocess.run(
-    ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
+    ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0-ip.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
 )
 
 
