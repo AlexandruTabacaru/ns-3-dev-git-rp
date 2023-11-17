@@ -404,6 +404,10 @@ main(int argc, char* argv[])
     // PCAP traces
     pointToPoint.EnablePcapAll("l4s-wifi");
     wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
+    internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
+                                 staNodes.Get(0)->GetObject<Ipv4>(),
+                                 1,
+                                 true);
 
     // Set up traces
     // Bytes and throughput in WifiMacQueue
