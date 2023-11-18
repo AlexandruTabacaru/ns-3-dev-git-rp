@@ -95,7 +95,7 @@ The program output consists of many time-series data files, and PCAP traces for 
     * **wifi-queue-bytes.dat**:  Each time the size of the device queue (WifiMacQueue) changes, the new size (in bytes) is written.  Note that a total of 38 bytes per IP packet is added to the queued packets, for the Wi-Fi and LLC overhead (e.g., typically 1538 bytes for a 1500 byte IP packet).  This trace includes control and management frames.
     * **wifi-dualpi2-bytes.dat**:  Each time the size of the overlying DualPi2QueueDisc changes, the new size (in bytes) is written.  This aggregates both the L and C queues.  The packet size is the IP packet size (e.g., typically 1500 bytes).
 
-* Several time-series traces from the primary TCP flows:
+* Several time-series traces from the first foreground TCP Prague flow (note:  if there are N foreground flows, only the first is traced in these files):
     * **prague-throughput.dat**:  100 ms average of TCP throughput (just payload bytes, not counting headers)
     * **prague-cwnd.dat**:  Congestion window (maintained in units of bytes)
     * **prague-ssthresh.dat**:  Slow start threshold (maintained in units of bytes)
@@ -104,7 +104,7 @@ The program output consists of many time-series data files, and PCAP traces for 
     * **prague-cong-state.dat**:  The congestion state machine
     * **prague-ecn-state.dat**:  The ECN state machine
 
-Files prefixed with 'cubic' are similar to the above Prague files.
+Files prefixed with 'cubic' are similar to the above Prague files (i.e., tracing the first foreground Cubicl flow).
 
 ###2.4 Command line arguments
 
