@@ -36,19 +36,17 @@
 // - whether to disable flow control
 // - Wi-Fi queue limit when flow control is enabled (base limit and scale factor)
 //
-// Benavior:
-// - at simulation time 1 second, each flow starts
+// Behavior:
+// - at around simulation time 1 second, each flow starts
 // - simulation ends 1 second after last foreground flow terminates, unless
 //   a specific duration was configured
 //
 // Outputs (some of these are for future definition):
-// 1) one-way latency sample for each flow measured at application layer
-// 2) queueing and medium access delay
-// 3) PCAP files at TCP endpoints
-// 4) PCAP files on Wifi endpoints
-// 5) queue depth of the overlying and Wi-Fi AC_BE queue
-// 6) throughputs of flows and of Wi-Fi downlink
-// 7) Wi-Fi MCS for data
+// 1) PCAP files at TCP endpoints
+// 2) queue depth of the overlying and Wi-Fi AC_BE queue
+// 3) queue depth of the WifiMacQueue AC_BE queue
+// 4) dequeue events of the WifiMacQueue
+// 5) Socket statistics for the first foreground Prague and Cubic flows defined
 
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
@@ -61,6 +59,7 @@
 #include "ns3/wifi-module.h"
 
 #include <iomanip>
+#include <sstream>
 
 using namespace ns3;
 
@@ -125,8 +124,8 @@ void TraceCubicSocket(Ptr<Application>, uint32_t);
 // Count the number of flows to wait for completion before stopping the simulation
 uint32_t g_flowsToClose = 0;
 // Hook these methods to the PacketSink objects
-void HandlePeerClose(Ptr<const Socket> socket);
-void HandlePeerError(Ptr<const Socket> socket);
+void HandlePeerClose(std::string context, Ptr<const Socket> socket);
+void HandlePeerError(std::string context, Ptr<const Socket> socket);
 
 // These methods work around the lack of ability to configure different TCP socket types
 // on the same node on a per-socket (per-application) basis. Instead, these methods can
@@ -334,20 +333,21 @@ main(int argc, char* argv[])
 
     // Application configuration for Prague flows under test
     uint16_t port = 100;
-    ApplicationContainer serverApp;
-    ApplicationContainer clientApp;
+    ApplicationContainer pragueServerApps;
+    ApplicationContainer pragueClientApps;
     for (auto i = 0U; i < numPrague; i++)
     {
         BulkSendHelper bulk("ns3::TcpSocketFactory",
                             InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulk.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        serverApp = bulk.Install(serverNode.Get(0));
-        serverApp.Start(Seconds(1.0));
+        bulk.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * MilliSeconds(10)));
+        pragueServerApps.Add(bulk.Install(serverNode.Get(0)));
+        NS_LOG_DEBUG("Creating Prague foreground flow " << i);
         PacketSinkHelper sink =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        clientApp = sink.Install(staNodes.Get(0));
-        clientApp.Start(Seconds(1.0));
+        sink.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * MilliSeconds(10)));
+        pragueClientApps.Add(sink.Install(staNodes.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
             Seconds(1.0) - TimeStep(1),
@@ -356,20 +356,21 @@ main(int argc, char* argv[])
 
     // Application configuration for Cubic flows under test
     port = 200;
-    ApplicationContainer serverAppCubic;
-    ApplicationContainer clientAppCubic;
+    ApplicationContainer cubicServerApps;
+    ApplicationContainer cubicClientApps;
     for (auto i = 0U; i < numCubic; i++)
     {
         BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
                                  InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulkCubic.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        serverAppCubic = bulkCubic.Install(serverNode.Get(0));
-        serverAppCubic.Start(Seconds(1.05));
+        bulkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * MilliSeconds(10)));
+        cubicServerApps.Add(bulkCubic.Install(serverNode.Get(0)));
+        NS_LOG_DEBUG("Creating Cubic foreground flow " << i);
         PacketSinkHelper sinkCubic =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        clientAppCubic = sinkCubic.Install(staNodes.Get(0));
-        clientAppCubic.Start(Seconds(1.05));
+        sinkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * MilliSeconds(10)));
+        cubicClientApps.Add(sinkCubic.Install(staNodes.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
             Seconds(1.05) - TimeStep(1),
@@ -424,7 +425,7 @@ main(int argc, char* argv[])
     Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
 
     // Throughput and latency for foreground flows, and set up close callbacks
-    if (clientApp.GetN())
+    if (pragueClientApps.GetN())
     {
         g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
         g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
@@ -434,20 +435,25 @@ main(int argc, char* argv[])
         g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
         g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
     }
-    for (auto i = 0U; i < clientApp.GetN(); i++)
+    for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(Seconds(1.0) + TimeStep(1),
-                            MakeBoundCallback(&TracePragueSocket, serverApp.Get(i), i));
-        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        Simulator::Schedule(Seconds(1.0) + i * MilliSeconds(10) + TimeStep(1),
+                            MakeBoundCallback(&TracePragueSocket, pragueServerApps.Get(i), i));
+        std::ostringstream oss;
+        oss << "Prague:" << i;
+        NS_LOG_DEBUG("Setting up callbacks on Prague sockets " << pragueClientApps.Get(i));
+        pragueClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerClose",
+            oss.str(),
             MakeCallback(&HandlePeerClose));
-        clientApp.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        pragueClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerError",
+            oss.str(),
             MakeCallback(&HandlePeerError));
     }
 
-    if (clientAppCubic.GetN())
+    if (cubicClientApps.GetN())
     {
         g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
         g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
@@ -456,16 +462,22 @@ main(int argc, char* argv[])
         g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
         g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
     }
-    for (auto i = 0U; i < clientAppCubic.GetN(); i++)
+    for (auto i = 0U; i < cubicClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(Seconds(1.05) + TimeStep(1),
-                            MakeBoundCallback(&TraceCubicSocket, serverAppCubic.Get(i), i));
-        clientAppCubic.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        Simulator::Schedule(Seconds(1.05) + i * MilliSeconds(10) + TimeStep(1),
+                            MakeBoundCallback(&TraceCubicSocket, cubicServerApps.Get(i), i));
+        std::ostringstream oss;
+        oss << "Cubic:" << i;
+        NS_LOG_DEBUG("Setting up callbacks on Cubic sockets " << i << " "
+                                                              << cubicClientApps.Get(i));
+        cubicClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerClose",
+            oss.str(),
             MakeCallback(&HandlePeerClose));
-        clientAppCubic.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+        cubicClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerError",
+            oss.str(),
             MakeCallback(&HandlePeerError));
     }
 
@@ -521,6 +533,13 @@ main(int argc, char* argv[])
               << "Reached simulation " << stopReason << " stop time after "
               << Simulator::Now().GetSeconds() << " seconds" << std::endl
               << std::endl;
+
+    if (stopReason == "fail-safe")
+    {
+        std::cout << "** Expected " << numCubic + numPrague << " flows to close, but "
+                  << g_flowsToClose << " are remaining" << std::endl
+                  << std::endl;
+    }
 
     std::cout << std::fixed << std::setprecision(2);
     if (numCubic)
@@ -752,8 +771,9 @@ TraceDequeueThroughput()
 }
 
 void
-HandlePeerClose(Ptr<const Socket> socket)
+HandlePeerClose(std::string context, Ptr<const Socket> socket)
 {
+    NS_LOG_DEBUG("Handling close of socket " << context);
     if (--g_flowsToClose == 0)
     {
         // Close 1 second after last TCP flow closes
@@ -762,8 +782,9 @@ HandlePeerClose(Ptr<const Socket> socket)
 }
 
 void
-HandlePeerError(Ptr<const Socket> socket)
+HandlePeerError(std::string context, Ptr<const Socket> socket)
 {
+    NS_LOG_DEBUG("Handling abnormal close of socket " << context);
     std::cout << "Warning:  socket closed abnormally" << std::endl;
     if (--g_flowsToClose == 0)
     {
