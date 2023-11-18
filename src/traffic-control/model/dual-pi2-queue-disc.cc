@@ -212,30 +212,42 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
     // Dequeue using the scheduler logic which will apply Laqm and coupled marking, and drops
 
     uint32_t pendingBytes = newBytes;
-    uint32_t markedCount = 0; // How many of those L4S packets are marked
-    while (CanSchedule(pendingBytes))
+    uint32_t markedCount = 0;      // How many of those L4S packets are marked
+    uint32_t maxIterations = 1000; // Prevent a deadlock simulation loop
+    for (uint32_t i = 0; i <= maxIterations; i++)
     {
-        auto scheduled = Scheduler();
+        NS_ASSERT_MSG(i < maxIterations, "Error: infinite loop");
+        auto eligible = CanSchedule(pendingBytes);
+        if (!eligible.first && !eligible.second)
+        {
+            NS_LOG_DEBUG("Cannot schedule further with pendingBytes " << pendingBytes);
+            break;
+        }
+        auto scheduled = Scheduler(eligible);
         if (scheduled == L4S)
         {
             bool marked = false;
             auto qdItem = DequeueFromL4sQueue(marked);
-            if (qdItem)
+            NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
+            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient pending bytes");
+            AddToL4sStagingQueue(qdItem);
+            pendingBytes -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
+            if (marked)
             {
-                NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
-                AddToL4sStagingQueue(qdItem);
-                pendingBytes -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
-                if (marked)
-                {
-                    markedCount++;
-                }
+                NS_LOG_DEBUG("Dequeued marked packet from L4S with size " << qdItem->GetSize());
+                markedCount++;
+            }
+            else
+            {
+                NS_LOG_DEBUG("Dequeued unmarked packet from L4S with size " << qdItem->GetSize());
             }
         }
         else if (scheduled == CLASSIC)
         {
             bool dropped [[maybe_unused]] = false;
             auto qdItem = DequeueFromClassicQueue(dropped);
-            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient bytes");
+            NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
+            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient pending bytes");
             AddToClassicStagingQueue(qdItem);
             pendingBytes -= (qdItem->GetSize() + 38);
         }
@@ -407,50 +419,51 @@ DualPi2QueueDisc::DequeueFromClassicStagingQueue()
     return nullptr;
 }
 
-bool
+std::pair<bool, bool>
 DualPi2QueueDisc::CanSchedule(uint32_t byteLimit) const
 {
     NS_LOG_FUNCTION(this << byteLimit);
+    bool canScheduleL4s = false;
+    bool canScheduleClassic = false;
     if (GetNPackets() == 0)
     {
         NS_LOG_DEBUG("Cannot schedule from an empty queue");
-        return false;
+        return std::make_pair(false, false);
     }
-    uint32_t l4sHolSize = 0; // Head of line size
+    uint32_t l4sHolWifiSize = 0; // Head of line's size as will be framed in Wi-Fi layer
     if (GetInternalQueue(L4S)->Peek())
     {
-        l4sHolSize = GetInternalQueue(L4S)->Peek()->GetSize();
+        l4sHolWifiSize = GetInternalQueue(L4S)->Peek()->GetSize() + 38;
     }
-    uint32_t classicHolSize = 0; // Head of line size
+    uint32_t classicHolWifiSize = 0; // Head of line's size as will be framed in Wi-Fi layer
     if (GetInternalQueue(CLASSIC)->Peek())
     {
-        classicHolSize = GetInternalQueue(CLASSIC)->Peek()->GetSize();
+        classicHolWifiSize = GetInternalQueue(CLASSIC)->Peek()->GetSize() + 38;
     }
-    if (l4sHolSize > byteLimit && classicHolSize > byteLimit)
+    if (l4sHolWifiSize && l4sHolWifiSize <= byteLimit)
     {
-        // If there is not an eligible classic packet, return NONE
-        NS_LOG_DEBUG("Neither L4S (" << l4sHolSize << ") nor Classic (" << classicHolSize
-                                     << ") have a small enough packet");
-        return false;
+        canScheduleL4s = true;
+        NS_LOG_DEBUG("Can schedule L4S size " << l4sHolWifiSize << " for limit " << byteLimit);
     }
-    if ((classicHolSize > byteLimit && l4sHolSize == 0) ||
-        (l4sHolSize > byteLimit && classicHolSize == 0))
+    if (classicHolWifiSize && classicHolWifiSize <= byteLimit)
     {
-        // If there is not an eligible L4S packet, return NONE
-        NS_LOG_DEBUG("L4S (" << l4sHolSize << ") or Classic (" << classicHolSize
-                             << ") have a large packet, and one of the two is empty");
-        return false;
+        canScheduleClassic = true;
+        NS_LOG_DEBUG("Can schedule Classic size " << classicHolWifiSize << " for limit "
+                                                  << byteLimit);
     }
-    return true;
+    return std::make_pair(canScheduleClassic, canScheduleL4s);
 }
 
 std::size_t
-DualPi2QueueDisc::Scheduler()
+DualPi2QueueDisc::Scheduler(std::pair<bool, bool> eligible)
 {
-    NS_LOG_FUNCTION(this);
+    NS_LOG_FUNCTION(this << eligible.first << eligible.second);
+    NS_ASSERT_MSG(eligible.first || eligible.second, "Error: Neither queue is eligible");
     // A generic weighted deficit round robin queue with two bands.  If the
     // queue is non-empy, it should iterate until returning either L4S or
     // CLASSIC.
+    // The 'eligible' parameter must be true for a given queue to be
+    // scheduled:  eligible.first -> CLASSIC, eligible.second -> L4S
     uint32_t l4sHolSize = 0; // Head of line size
     if (GetInternalQueue(L4S)->Peek())
     {
@@ -480,13 +493,13 @@ DualPi2QueueDisc::Scheduler()
             NS_LOG_LOGIC("Deficit after increment: LL deficit "
                          << m_llDeficit << " classic deficit " << m_classicDeficit);
         }
-        if (l4sHolSize) // queue not empty
+        if (l4sHolSize && eligible.second) // L4S
         {
             if (l4sHolSize <= m_llDeficit)
             {
                 NS_LOG_LOGIC("Selecting LL queue");
                 m_llDeficit -= l4sHolSize;
-                NS_LOG_LOGIC("State after LL selection: LL deficit << "
+                NS_LOG_LOGIC("State after LL selection: LL deficit "
                              << m_llDeficit << " classic deficit " << m_classicDeficit);
                 return L4S;
             }
@@ -496,13 +509,13 @@ DualPi2QueueDisc::Scheduler()
                 m_drrQueues.reset(L4S);
             }
         }
-        else
+        if (!l4sHolSize)
         {
             NS_LOG_LOGIC("L4S queue empty; end the L4S round");
             m_llDeficit = 0;
             m_drrQueues.reset(L4S);
         }
-        if (classicHolSize) // queue not empty
+        if (classicHolSize && eligible.first) // CLASSIC
         {
             if (classicHolSize <= m_classicDeficit)
             {
@@ -518,7 +531,7 @@ DualPi2QueueDisc::Scheduler()
                 m_drrQueues.reset(CLASSIC);
             }
         }
-        else
+        if (!classicHolSize)
         {
             NS_LOG_LOGIC("classic queue empty; end the classic round");
             m_classicDeficit = 0;
@@ -626,12 +639,13 @@ DualPi2QueueDisc::DoDequeue()
     }
     while (GetQueueSize() > 0)
     {
-        auto selected = Scheduler();
+        auto selected = Scheduler({true, true});
         if (selected == L4S)
         {
             bool marked [[maybe_unused]];
             qdItem = DequeueFromL4sQueue(marked);
             m_traceL4sSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+            NS_LOG_DEBUG("Dequeue from L4S queue, size " << qdItem->GetSize());
             return qdItem;
         }
         else if (selected == CLASSIC)
@@ -644,6 +658,7 @@ DualPi2QueueDisc::DoDequeue()
             {
                 m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
             }
+            NS_LOG_DEBUG("Dequeue from CLASSIC queue, size " << qdItem->GetSize());
             return qdItem;
         }
         else

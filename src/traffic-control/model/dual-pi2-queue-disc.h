@@ -38,6 +38,7 @@
 #include <bitset>
 #include <queue>
 #include <set>
+#include <utility>
 
 namespace ns3
 {
@@ -178,7 +179,7 @@ class DualPi2QueueDisc : public QueueDisc
      * \param byteLimit The byte limit to check against
      * \return true if the above conditions hold, false otherwise
      */
-    bool CanSchedule(uint32_t byteLimit) const;
+    std::pair<bool, bool> CanSchedule(uint32_t byteLimit) const;
     /**
      * A two-band weighted deficit round robin (WDRR) queue.  If there
      * is no packet in the queue, returns the value NONE.  If at least
@@ -187,9 +188,10 @@ class DualPi2QueueDisc : public QueueDisc
      * method does not actually dequeue anything; the individual internal
      * queue that is selected must subsequently be dequeued from.
      *
+     * \param eligible whether classic (first) or L4S (second) may be scheduled
      * \return either 0 (Classic), 1 (L4S), or 2 (NONE)
      */
-    std::size_t Scheduler();
+    std::size_t Scheduler(std::pair<bool, bool> eligible);
 
     // Values supplied by user
     Time m_target;              //!< Queue delay target for Classic traffic
