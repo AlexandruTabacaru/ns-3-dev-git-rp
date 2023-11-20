@@ -117,9 +117,12 @@ subprocess.run(
     ["python3", "plot-l4s-wifi.py", plotTitle], stdout=subprocess.PIPE, text=True
 )
 
-subprocess.run(
-    ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0-ip.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
-)
+try:
+    subprocess.run(
+        ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0-ip.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
+    )
+except:
+    pass
 
 
 sys.exit()
