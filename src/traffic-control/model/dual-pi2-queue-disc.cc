@@ -234,12 +234,16 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             pendingBytes -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
             if (marked)
             {
-                NS_LOG_DEBUG("Dequeued marked packet from L4S with size " << qdItem->GetSize());
+                NS_LOG_INFO("Moved marked L4S packet to staging queue; size "
+                            << qdItem->GetSize() << "; timestamp "
+                            << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
                 markedCount++;
             }
             else
             {
-                NS_LOG_DEBUG("Dequeued unmarked packet from L4S with size " << qdItem->GetSize());
+                NS_LOG_INFO("Moved unmarked L4S packet to staging queue; size "
+                            << qdItem->GetSize() << "; timestamp "
+                            << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
             }
         }
         else if (scheduled == CLASSIC)
@@ -248,6 +252,9 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             auto qdItem = DequeueFromClassicQueue(dropped);
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient pending bytes");
+            NS_LOG_INFO("Moved CLASSIC packet to staging queue; size "
+                        << qdItem->GetSize() << "; timestamp "
+                        << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
             AddToClassicStagingQueue(qdItem);
             pendingBytes -= (qdItem->GetSize() + 38);
         }
@@ -316,6 +323,7 @@ DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
     if (nQueued + item->GetSize() > m_queueLimit)
     {
         // Drops due to queue limit
+        NS_LOG_INFO("Drop packet due to queue limit " << m_queueLimit);
         DropBeforeEnqueue(item, FORCED_DROP);
         return false;
     }
@@ -328,8 +336,9 @@ DualPi2QueueDisc::DoEnqueue(Ptr<QueueDiscItem> item)
     }
 
     bool retval = GetInternalQueue(queueNumber)->Enqueue(item);
-    NS_LOG_LOGIC("Packets enqueued in queue-" << queueNumber << ": "
-                                              << GetInternalQueue(queueNumber)->GetNPackets());
+    NS_LOG_INFO("Enqueue packet in queue "
+                << queueNumber << " size: " << item->GetSize()
+                << " nPackets: " << GetInternalQueue(queueNumber)->GetNPackets());
     return retval;
 }
 
@@ -398,9 +407,12 @@ DualPi2QueueDisc::AddToClassicStagingQueue(Ptr<QueueDiscItem> qdItem)
 Ptr<QueueDiscItem>
 DualPi2QueueDisc::DequeueFromL4sStagingQueue()
 {
+    NS_LOG_FUNCTION(this);
     if (!m_l4sStagingQueue.empty())
     {
         auto qdItem = m_l4sStagingQueue.front();
+        NS_LOG_DEBUG("Dequeue from L4S staging queue; timestamp "
+                     << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
         m_l4sStagingQueue.pop_front();
         return qdItem;
     }
@@ -410,10 +422,13 @@ DualPi2QueueDisc::DequeueFromL4sStagingQueue()
 Ptr<QueueDiscItem>
 DualPi2QueueDisc::DequeueFromClassicStagingQueue()
 {
+    NS_LOG_FUNCTION(this);
     if (!m_classicStagingQueue.empty())
     {
         auto qdItem = m_classicStagingQueue.front();
         m_classicStagingQueue.pop_front();
+        NS_LOG_DEBUG("Dequeue from CLASSIC staging queue; timestamp "
+                     << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
         return qdItem;
     }
     return nullptr;
@@ -603,9 +618,10 @@ DualPi2QueueDisc::DequeueFromClassicQueue(bool& dropped)
     {
         if (Recur(m_classicCount, m_pC))
         {
+            NS_LOG_INFO("Classic drop due to recur function; queue length "
+                        << GetInternalQueue(CLASSIC)->GetNBytes());
             DropAfterDequeue(qdItem, UNFORCED_CLASSIC_DROP);
             dropped = true;
-            NS_LOG_DEBUG("C-queue packet is dropped");
             qdItem = GetInternalQueue(CLASSIC)->Dequeue();
             continue;
         }
@@ -627,14 +643,21 @@ DualPi2QueueDisc::DoDequeue()
     {
         // Packets in staging queue have already been marked or not
         // and internal Laqm probabilities have been updated
-        NS_LOG_DEBUG("Dequeue from L4S staging queue");
-        m_traceL4sSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+        Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
+        NS_LOG_INFO("Dequeue from L4S staging queue; timestamp "
+                    << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
+                    << sojourn.GetMicroSeconds() << " us");
+        m_traceL4sSojourn(sojourn);
         return qdItem;
     }
     qdItem = DequeueFromClassicStagingQueue();
     if (qdItem)
     {
-        m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+        Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
+        NS_LOG_INFO("Dequeue from CLASSIC staging queue; timestamp "
+                    << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
+                    << sojourn.GetMicroSeconds() << " us");
+        m_traceClassicSojourn(sojourn);
         return qdItem;
     }
     while (GetQueueSize() > 0)
@@ -644,8 +667,11 @@ DualPi2QueueDisc::DoDequeue()
         {
             bool marked [[maybe_unused]];
             qdItem = DequeueFromL4sQueue(marked);
-            m_traceL4sSojourn(Simulator::Now() - qdItem->GetTimeStamp());
-            NS_LOG_DEBUG("Dequeue from L4S queue, size " << qdItem->GetSize());
+            Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
+            NS_LOG_INFO("Dequeue from L4S queue; timestamp "
+                        << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
+                        << sojourn.GetMicroSeconds() << " us");
+            m_traceL4sSojourn(sojourn);
             return qdItem;
         }
         else if (selected == CLASSIC)
@@ -656,11 +682,18 @@ DualPi2QueueDisc::DoDequeue()
             // that an item was actually returned before tracing it
             if (qdItem)
             {
-                m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
-                NS_LOG_DEBUG("Dequeue from CLASSIC queue, size " << qdItem->GetSize());
+                Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
+                NS_LOG_INFO("Dequeue from CLASSIC queue; timestamp "
+                            << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
+                            << sojourn.GetMicroSeconds() << " us");
+                m_traceClassicSojourn(sojourn);
                 return qdItem;
             }
-            // Continue in while() loop
+            else
+            {
+                NS_LOG_DEBUG("Drop occurred in CLASSIC queue");
+                // Do not return; continue with while() loop
+            }
         }
         else
         {
