@@ -410,7 +410,7 @@ DualPi2QueueDisc::DequeueFromL4sStagingQueue()
 Ptr<QueueDiscItem>
 DualPi2QueueDisc::DequeueFromClassicStagingQueue()
 {
-    if (!m_l4sStagingQueue.empty())
+    if (!m_classicStagingQueue.empty())
     {
         auto qdItem = m_classicStagingQueue.front();
         m_classicStagingQueue.pop_front();
