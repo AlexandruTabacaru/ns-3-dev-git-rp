@@ -657,9 +657,10 @@ DualPi2QueueDisc::DoDequeue()
             if (qdItem)
             {
                 m_traceClassicSojourn(Simulator::Now() - qdItem->GetTimeStamp());
+                NS_LOG_DEBUG("Dequeue from CLASSIC queue, size " << qdItem->GetSize());
+                return qdItem;
             }
-            NS_LOG_DEBUG("Dequeue from CLASSIC queue, size " << qdItem->GetSize());
-            return qdItem;
+            // Continue in while() loop
         }
         else
         {
