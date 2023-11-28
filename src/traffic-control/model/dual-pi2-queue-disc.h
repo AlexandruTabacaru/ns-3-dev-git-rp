@@ -131,13 +131,6 @@ class DualPi2QueueDisc : public QueueDisc
      */
     Ptr<QueueDiscItem> DequeueFromClassicStagingQueue();
 
-    /**
-     * \brief Return the Laqm probability of marking
-     * \param The QueueDiscItem to evaluate
-     * \return The probability of mark, p'L
-     */
-    double GetNativeLaqmProbability(Ptr<const QueueDiscItem> qdItem) const;
-
     Ptr<QueueDiscItem> DequeueFromL4sQueue(bool& marked);
 
     Ptr<QueueDiscItem> DequeueFromClassicQueue(bool& dropped);
@@ -163,11 +156,11 @@ class DualPi2QueueDisc : public QueueDisc
      */
     void DualPi2Update();
     /**
-     * L4S AQM function
-     * \param lqTime Delay to evaluate against threshold
-     * \return value between 0 and 1 representing the probability of mark
+     * \brief Return the Laqm probability of marking
+     * \param qDelay The queue delay to evaluate
+     * \return The probability of mark, p'L
      */
-    double Laqm(Time lqTime) const;
+    double Laqm(Time qDelay) const;
     /**
      * \brief Check whether a subsequent call to Scheduler() will return
      * a packet with size <= byteLimit
@@ -200,7 +193,8 @@ class DualPi2QueueDisc : public QueueDisc
     uint32_t m_mtu;             //!< Device MTU (bytes)
     double m_alpha;             //!< Parameter to PI Square controller
     double m_beta;              //!< Parameter to PI Square controller
-    Time m_minTh;               //!< L4S marking threshold (in time)
+    Time m_minTh;               //!< L4S marking threshold MinTh
+    Time m_range;               //!< L4S marking threshold range
     double m_k;                 //!< Coupling factor
     uint32_t m_classicDeficit;  //!< deficit counter for DRR
     uint32_t m_llDeficit;       //!< deficit counter for DRR
@@ -209,6 +203,7 @@ class DualPi2QueueDisc : public QueueDisc
     uint32_t m_drrQuantum;      //!< DRR quantum
     uint32_t m_queueLimit;      //!< Queue limit in bytes / packets
     Time m_startTime;           //!< Start time of the update timer
+    bool m_disableLaqm;         //!< Disable laqm() method
 
     // Variables maintained by DualQ Coupled PI2
     Time m_classicQueueTime;   //!< Arrival time of a packet of Classic Traffic

@@ -88,10 +88,15 @@ DualPi2QueueDisc::GetTypeId()
                           TimeValue(MilliSeconds(15)),
                           MakeTimeAccessor(&DualPi2QueueDisc::m_target),
                           MakeTimeChecker())
-            .AddAttribute("L4SMarkThresold",
-                          "L4S marking threshold in Time",
-                          TimeValue(MicroSeconds(475)),
+            .AddAttribute("MinTh",
+                          "Laqm marking threshold",
+                          TimeValue(MicroSeconds(800)),
                           MakeTimeAccessor(&DualPi2QueueDisc::m_minTh),
+                          MakeTimeChecker())
+            .AddAttribute("Range",
+                          "Laqm marking range",
+                          TimeValue(MicroSeconds(400)),
+                          MakeTimeAccessor(&DualPi2QueueDisc::m_range),
                           MakeTimeChecker())
             .AddAttribute("K",
                           "Coupling factor",
@@ -114,6 +119,11 @@ DualPi2QueueDisc::GetTypeId()
                           UintegerValue(1500),
                           MakeUintegerAccessor(&DualPi2QueueDisc::m_drrQuantum),
                           MakeUintegerChecker<uint32_t>())
+            .AddAttribute("DisableLaqm",
+                          "Whether to disable Laqm calculation and return zero",
+                          BooleanValue(false),
+                          MakeBooleanAccessor(&DualPi2QueueDisc::m_disableLaqm),
+                          MakeBooleanChecker())
             .AddTraceSource("ProbCL",
                             "Coupled probability (p_CL)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCL),
@@ -559,27 +569,17 @@ DualPi2QueueDisc::Scheduler(std::pair<bool, bool> eligible)
     return NONE;
 }
 
-// In RFC 9332 pseudocode:
-// 5a:         if (lq.len()>Th_len)                   % >1 packet queued
-// 5b:           p'_L = laqm(lq.time())                    % Native LAQM
-// 5c:         else
-// 5d:           p'_L = 0                 % Suppress marking 1 pkt queue
-// In the L4S Wi-Fi use, however, we suppress the Laqm marking and ensure
-// that we mark packets corresponding to any remaining queue after a
-// Ack or Block Ack-induced drain event occurs.
-double
-DualPi2QueueDisc::GetNativeLaqmProbability(Ptr<const QueueDiscItem> qdItem [[maybe_unused]]) const
-{
-    // RFC 9332 behavior: return (Laqm(Simulator::Now() - qdItem->GetTimeStamp());
-    return 0;
-}
-
 Ptr<QueueDiscItem>
 DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
 {
     NS_LOG_FUNCTION(this);
     auto qdItem = GetInternalQueue(L4S)->Dequeue();
-    double pPrimeL = GetNativeLaqmProbability(qdItem);
+    double pPrimeL{0}; // p'_L in RFC 9332
+    if (GetInternalQueue(L4S)->GetNPackets() > 1)
+    {
+        pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
+    }
+    // else p'_L = 0 by initialization above
     if (pPrimeL > m_pCL)
     {
         NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
@@ -704,14 +704,28 @@ DualPi2QueueDisc::DoDequeue()
 }
 
 double
-DualPi2QueueDisc::Laqm(Time lqTime) const
+DualPi2QueueDisc::Laqm(Time qDelay [[maybe_unused]]) const
 {
-    NS_LOG_FUNCTION(this << lqTime.GetSeconds());
-    if (lqTime > m_minTh)
+    NS_LOG_FUNCTION(this << qDelay.As(Time::S));
+    if (m_disableLaqm)
     {
-        return 1;
+        return 0;
     }
-    return 0;
+    else
+    {
+        if (qDelay >= m_minTh + m_range)
+        {
+            return 1;
+        }
+        else if (qDelay > m_minTh)
+        {
+            return (qDelay - m_minTh).GetSeconds() / m_range.GetSeconds();
+        }
+        else
+        {
+            return 0;
+        }
+    }
 }
 
 bool

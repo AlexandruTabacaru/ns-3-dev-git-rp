@@ -173,6 +173,8 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
     // The bulk send application should do 1448-byte writes (one timestamp per TCP packet)
     Config::SetDefault("ns3::BulkSendApplication::SendSize", UintegerValue(1448));
+    // Bypass Laqm when using Wi-Fi
+    Config::SetDefault("ns3::DualPi2QueueDisc::DisableLaqm", BooleanValue(true));
 
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
