@@ -268,10 +268,10 @@ TcpSocketBase::TcpSocketBase()
     : TcpSocket()
 {
     NS_LOG_FUNCTION(this);
-    m_txBuffer = CreateObject<TcpTxBuffer>();
-    m_txBuffer->SetRWndCallback(MakeCallback(&TcpSocketBase::GetRWnd, this));
-    m_tcb = CreateObject<TcpSocketState>();
     m_rateOps = CreateObject<TcpRateLinux>();
+    m_tcb = CreateObject<TcpSocketState>();
+    m_tcb->m_txBuffer = CreateObject<TcpTxBuffer>();
+    m_tcb->m_txBuffer->SetRWndCallback(MakeCallback(&TcpSocketBase::GetRWnd, this));
 
     m_tcb->m_rxBuffer = CreateObject<TcpRxBuffer>();
 
@@ -392,9 +392,9 @@ TcpSocketBase::TcpSocketBase(const TcpSocketBase& sock)
     SetDataSentCallback(vPSUI);
     SetSendCallback(vPSUI);
     SetRecvCallback(vPS);
-    m_txBuffer = CopyObject(sock.m_txBuffer);
-    m_txBuffer->SetRWndCallback(MakeCallback(&TcpSocketBase::GetRWnd, this));
     m_tcb = CopyObject(sock.m_tcb);
+    m_tcb->m_txBuffer = CopyObject(sock.m_tcb->m_txBuffer);
+    m_tcb->m_txBuffer->SetRWndCallback(MakeCallback(&TcpSocketBase::GetRWnd, this));
     m_tcb->m_rxBuffer = CopyObject(sock.m_tcb->m_rxBuffer);
 
     m_tcb->m_pacingRate = m_tcb->m_maxPacingRate;
@@ -782,7 +782,7 @@ TcpSocketBase::Close()
         return 0;
     }
 
-    if (m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence) > 0)
+    if (m_tcb->m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence) > 0)
     { // App close with pending data must wait until all data transmitted
         if (!m_closeOnEmpty)
         {
@@ -805,7 +805,7 @@ TcpSocketBase::ShutdownSend()
     m_closeOnEmpty = true;
     // if buffer is already empty, send a fin now
     // otherwise fin will go when buffer empties.
-    if (m_txBuffer->Size() == 0)
+    if (m_tcb->m_txBuffer->Size() == 0)
     {
         if (m_state == ESTABLISHED || m_state == CLOSE_WAIT)
         {
@@ -847,7 +847,7 @@ TcpSocketBase::Send(Ptr<Packet> p, uint32_t flags)
     if (m_state == ESTABLISHED || m_state == SYN_SENT || m_state == CLOSE_WAIT)
     {
         // Store the packet into Tx buffer
-        if (!m_txBuffer->Add(p))
+        if (!m_tcb->m_txBuffer->Add(p))
         { // TxBuffer overflow, send failed
             m_errno = ERROR_MSGSIZE;
             return -1;
@@ -861,13 +861,14 @@ TcpSocketBase::Send(Ptr<Packet> p, uint32_t flags)
         m_rateOps->CalculateAppLimited(m_tcb->m_cWnd,
                                        m_tcb->m_bytesInFlight,
                                        m_tcb->m_segmentSize,
-                                       m_txBuffer->TailSequence(),
+                                       m_tcb->m_txBuffer->TailSequence(),
                                        m_tcb->m_nextTxSequence,
-                                       m_txBuffer->GetLost(),
-                                       m_txBuffer->GetRetransmitsCount());
+                                       m_tcb->m_txBuffer->GetLost(),
+                                       m_tcb->m_txBuffer->GetRetransmitsCount());
 
         // Submit the data to lower layers
-        NS_LOG_LOGIC("txBufSize=" << m_txBuffer->Size() << " state " << TcpStateName[m_state]);
+        NS_LOG_LOGIC("txBufSize=" << m_tcb->m_txBuffer->Size() << " state "
+                                  << TcpStateName[m_state]);
         if ((m_state == ESTABLISHED || m_state == CLOSE_WAIT) && AvailableWindow() > 0)
         { // Try to send the data out: Add a little step to allow the application
             // to fill the buffer
@@ -942,7 +943,7 @@ uint32_t
 TcpSocketBase::GetTxAvailable() const
 {
     NS_LOG_FUNCTION(this);
-    return m_txBuffer->Available();
+    return m_tcb->m_txBuffer->Available();
 }
 
 /* Inherit from Socket class: Get the max number of bytes an app can read */
@@ -1360,7 +1361,7 @@ TcpSocketBase::DoForwardUp(Ptr<Packet> packet, const Address& fromAddress, const
         else
         {
             m_sackEnabled = false;
-            m_txBuffer->SetSackEnabled(false);
+            m_tcb->m_txBuffer->SetSackEnabled(false);
         }
 
         // When receiving a <SYN> or <SYN-ACK> we should adapt TS to the other end
@@ -1499,12 +1500,12 @@ TcpSocketBase::ProcessEstablished(Ptr<Packet> packet, const TcpHeader& tcpHeader
     // Different flags are different events
     if (tcpflags == TcpHeader::ACK)
     {
-        if (tcpHeader.GetAckNumber() < m_txBuffer->HeadSequence())
+        if (tcpHeader.GetAckNumber() < m_tcb->m_txBuffer->HeadSequence())
         {
             // Case 1:  If the ACK is a duplicate (SEG.ACK < SND.UNA), it can be ignored.
             // Pag. 72 RFC 793
             NS_LOG_WARN("Ignored ack of " << tcpHeader.GetAckNumber()
-                                          << " SND.UNA = " << m_txBuffer->HeadSequence());
+                                          << " SND.UNA = " << m_tcb->m_txBuffer->HeadSequence());
 
             // TODO: RFC 5961 5.2 [Blind Data Injection Attack].[Mitigation]
         }
@@ -1649,17 +1650,17 @@ TcpSocketBase::EnterRecovery(uint32_t currentDelivered)
     if (!m_sackEnabled)
     {
         // One segment has left the network, PLUS the head is lost
-        m_txBuffer->AddRenoSack();
-        m_txBuffer->MarkHeadAsLost();
+        m_tcb->m_txBuffer->AddRenoSack();
+        m_tcb->m_txBuffer->MarkHeadAsLost();
     }
     else
     {
-        if (!m_txBuffer->IsLost(m_txBuffer->HeadSequence()))
+        if (!m_tcb->m_txBuffer->IsLost(m_tcb->m_txBuffer->HeadSequence()))
         {
             // We received 3 dupacks, but the head is not marked as lost
             // (received less than 3 SACK block ahead).
             // Manually set it as lost.
-            m_txBuffer->MarkHeadAsLost();
+            m_tcb->m_txBuffer->MarkHeadAsLost();
         }
     }
 
@@ -1737,7 +1738,7 @@ TcpSocketBase::DupAck(uint32_t currentDelivered)
         {
             // If we are in recovery and we receive a dupack, one segment
             // has left the network. This is equivalent to a SACK of one block.
-            m_txBuffer->AddRenoSack();
+            m_tcb->m_txBuffer->AddRenoSack();
         }
         if (!m_congestionControl->HasCongControl())
         {
@@ -1778,7 +1779,7 @@ TcpSocketBase::DupAck(uint32_t currentDelivered)
         // (indicating at least three segments have arrived above the current
         // cumulative acknowledgment point, which is taken to indicate loss)
         // go to step (4).
-        else if (m_txBuffer->IsLost(m_highRxAckMark + m_tcb->m_segmentSize))
+        else if (m_tcb->m_txBuffer->IsLost(m_highRxAckMark + m_tcb->m_segmentSize))
         {
             EnterRecovery(currentDelivered);
             NS_ASSERT(m_tcb->m_congState == TcpSocketState::CA_RECOVERY);
@@ -1795,7 +1796,7 @@ TcpSocketBase::DupAck(uint32_t currentDelivered)
 
             if (!m_sackEnabled && m_limitedTx)
             {
-                m_txBuffer->AddRenoSack();
+                m_tcb->m_txBuffer->AddRenoSack();
 
                 // In limited transmit, cwnd Infl is not updated.
             }
@@ -1812,7 +1813,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
     NS_ASSERT(0 != (tcpHeader.GetFlags() & TcpHeader::ACK));
     NS_ASSERT(m_tcb->m_segmentSize > 0);
 
-    uint32_t previousLost = m_txBuffer->GetLost();
+    uint32_t previousLost = m_tcb->m_txBuffer->GetLost();
     uint32_t priorInFlight = m_tcb->m_bytesInFlight.Get();
 
     // RFC 6675, Section 5, 1st paragraph:
@@ -1823,7 +1824,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
     ReadOptions(tcpHeader, &bytesSacked);
 
     SequenceNumber32 ackNumber = tcpHeader.GetAckNumber();
-    SequenceNumber32 oldHeadSequence = m_txBuffer->HeadSequence();
+    SequenceNumber32 oldHeadSequence = m_tcb->m_txBuffer->HeadSequence();
 
     if (ackNumber < oldHeadSequence)
     {
@@ -1841,7 +1842,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         uint32_t segAcked = (ackNumber - oldHeadSequence) / m_tcb->m_segmentSize;
         for (uint32_t i = 0; i < segAcked; i++)
         {
-            if (m_txBuffer->IsRetransmittedDataAcked(ackNumber - (i * m_tcb->m_segmentSize)))
+            if (m_tcb->m_txBuffer->IsRetransmittedDataAcked(ackNumber - (i * m_tcb->m_segmentSize)))
             {
                 m_tcb->m_isRetransDataAcked = true;
                 NS_LOG_DEBUG("Ack Number " << ackNumber << "is ACK of retransmitted packet.");
@@ -1849,7 +1850,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         }
     }
 
-    m_txBuffer->DiscardUpTo(ackNumber, MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+    m_tcb->m_txBuffer->DiscardUpTo(ackNumber, MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
 
     auto currentDelivered =
         static_cast<uint32_t>(m_rateOps->GetConnectionRate().m_delivered - previousDelivered);
@@ -1901,7 +1902,7 @@ TcpSocketBase::ReceivedAck(Ptr<Packet> packet, const TcpHeader& tcpHeader)
 
     if (m_congestionControl->HasCongControl())
     {
-        uint32_t currentLost = m_txBuffer->GetLost();
+        uint32_t currentLost = m_tcb->m_txBuffer->GetLost();
         uint32_t lost =
             (currentLost > previousLost) ? currentLost - previousLost : previousLost - currentLost;
         auto rateSample = m_rateOps->GenerateSample(currentDelivered,
@@ -2038,7 +2039,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             {
                 // Manually set the head as lost, it will be retransmitted.
                 NS_LOG_INFO("Partial ACK. Manually setting head as lost");
-                m_txBuffer->MarkHeadAsLost();
+                m_tcb->m_txBuffer->MarkHeadAsLost();
             }
 
             // Before retransmitting the packet perform DoRecovery and check if
@@ -2049,7 +2050,7 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
             }
 
             // If the packet is already retransmitted do not retransmit it
-            if (!m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
+            if (!m_tcb->m_txBuffer->IsRetransmittedDataAcked(ackNumber + m_tcb->m_segmentSize))
             {
                 DoRetransmit(); // Assume the next seq is lost. Retransmit lost packet
                 m_tcb->m_cWndInfl = SafeSubtraction(m_tcb->m_cWndInfl, bytesAcked);
@@ -2093,9 +2094,9 @@ TcpSocketBase::ProcessAck(const SequenceNumber32& ackNumber,
                                                        << " ssTh=" << m_tcb->m_ssThresh);
             if (!m_sackEnabled)
             {
-                NS_ASSERT_MSG(
-                    m_txBuffer->GetSacked() == 0,
-                    "Some segment got dup-acked in CA_LOSS state: " << m_txBuffer->GetSacked());
+                NS_ASSERT_MSG(m_tcb->m_txBuffer->GetSacked() == 0,
+                              "Some segment got dup-acked in CA_LOSS state: "
+                                  << m_tcb->m_txBuffer->GetSacked());
             }
             NewAck(ackNumber, true);
         }
@@ -2320,7 +2321,7 @@ TcpSocketBase::ProcessSynSent(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         m_retxEvent.Cancel();
         m_tcb->m_rxBuffer->SetNextRxSequence(tcpHeader.GetSequenceNumber() + SequenceNumber32(1));
         m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        m_tcb->m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
         // Before sending packets, update the pacing rate based on RTT measurement so far
         UpdatePacingRate();
         SendEmptyPacket(TcpHeader::ACK);
@@ -2384,7 +2385,7 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         m_connected = true;
         m_retxEvent.Cancel();
         m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-        m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+        m_tcb->m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
         if (m_endPoint)
         {
             m_endPoint->SetPeer(InetSocketAddress::ConvertFrom(fromAddress).GetIpv4(),
@@ -2436,7 +2437,7 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
             m_connected = true;
             m_retxEvent.Cancel();
             m_tcb->m_highTxMark = ++m_tcb->m_nextTxSequence;
-            m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
+            m_tcb->m_txBuffer->SetHeadSequence(m_tcb->m_nextTxSequence);
             if (m_endPoint)
             {
                 m_endPoint->SetPeer(InetSocketAddress::ConvertFrom(fromAddress).GetIpv4(),
@@ -2490,7 +2491,7 @@ TcpSocketBase::ProcessWait(Ptr<Packet> packet, const TcpHeader& tcpHeader)
     else if (tcpflags == TcpHeader::ACK)
     { // Process the ACK, and if in FIN_WAIT_1, conditionally move to FIN_WAIT_2
         ReceivedAck(packet, tcpHeader);
-        if (m_state == FIN_WAIT_1 && m_txBuffer->Size() == 0 &&
+        if (m_state == FIN_WAIT_1 && m_tcb->m_txBuffer->Size() == 0 &&
             tcpHeader.GetAckNumber() == m_tcb->m_highTxMark + SequenceNumber32(1))
         { // This ACK corresponds to the FIN sent
             NS_LOG_DEBUG("FIN_WAIT_1 -> FIN_WAIT_2");
@@ -2528,7 +2529,7 @@ TcpSocketBase::ProcessWait(Ptr<Packet> packet, const TcpHeader& tcpHeader)
         {
             NS_LOG_DEBUG("FIN_WAIT_1 -> CLOSING");
             m_state = CLOSING;
-            if (m_txBuffer->Size() == 0 &&
+            if (m_tcb->m_txBuffer->Size() == 0 &&
                 tcpHeader.GetAckNumber() == m_tcb->m_highTxMark + SequenceNumber32(1))
             { // This ACK corresponds to the FIN sent
                 TimeWait();
@@ -3120,7 +3121,7 @@ TcpSocketBase::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize, bool withA
     NS_LOG_FUNCTION(this << seq << maxSize << withAck);
 
     bool isStartOfTransmission = BytesInFlight() == 0U;
-    TcpTxItem* outItem = m_txBuffer->CopyFromSequence(maxSize, seq);
+    TcpTxItem* outItem = m_tcb->m_txBuffer->CopyFromSequence(maxSize, seq);
 
     m_rateOps->SkbSent(outItem, isStartOfTransmission);
 
@@ -3128,7 +3129,7 @@ TcpSocketBase::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize, bool withA
     Ptr<Packet> p = outItem->GetPacketCopy();
     uint32_t sz = p->GetSize(); // Size of packet
     uint8_t flags = withAck ? TcpHeader::ACK : 0;
-    uint32_t remainingData = m_txBuffer->SizeFromSequence(seq + SequenceNumber32(sz));
+    uint32_t remainingData = m_tcb->m_txBuffer->SizeFromSequence(seq + SequenceNumber32(sz));
 
     // TCP sender should not send data out of the window advertised by the
     // peer when it is not retransmission.
@@ -3289,7 +3290,7 @@ uint32_t
 TcpSocketBase::SendPendingData(bool withAck)
 {
     NS_LOG_FUNCTION(this << withAck);
-    if (m_txBuffer->Size() == 0)
+    if (m_tcb->m_txBuffer->Size() == 0)
     {
         return 0; // Nothing to send
     }
@@ -3334,7 +3335,7 @@ TcpSocketBase::SendPendingData(bool withAck)
         SequenceNumber32 next;
         SequenceNumber32 nextHigh;
         bool enableRule3 = m_sackEnabled && m_tcb->m_congState == TcpSocketState::CA_RECOVERY;
-        if (!m_txBuffer->NextSeg(&next, &nextHigh, enableRule3))
+        if (!m_tcb->m_txBuffer->NextSeg(&next, &nextHigh, enableRule3))
         {
             NS_LOG_INFO("no valid seq to transmit, or no data available");
             break;
@@ -3342,7 +3343,7 @@ TcpSocketBase::SendPendingData(bool withAck)
         else
         {
             // It's time to transmit, but before do silly window and Nagle's check
-            uint32_t availableData = m_txBuffer->SizeFromSequence(next);
+            uint32_t availableData = m_tcb->m_txBuffer->SizeFromSequence(next);
 
             // If there's less app data than the full window, ask the app for more
             // data before trying to send
@@ -3363,7 +3364,7 @@ TcpSocketBase::SendPendingData(bool withAck)
             if (!m_noDelay && UnAckDataCount() > 0 && availableData < m_tcb->m_segmentSize)
             {
                 NS_LOG_DEBUG("Invoking Nagle's algorithm for seq "
-                             << next << ", SFS: " << m_txBuffer->SizeFromSequence(next)
+                             << next << ", SFS: " << m_tcb->m_txBuffer->SizeFromSequence(next)
                              << ". Wait to send.");
                 break;
             }
@@ -3381,7 +3382,7 @@ TcpSocketBase::SendPendingData(bool withAck)
             //       HighData must be updated to reflect the transmission of
             //       previously unsent data.
             //
-            // These steps are done in m_txBuffer with the tags.
+            // These steps are done in m_tcb->m_txBuffer with the tags.
             if (m_tcb->m_nextTxSequence != next)
             {
                 m_tcb->m_nextTxSequence = next;
@@ -3393,9 +3394,9 @@ TcpSocketBase::SendPendingData(bool withAck)
             uint32_t sz = SendDataPacket(m_tcb->m_nextTxSequence, s, withAck);
 
             NS_LOG_LOGIC(" rxwin " << m_rWnd << " segsize " << m_tcb->m_segmentSize
-                                   << " highestRxAck " << m_txBuffer->HeadSequence() << " pd->Size "
-                                   << m_txBuffer->Size() << " pd->SFS "
-                                   << m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence));
+                                   << " highestRxAck " << m_tcb->m_txBuffer->HeadSequence()
+                                   << " pd->Size " << m_tcb->m_txBuffer->Size() << " pd->SFS "
+                                   << m_tcb->m_txBuffer->SizeFromSequence(m_tcb->m_nextTxSequence));
 
             NS_LOG_DEBUG("cWnd: " << m_tcb->m_cWnd << " total unAck: " << UnAckDataCount()
                                   << " sent seq " << m_tcb->m_nextTxSequence << " size " << sz);
@@ -3449,13 +3450,13 @@ TcpSocketBase::SendPendingData(bool withAck)
 uint32_t
 TcpSocketBase::UnAckDataCount() const
 {
-    return m_tcb->m_highTxMark - m_txBuffer->HeadSequence();
+    return m_tcb->m_highTxMark - m_tcb->m_txBuffer->HeadSequence();
 }
 
 uint32_t
 TcpSocketBase::BytesInFlight() const
 {
-    uint32_t bytesInFlight = m_txBuffer->BytesInFlight();
+    uint32_t bytesInFlight = m_tcb->m_txBuffer->BytesInFlight();
     // Ugly, but we are not modifying the state; m_bytesInFlight is used
     // only for tracing purpose.
     m_tcb->m_bytesInFlight = bytesInFlight;
@@ -3703,7 +3704,7 @@ TcpSocketBase::NewAck(const SequenceNumber32& ack, bool resetRTO)
 
     // Note the highest ACK and tell app to send more
     NS_LOG_LOGIC("TCP " << this << " NewAck " << ack << " numberAck "
-                        << (ack - m_txBuffer->HeadSequence())); // Number bytes ack'ed
+                        << (ack - m_tcb->m_txBuffer->HeadSequence())); // Number bytes ack'ed
 
     if (GetTxAvailable() > 0)
     {
@@ -3713,7 +3714,7 @@ TcpSocketBase::NewAck(const SequenceNumber32& ack, bool resetRTO)
     {
         m_tcb->m_nextTxSequence = ack; // If advanced
     }
-    if (m_txBuffer->Size() == 0 && m_state != FIN_WAIT_1 && m_state != CLOSING)
+    if (m_tcb->m_txBuffer->Size() == 0 && m_state != FIN_WAIT_1 && m_state != CLOSING)
     { // No retransmit timer if no data to retransmit
         NS_LOG_LOGIC(
             this << " Cancelled ReTxTimeout event which was set to expire at "
@@ -3749,7 +3750,7 @@ TcpSocketBase::ReTxTimeout()
     }
 
     // Retransmit non-data packet: Only if in FIN_WAIT_1 or CLOSING state
-    if (m_txBuffer->Size() == 0)
+    if (m_tcb->m_txBuffer->Size() == 0)
     {
         if (m_state == FIN_WAIT_1 || m_state == CLOSING)
         { // Must have lost FIN, re-send
@@ -3760,10 +3761,10 @@ TcpSocketBase::ReTxTimeout()
 
     NS_LOG_DEBUG("Checking if Connection is Established");
     // If all data are received (non-closing socket and nothing to send), just return
-    if (m_state <= ESTABLISHED && m_txBuffer->HeadSequence() >= m_tcb->m_highTxMark &&
-        m_txBuffer->Size() == 0)
+    if (m_state <= ESTABLISHED && m_tcb->m_txBuffer->HeadSequence() >= m_tcb->m_highTxMark &&
+        m_tcb->m_txBuffer->Size() == 0)
     {
-        NS_LOG_DEBUG("Already Sent full data" << m_txBuffer->HeadSequence() << " "
+        NS_LOG_DEBUG("Already Sent full data" << m_tcb->m_txBuffer->HeadSequence() << " "
                                               << m_tcb->m_highTxMark);
         return;
     }
@@ -3788,7 +3789,7 @@ TcpSocketBase::ReTxTimeout()
     m_dupAckCount = 0;
     if (!m_sackEnabled)
     {
-        m_txBuffer->ResetRenoSack();
+        m_tcb->m_txBuffer->ResetRenoSack();
     }
 
     // From RFC 6675, Section 5.1
@@ -3803,7 +3804,7 @@ TcpSocketBase::ReTxTimeout()
     // The head of the sent list will not be marked as sacked, therefore
     // will be retransmitted, if the receiver renegotiate the SACK blocks
     // that we received.
-    m_txBuffer->SetSentListLost(resetSack);
+    m_tcb->m_txBuffer->SetSentListLost(resetSack);
 
     // From RFC 6675, Section 5.1
     // If an RTO occurs during loss recovery as specified in this document,
@@ -3825,7 +3826,7 @@ TcpSocketBase::ReTxTimeout()
     // When a TCP sender detects segment loss using the retransmission timer
     // and the given segment has not yet been resent by way of the
     // retransmission timer, decrease ssThresh
-    if (m_tcb->m_congState != TcpSocketState::CA_LOSS || !m_txBuffer->IsHeadRetransmitted())
+    if (m_tcb->m_congState != TcpSocketState::CA_LOSS || !m_tcb->m_txBuffer->IsHeadRetransmitted())
     {
         m_tcb->m_ssThresh = m_congestionControl->GetSsThresh(m_tcb, inFlightBeforeRto);
     }
@@ -3840,8 +3841,9 @@ TcpSocketBase::ReTxTimeout()
     m_pacingTimer.Cancel();
 
     NS_LOG_DEBUG("RTO. Reset cwnd to " << m_tcb->m_cWnd << ", ssthresh to " << m_tcb->m_ssThresh
-                                       << ", restart from seqnum " << m_txBuffer->HeadSequence()
-                                       << " doubled rto to " << m_rto.Get().GetSeconds() << " s");
+                                       << ", restart from seqnum "
+                                       << m_tcb->m_txBuffer->HeadSequence() << " doubled rto to "
+                                       << m_rto.Get().GetSeconds() << " s");
 
     NS_ASSERT_MSG(BytesInFlight() == 0,
                   "There are some bytes in flight after an RTO: " << BytesInFlight());
@@ -3902,8 +3904,9 @@ TcpSocketBase::PersistTimeout()
     NS_LOG_LOGIC("PersistTimeout expired at " << Simulator::Now().GetSeconds());
     m_persistTimeout =
         std::min(Seconds(60), Time(2 * m_persistTimeout)); // max persist timeout = 60s
-    Ptr<Packet> p = m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence)->GetPacketCopy();
-    m_txBuffer->ResetLastSegmentSent();
+    Ptr<Packet> p =
+        m_tcb->m_txBuffer->CopyFromSequence(1, m_tcb->m_nextTxSequence)->GetPacketCopy();
+    m_tcb->m_txBuffer->ResetLastSegmentSent();
     TcpHeader tcpHeader;
     tcpHeader.SetSequenceNumber(m_tcb->m_nextTxSequence);
     tcpHeader.SetAckNumber(m_tcb->m_rxBuffer->NextRxSequence());
@@ -3966,13 +3969,13 @@ TcpSocketBase::DoRetransmit()
 
     // Find the first segment marked as lost and not retransmitted. With Reno,
     // that should be the head
-    res = m_txBuffer->NextSeg(&seq, &seqHigh, false);
+    res = m_tcb->m_txBuffer->NextSeg(&seq, &seqHigh, false);
     if (!res)
     {
         // We have already retransmitted the head. However, we still received
         // three dupacks, or the RTO expired, but no data to transmit.
         // Therefore, re-send again the head.
-        seq = m_txBuffer->HeadSequence();
+        seq = m_tcb->m_txBuffer->HeadSequence();
         maxSizeToSend = m_tcb->m_segmentSize;
     }
     else
@@ -3980,7 +3983,7 @@ TcpSocketBase::DoRetransmit()
         // NextSeg() may constrain the segment size when res is true
         maxSizeToSend = static_cast<uint32_t>(seqHigh - seq);
     }
-    NS_ASSERT(m_sackEnabled || seq == m_txBuffer->HeadSequence());
+    NS_ASSERT(m_sackEnabled || seq == m_tcb->m_txBuffer->HeadSequence());
 
     NS_LOG_INFO("Retransmitting " << seq);
     // Update the trace and retransmit the segment
@@ -4028,13 +4031,13 @@ void
 TcpSocketBase::SetSndBufSize(uint32_t size)
 {
     NS_LOG_FUNCTION(this << size);
-    m_txBuffer->SetMaxBufferSize(size);
+    m_tcb->m_txBuffer->SetMaxBufferSize(size);
 }
 
 uint32_t
 TcpSocketBase::GetSndBufSize() const
 {
-    return m_txBuffer->MaxBufferSize();
+    return m_tcb->m_txBuffer->MaxBufferSize();
 }
 
 void
@@ -4075,7 +4078,7 @@ TcpSocketBase::SetSegSize(uint32_t size)
 {
     NS_LOG_FUNCTION(this << size);
     m_tcb->m_segmentSize = size;
-    m_txBuffer->SetSegmentSize(size);
+    m_tcb->m_txBuffer->SetSegmentSize(size);
 
     NS_ABORT_MSG_UNLESS(m_state == CLOSED, "Cannot change segment size dynamically.");
 }
@@ -4274,7 +4277,8 @@ TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
     NS_LOG_FUNCTION(this << option);
 
     Ptr<const TcpOptionSack> s = DynamicCast<const TcpOptionSack>(option);
-    return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+    return m_tcb->m_txBuffer->Update(s->GetSackList(),
+                                     MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
 }
 
 void
@@ -4445,7 +4449,7 @@ TcpSocketBase::GetClockGranularity() const
 Ptr<TcpTxBuffer>
 TcpSocketBase::GetTxBuffer() const
 {
-    return m_txBuffer;
+    return m_tcb->m_txBuffer;
 }
 
 Ptr<TcpRxBuffer>
@@ -4458,7 +4462,7 @@ void
 TcpSocketBase::SetRetxThresh(uint32_t retxThresh)
 {
     m_retxThresh = retxThresh;
-    m_txBuffer->SetDupAckThresh(retxThresh);
+    m_tcb->m_txBuffer->SetDupAckThresh(retxThresh);
 }
 
 void

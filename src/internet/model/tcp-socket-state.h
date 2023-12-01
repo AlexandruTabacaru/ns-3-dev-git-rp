@@ -18,6 +18,7 @@
 #define TCP_SOCKET_STATE_H
 
 #include "tcp-rx-buffer.h"
+#include "tcp-tx-buffer.h"
 
 #include "ns3/data-rate.h"
 #include "ns3/object.h"
@@ -214,6 +215,7 @@ class TcpSocketState : public Object
     TracedValue<uint32_t> m_bytesInFlight{0};  //!< Bytes in flight
     TracedValue<Time> m_lastRtt{Seconds(0.0)}; //!< Last RTT sample collected
 
+    Ptr<TcpTxBuffer> m_txBuffer; //!< Tx buffer (transmission buffer)
     Ptr<TcpRxBuffer> m_rxBuffer; //!< Rx buffer (reordering buffer)
 
     EcnMode_t m_ecnMode{ClassicEcn}; //!< ECN mode

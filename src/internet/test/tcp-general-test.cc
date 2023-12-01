@@ -900,11 +900,11 @@ TcpGeneralTest::GetTxBuffer(SocketWho who)
 {
     if (who == SENDER)
     {
-        return DynamicCast<TcpSocketMsgBase>(m_senderSocket)->m_txBuffer;
+        return DynamicCast<TcpSocketMsgBase>(m_senderSocket)->GetTxBuffer();
     }
     else if (who == RECEIVER)
     {
-        return DynamicCast<TcpSocketMsgBase>(m_receiverSocket)->m_txBuffer;
+        return DynamicCast<TcpSocketMsgBase>(m_receiverSocket)->GetTxBuffer();
     }
     else
     {

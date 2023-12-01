@@ -164,10 +164,10 @@ TcpSocketCongestedRouter::SendDataPacket(SequenceNumber32 seq, uint32_t maxSize,
         isRetransmission = true;
     }
 
-    Ptr<Packet> p = m_txBuffer->CopyFromSequence(maxSize, seq)->GetPacketCopy();
+    Ptr<Packet> p = m_tcb->m_txBuffer->CopyFromSequence(maxSize, seq)->GetPacketCopy();
     uint32_t sz = p->GetSize(); // Size of packet
     uint8_t flags = withAck ? TcpHeader::ACK : 0;
-    uint32_t remainingData = m_txBuffer->SizeFromSequence(seq + SequenceNumber32(sz));
+    uint32_t remainingData = m_tcb->m_txBuffer->SizeFromSequence(seq + SequenceNumber32(sz));
 
     if (withAck)
     {

@@ -1319,9 +1319,6 @@ class TcpSocketBase : public TcpSocket
 
     Ptr<RttEstimator> m_rtt; //!< Round trip time estimator
 
-    // Tx buffer management
-    Ptr<TcpTxBuffer> m_txBuffer; //!< Tx buffer
-
     // State-related attributes
     TracedValue<TcpStates_t> m_state{CLOSED}; //!< TCP state
 
