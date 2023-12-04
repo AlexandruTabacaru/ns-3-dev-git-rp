@@ -154,6 +154,7 @@ main(int argc, char* argv[])
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     uint16_t mcs = 2;
+    uint32_t channelWidth = 80;
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
     double scale = 1.0;     // default flow control scale factor
@@ -185,6 +186,7 @@ main(int argc, char* argv[])
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
+    cmd.AddValue("channelWidth", "Width (MHz) of channel", channelWidth);
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
@@ -201,6 +203,14 @@ main(int argc, char* argv[])
     }
     std::ostringstream ossDataMode;
     ossDataMode << "HeMcs" << mcs;
+
+    NS_ABORT_MSG_UNLESS(channelWidth == 20 || channelWidth == 40 || channelWidth == 80 ||
+                            channelWidth == 160,
+                        "Only widths 20, 40, 80, 160 supported");
+    // ns-3 format for Wi-Fi channel configuration:
+    // {channelNumber, channelWidth(MHz), band, and primary 20 MHz index}
+    // channel number of zero will cause the first such channel in the band to be used
+    std::string channelString("{0, " + std::to_string(channelWidth) + ", BAND_5GHZ, 0}");
 
     // When using DCE with ns-3, or reading pcaps with Wireshark,
     // enable checksum computations in ns-3 models
@@ -233,6 +243,7 @@ main(int argc, char* argv[])
                                    DoubleValue(46.6777));
     wifiPhy.SetChannel(wifiChannel.Create());
     wifiPhy.SetPcapDataLinkType(WifiPhyHelper::DLT_IEEE802_11_RADIO);
+    wifiPhy.Set("ChannelSettings", StringValue(channelString));
 
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211ax);
