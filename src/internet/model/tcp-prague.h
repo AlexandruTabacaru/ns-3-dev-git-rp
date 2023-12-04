@@ -144,6 +144,10 @@ class TcpPrague : public TcpCongestionOps
     void UpdateAlpha(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
     // documented in base class
+    bool HasCongControl() const override;
+    void CongControl(Ptr<TcpSocketState> tcb,
+                     const TcpRateOps::TcpRateConnection& rc,
+                     const TcpRateOps::TcpRateSample& rs) override;
     Ptr<TcpCongestionOps> Fork() override;
     virtual void ReduceCwnd(Ptr<TcpSocketState> tcb);
     void CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event) override;
@@ -195,13 +199,6 @@ class TcpPrague : public TcpCongestionOps
      * \param tcb internal congestion state
      */
     void EnterLoss(Ptr<TcpSocketState> tcb);
-
-    /**
-     * \brief Resets the value of m_ackedBytesEcn, m_ackedBytesTotal and m_nextSeq
-     *
-     * \param tcb internal congestion state
-     */
-    void Reset(Ptr<TcpSocketState> tcb);
 
     /**
      * \brief Sets the value of m_alpha

@@ -150,12 +150,37 @@ TcpPrague::Init(Ptr<TcpSocketState> tcb)
     NewRound(tcb);
 }
 
+bool
+TcpPrague::HasCongControl() const
+{
+    NS_LOG_FUNCTION(this);
+    return true;
+}
+
+void
+TcpPrague::CongControl(Ptr<TcpSocketState> tcb,
+                       const TcpRateOps::TcpRateConnection& rc,
+                       const TcpRateOps::TcpRateSample& rs)
+{
+    NS_LOG_FUNCTION(this << tcb << rs);
+    // Do nothing; PktsAcked handling for now
+}
+
 uint32_t
 TcpPrague::GetSsThresh(Ptr<const TcpSocketState> state, uint32_t bytesInFlight)
 {
     NS_LOG_FUNCTION(this << state << bytesInFlight);
 
-    return std::max(2 * state->m_segmentSize, bytesInFlight / 2);
+    if (!m_sawCE)
+    {
+        NS_LOG_DEBUG("Haven't seen CE; returning ssthresh = " << bytesInFlight / 2);
+        return std::max(2 * state->m_segmentSize, bytesInFlight / 2);
+    }
+    else
+    {
+        NS_LOG_DEBUG("Have seen CE; returning ssthresh = " << state->m_ssThresh);
+        return state->m_ssThresh;
+    }
 }
 
 void
@@ -166,6 +191,8 @@ TcpPrague::ReduceCwnd(Ptr<TcpSocketState> tcb)
     uint32_t cwnd_segs = tcb->m_cWnd / tcb->m_segmentSize;
     double_t reduction = m_alpha * cwnd_segs / 2.0;
     m_cWndCnt -= reduction;
+    NS_LOG_DEBUG("ReduceCwnd: alpha " << m_alpha << " cwnd_segs " << cwnd_segs << " reduction "
+                                      << reduction << " m_cWndCnt " << m_cWndCnt);
 }
 
 uint32_t
@@ -213,6 +240,8 @@ TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     if (m_cWndCnt <= -1)
     {
         m_cWndCnt++;
+        NS_LOG_DEBUG("Decrementing m_cWnd from " << tcb->m_cWnd << " to "
+                                                 << tcb->m_cWnd - tcb->m_segmentSize);
         tcb->m_cWnd -= tcb->m_segmentSize;
         if (tcb->m_cWnd < 2 * tcb->m_segmentSize)
         {
@@ -225,6 +254,8 @@ TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     else if (m_cWndCnt >= 1)
     {
         m_cWndCnt--;
+        NS_LOG_DEBUG("Incrementing m_cWnd from " << tcb->m_cWnd << " to "
+                                                 << tcb->m_cWnd + tcb->m_segmentSize);
         tcb->m_cWnd += tcb->m_segmentSize;
         CwndChanged(tcb);
     }
@@ -250,10 +281,8 @@ TcpPrague::UpdateAlpha(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
                 bytesEcn = static_cast<double>(m_ackedBytesEcn * 1.0 / m_ackedBytesTotal);
             }
             m_alpha = (1.0 - m_g) * m_alpha + m_g * bytesEcn;
-            NS_LOG_INFO(this << "bytesEcn " << bytesEcn << ", m_alpha " << m_alpha);
-
+            NS_LOG_INFO("bytesEcn " << bytesEcn << ", m_alpha " << m_alpha);
             m_alphaStamp = Simulator::Now();
-            Reset(tcb);
         }
     }
     NewRound(tcb);
@@ -271,9 +300,12 @@ TcpPrague::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time
     {
         m_sawCE = true;
         m_ackedBytesEcn += segmentsAcked * tcb->m_segmentSize;
+        UpdateCwnd(tcb, 0);
     }
-
-    UpdateCwnd(tcb, segmentsAcked);
+    else
+    {
+        UpdateCwnd(tcb, segmentsAcked);
+    }
     if (ShouldUpdateEwma(tcb))
     {
         UpdateAlpha(tcb, segmentsAcked);
@@ -285,6 +317,9 @@ TcpPrague::NewRound(Ptr<TcpSocketState> tcb)
 {
     NS_LOG_FUNCTION(this << tcb);
 
+    m_nextSeq = tcb->m_nextTxSequence;
+    m_ackedBytesEcn = 0;
+    m_ackedBytesTotal = 0;
     if (tcb->m_cWnd >= tcb->m_ssThresh)
     {
         ++m_round;
@@ -307,16 +342,6 @@ TcpPrague::CwndChanged(Ptr<TcpSocketState> tcb)
     NS_LOG_FUNCTION(this << tcb);
 
     AiAckIncrease(tcb);
-}
-
-void
-TcpPrague::Reset(Ptr<TcpSocketState> tcb)
-{
-    NS_LOG_FUNCTION(this << tcb);
-
-    m_nextSeq = tcb->m_nextTxSequence;
-    m_ackedBytesEcn = 0;
-    m_ackedBytesTotal = 0;
 }
 
 void
@@ -384,8 +409,8 @@ TcpPrague::CeState1to0(Ptr<TcpSocketState> tcb)
     m_priorRcvNxt = tcb->m_rxBuffer->NextRxSequence();
     m_ceState = false;
 
-    if (tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD ||
-        tcb->m_ecnState == TcpSocketState::ECN_SENDING_ECE)
+    if ((tcb->m_ecnState == TcpSocketState::ECN_CE_RCVD) ||
+        (tcb->m_ecnState == TcpSocketState::ECN_SENDING_ECE))
     {
         tcb->m_ecnState = TcpSocketState::ECN_IDLE;
     }
@@ -454,8 +479,10 @@ TcpPrague::CongestionStateSet(Ptr<TcpSocketState> tcb,
     case TcpSocketState::CA_RECOVERY:
         EnterLoss(tcb);
         break;
-    case TcpSocketState::CA_DISORDER:
     case TcpSocketState::CA_CWR:
+        ReduceCwnd(tcb);
+        break;
+    case TcpSocketState::CA_DISORDER:
     case TcpSocketState::CA_LOSS:
     default:
         break;
@@ -513,22 +540,20 @@ TcpPrague::ShouldUpdateEwma(Ptr<TcpSocketState> tcb)
     // This method is similar to prague_should_update_ewma in Linux
     NS_LOG_FUNCTION(this << tcb);
 
-    if (m_rttScalingMode == RttScalingMode_t::RTT_CONTROL_NONE)
-    {
-        return true;
-    }
-    bool e2eRttElapsed = !(tcb->m_nextTxSequence < m_nextSeq);
-
-    if (!e2eRttElapsed)
-    {
-        return false;
-    }
+    bool pragueE2eRttElapsed = !(tcb->m_txBuffer->HeadSequence() < m_nextSeq);
 
     // Instead of Linux-like tcp_mstamp, use simulator time
-    bool targetRttElapsed =
-        (GetTargetRtt(tcb).GetSeconds() <=
-         std::max(Simulator::Now().GetSeconds() - m_alphaStamp.GetSeconds(), 0.0));
-    return !IsRttIndependent(tcb) || targetRttElapsed;
+    bool targetRttElapsed = false;
+    if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE)
+    {
+        targetRttElapsed =
+            (GetTargetRtt(tcb).GetSeconds() <=
+             std::max(Simulator::Now().GetSeconds() - m_alphaStamp.GetSeconds(), 0.0));
+    }
+    NS_LOG_DEBUG("pragueE2eRttElapsed " << pragueE2eRttElapsed << " m_nextTxSequence "
+                                        << tcb->m_nextTxSequence << " m_nextSeq " << m_nextSeq);
+    return (pragueE2eRttElapsed && ((m_rttScalingMode == RttScalingMode_t::RTT_CONTROL_NONE) ||
+                                    !IsRttIndependent(tcb) || targetRttElapsed));
 }
 
 void
