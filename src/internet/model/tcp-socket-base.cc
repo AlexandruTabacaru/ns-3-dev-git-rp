@@ -1625,6 +1625,7 @@ TcpSocketBase::EnterCwr(uint32_t currentDelivered)
     NS_ASSERT(m_tcb->m_congState != TcpSocketState::CA_CWR);
     NS_LOG_DEBUG(TcpSocketState::TcpCongStateName[m_tcb->m_congState] << " -> CA_CWR");
     m_tcb->m_congState = TcpSocketState::CA_CWR;
+    m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_CWR);
     // CWR state will be exited when the ack exceeds the m_recover variable.
     // Do not set m_recoverActive (which applies to a loss-based recovery)
     // m_recover corresponds to Linux tp->high_seq
