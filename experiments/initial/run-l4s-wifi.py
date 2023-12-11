@@ -12,8 +12,8 @@ path_to_ns3_dir = "../../"
 path_to_ns3_script = "../../../ns3"
 
 # In future, add parametric job control here (multiprocessing.Pool)
-numCubic = 5
-numPrague = 5
+numCubic = 1
+numPrague = 1
 numBackground = 0
 numBytes = 50000000
 duration = 30
