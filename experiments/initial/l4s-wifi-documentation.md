@@ -143,6 +143,7 @@ Program Options:
     --flowControl:      Whether to enable flow control (set also the limit) [true]
     --limit:            Queue limit (bytes) [65535]
     --scale:            Scaling factor for queue limit [1]
+    --rtsCtsThreshold:  RTS/CTS threshold (bytes) [0]
     --processingDelay:  Notional packet processing delay [+10us]
     --showProgress:     Show simulation progress every 5s [false]
 
@@ -165,6 +166,7 @@ Some notes on a few of these parameters:
 * **numBytes**: This configures the file size, in bytes, for each TCP flow.  By default, it is 50 MB but depending on the configuration and number of flows active, this parameter is likely going to need to be adjusted to suit the scenario.
 * **limit**: This is the size of the so-called "aggregation buffer" (or device buffer).  The default of 65535 corresponds to the maximum A-MPDU size in bytes (recall, we do not have A-MSDU configured, so this is the maximal amount of data that can be sent in one TXOP, and it works out to 42 full-sized TCP segments).
 * **scale**:  This is a scaling factor of how much larger the aggregation buffer should be scaled.  A factor of 2, for instance, will double the size from whatever is specified as the limit.
+* **rtsCtsThreshold**:  This argument exposes the WifiRemoteStationManager RtsCtsThreshold attribute; (A-)MPDUs larger (in bytes) than this threshold require an RTS/CTS exchange.  If this argument is zero, the normal attribute default applies, which disables RTS/CTS.  A low non-zero value such as 500 or 1000 should enable RTS/CTS for all (A-)MPDUs.
 * **processingDelay**:  This is the newly-added model of processing delay from the time that a packet arrives to be enqueued before it is available for actual transmission.  By default, it is 10 us;
 other values haven't been tested much.
 * **mcs**: Values between 0 and 11 are possible.  However, note that with this configuration, only MCS 0-2 will occupy the full AC_BE TXOP duration of 5.484 ms.  At higher MCS, the A-MPDU will take less than 5 ms to transmit.

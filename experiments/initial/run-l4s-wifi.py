@@ -22,6 +22,9 @@ channelWidth=20
 flowControl = 1
 limit = 65535
 scale = 1
+# Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
+# Zero disables the explicit setting of the WifiRemoteStationManager attribute
+rtsCtsThreshold = 0
 showProgress = 0
 
 arguments = " --numCubic=" + str(numCubic)
@@ -34,6 +37,7 @@ arguments += " --channelWidth=" + str(channelWidth)
 arguments += " --flowControl=" + str(flowControl)
 arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
+arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
 arguments += " --showProgress=" + str(showProgress)
 
 # Build a plot title; customize as needed
