@@ -27,6 +27,11 @@ else:
     title = "Untitled"
 space_between_subplots = 1.0
 
+# Add a red dashed line to the plot for the average value between 2s and
+# a user-defined end time (default 8s)
+add_horizontal_line_for_averaging = False
+end_of_averaging_period=8
+
 f = open("wifi-dequeue-throughput.dat", "r")
 wifi_time = []
 wifi_samples_plot = []
@@ -36,7 +41,7 @@ for line in f:
     t = float(columns[0])
     wifi_time.append(t)
     wifi_samples_plot.append(float(columns[1]))
-    if t >= 2 and t <= 8:
+    if t >= 2 and t <= end_of_averaging_period:
         wifi_samples_avg.append(float(columns[1]))
 f.close()
 
@@ -50,7 +55,7 @@ if os.path.exists("cubic-throughput.dat"):
         t = float(columns[0])
         cubic_time.append(t)
         cubic_samples_plot.append(float(columns[1]))
-        if t >= 2 and t <= 8:
+        if t >= 2 and t <= end_of_averaging_period:
             cubic_samples_avg.append(float(columns[1]))
     f.close()
 
@@ -64,7 +69,7 @@ if os.path.exists("prague-throughput.dat"):
         t = float(columns[0])
         prague_time.append(t)
         prague_samples_plot.append(float(columns[1]))
-        if t >= 2 and t <= 8:
+        if t >= 2 and t <= end_of_averaging_period:
             prague_samples_avg.append(float(columns[1]))
     f.close()
 
@@ -77,7 +82,7 @@ for line in f:
     t = float(columns[0])
     bytes_time.append(t)
     bytes_samples_plot.append(float(columns[1]))
-    if t >= 2 and t <= 8:
+    if t >= 2 and t <= end_of_averaging_period:
         bytes_samples_avg.append(float(columns[1]))
 f.close()
 
@@ -90,7 +95,7 @@ for line in f:
     t = float(columns[0])
     dualpi2_time.append(t)
     dualpi2_samples_plot.append(float(columns[1]))
-    if t >= 2 and t <= 8:
+    if t >= 2 and t <= end_of_averaging_period:
         dualpi2_samples_avg.append(float(columns[1]))
 f.close()
 
@@ -112,10 +117,11 @@ ax1.set_xlim(
 ax1.set_ylim(0, 120)
 ax1.set_xlabel("Time (s)")
 ax1.set_ylabel("Throughput (Mbps)")
-wifi_avg = round(sum(wifi_samples_avg) / len(wifi_samples_avg), 1)
-wifi_label = r"Avg {} Mbps (2s < t < 8s)".format(wifi_avg)
-ax1.axhline(y=wifi_avg, color="r", linestyle="dashed", label=wifi_label)
-ax1.set_title("Wifi throughput")
+if add_horizontal_line_for_averaging:
+    wifi_avg = round(sum(wifi_samples_avg) / len(wifi_samples_avg), 1)
+    wifi_label = r"Avg {} Mbps (2s < t < {}s)".format(wifi_avg, end_of_averaging_period)
+    ax1.axhline(y=wifi_avg, color="r", linestyle="dashed", label=wifi_label)
+ax1.set_title("Wifi throughput (all flows)")
 ax1.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax2.plot(
@@ -131,10 +137,11 @@ ax2.set_xlim(
 ax2.set_ylim(0, 120)
 ax2.set_xlabel("Time (s)")
 ax2.set_ylabel("Throughput (Mbps)")
-if len(cubic_samples_avg):
-    cubic_avg = round(sum(cubic_samples_avg) / len(cubic_samples_avg), 1)
-    cubic_label = r"Avg {} Mbps (2s < t < 8s)".format(cubic_avg)
-    ax2.axhline(y=cubic_avg, color="r", linestyle="dashed", label=cubic_label)
+if add_horizontal_line_for_averaging:
+    if len(cubic_samples_avg):
+        cubic_avg = round(sum(cubic_samples_avg) / len(cubic_samples_avg), 1)
+        cubic_label = r"Avg {} Mbps (2s < t < {}s)".format(cubic_avg, end_of_averaging_period)
+        ax2.axhline(y=cubic_avg, color="r", linestyle="dashed", label=cubic_label)
 ax2.set_title("Cubic throughput")
 ax2.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
@@ -151,26 +158,25 @@ ax3.set_xlim(
 ax3.set_ylim(0, 120)
 ax3.set_xlabel("Time (s)")
 ax3.set_ylabel("Throughput (Mbps)")
-if len(prague_samples_avg):
-    prague_avg = round(sum(prague_samples_avg) / len(prague_samples_avg), 1)
-    prague_label = r"Avg {} Mbps (2s < t < 8s)".format(prague_avg)
-    ax3.axhline(y=prague_avg, color="r", linestyle="dashed", label=prague_label)
+if add_horizontal_line_for_averaging:
+    if len(prague_samples_avg):
+        prague_avg = round(sum(prague_samples_avg) / len(prague_samples_avg), 1)
+        prague_label = r"Avg {} Mbps (2s < t < {}s)".format(prague_avg, end_of_averaging_period)
+        ax3.axhline(y=prague_avg, color="r", linestyle="dashed", label=prague_label)
 ax3.set_title("Prague throughput")
 ax3.legend(loc="upper right", prop={"size": 6})
 
-ax4.plot(bytes_time, bytes_samples_plot, marker="", color="black", label="Bytes")
+ax4.plot(bytes_time, bytes_samples_plot, marker="", color="black")
 ax4.set_ylim(0, 600000)
 ax4.set_xlabel("Time (s)")
 ax4.set_ylabel("Bytes in AC_BE")
 ax4.set_title("Bytes in Wi-Fi device AC_BE queue")
-ax4.legend(loc="upper right", prop={"size": 6})
 
-ax5.plot(dualpi2_time, dualpi2_samples_plot, marker="", color="black", label="Bytes")
+ax5.plot(dualpi2_time, dualpi2_samples_plot, marker="", color="black")
 ax5.set_ylim(0, 600000)
 ax5.set_xlabel("Time (s)")
 ax5.set_ylabel("Bytes in DualPI2")
 ax5.set_title("Bytes in overlying DualPI2 AC_BE queue")
-ax5.legend(loc="upper right", prop={"size": 6})
 
 fig.suptitle(title)
 plt.savefig(plotname, format="pdf")

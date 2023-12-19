@@ -25,6 +25,11 @@ else:
     title = "Untitled"
 space_between_subplots = 1.0
 
+# Add a red dashed line to the plot for the average value between 2s and
+# a user-defined end time (default 8s)
+add_horizontal_line_for_averaging = False
+end_of_averaging_period=8
+
 cubic_time = []
 cubic_samples_plot = []
 cubic_samples_avg = []
@@ -35,9 +40,8 @@ if os.path.exists("cubic-throughput.dat"):
         t = float(columns[0])
         cubic_time.append(t)
         cubic_samples_plot.append(float(columns[1]))
-        # Throughput average plot disabled
-        # if t >= 2 and t <= 8:
-        #    cubic_samples_avg.append(float(columns[1]))
+        if t >= 2 and t <= end_of_averaging_period:
+            cubic_samples_avg.append(float(columns[1]))
     f.close()
 
 prague_time = []
@@ -50,9 +54,8 @@ if os.path.exists("prague-throughput.dat"):
         t = float(columns[0])
         prague_time.append(t)
         prague_samples_plot.append(float(columns[1]))
-        # Throughput average plot disabled
-        # if t >= 2 and t <= 8:
-        #    prague_samples_avg.append(float(columns[1]))
+        if t >= 2 and t <= end_of_averaging_period:
+           prague_samples_avg.append(float(columns[1]))
     f.close()
 
 f = open("wired-dualpi2-bytes.dat", "r")
@@ -64,7 +67,7 @@ for line in f:
     t = float(columns[0])
     dualpi2_time.append(t)
     dualpi2_samples_plot.append(float(columns[1]))
-    if t >= 2 and t <= 8:
+    if t >= 2 and t <= end_of_averaging_period:
         dualpi2_samples_avg.append(float(columns[1]))
 f.close()
 
@@ -87,10 +90,11 @@ ax2.set_xlim(
 ax2.set_ylim(0, 120)
 ax2.set_xlabel("Time (s)")
 ax2.set_ylabel("Throughput (Mbps)")
-if len(cubic_samples_avg):
-    cubic_avg = round(sum(cubic_samples_avg) / len(cubic_samples_avg), 1)
-    cubic_label = r"Avg {} Mbps (2s < t < 8s)".format(cubic_avg)
-    ax2.axhline(y=cubic_avg, color="r", linestyle="dashed", label=cubic_label)
+if add_horizontal_line_for_averaging:
+    if len(cubic_samples_avg):
+        cubic_avg = round(sum(cubic_samples_avg) / len(cubic_samples_avg), 1)
+        cubic_label = r"Avg {} Mbps (2s < t < {}s)".format(cubic_avg, end_of_averaging_period)
+        ax2.axhline(y=cubic_avg, color="r", linestyle="dashed", label=cubic_label)
 ax2.set_title("Cubic throughput")
 ax2.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
@@ -107,10 +111,11 @@ ax3.set_xlim(
 ax3.set_ylim(0, 120)
 ax3.set_xlabel("Time (s)")
 ax3.set_ylabel("Throughput (Mbps)")
-if len(prague_samples_avg):
-    prague_avg = round(sum(prague_samples_avg) / len(prague_samples_avg), 1)
-    prague_label = r"Avg {} Mbps (2s < t < 8s)".format(prague_avg)
-    ax3.axhline(y=prague_avg, color="r", linestyle="dashed", label=prague_label)
+if add_horizontal_line_for_averaging:
+    if len(prague_samples_avg):
+        prague_avg = round(sum(prague_samples_avg) / len(prague_samples_avg), 1)
+        prague_label = r"Avg {} Mbps (2s < t < {}s)".format(prague_avg, end_of_averaging_period)
+        ax3.axhline(y=prague_avg, color="r", linestyle="dashed", label=prague_label)
 ax3.set_title("Prague throughput")
 ax3.legend(loc="upper right", prop={"size": 6})
 
@@ -119,7 +124,6 @@ ax5.set_ylim(0, 600000)
 ax5.set_xlabel("Time (s)")
 ax5.set_ylabel("Bytes in DualPI2")
 ax5.set_title("Bytes in DualPI2 queue")
-ax5.legend(loc="upper right", prop={"size": 6})
 
 fig.suptitle(title)
 plt.savefig(plotname, format="pdf")
