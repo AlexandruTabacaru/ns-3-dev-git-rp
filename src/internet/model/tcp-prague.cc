@@ -137,17 +137,28 @@ void
 TcpPrague::Init(Ptr<TcpSocketState> tcb)
 {
     NS_LOG_FUNCTION(this << tcb);
-    NS_LOG_INFO(this << "Enabling DctcpEcn for TCP Prague");
-    tcb->m_useEcn = TcpSocketState::On;
-    tcb->m_ecnMode = TcpSocketState::DctcpEcn;
-    tcb->m_ectCodePoint = m_useEct0 ? TcpSocketState::Ect0 : TcpSocketState::Ect1;
-    tcb->m_pacing = true;
-    tcb->m_pacingCaRatio = 100;
+    if (!m_initialized)
+    {
+        // these steps occur prior to SYN exchange
+        NS_LOG_INFO(this << "Enabling DctcpEcn for TCP Prague");
+        tcb->m_useEcn = TcpSocketState::On;
+        tcb->m_ecnMode = TcpSocketState::DctcpEcn;
+        tcb->m_ectCodePoint = m_useEct0 ? TcpSocketState::Ect0 : TcpSocketState::Ect1;
+        m_initialized = true;
+    }
+    else
+    {
+        // these steps occur upon moving to ESTABLISHED
+        tcb->m_pacing = true;
+        tcb->m_paceInitialWindow = true;
+        tcb->m_pacingCaRatio = 100;
+        UpdatePacingRate(tcb);
 
-    // related to rtt independence
-    m_round = 0;
-    m_alphaStamp = Simulator::Now();
-    NewRound(tcb);
+        // related to rtt independence
+        m_round = 0;
+        m_alphaStamp = Simulator::Now();
+        NewRound(tcb);
+    }
 }
 
 bool
@@ -163,7 +174,40 @@ TcpPrague::CongControl(Ptr<TcpSocketState> tcb,
                        const TcpRateOps::TcpRateSample& rs)
 {
     NS_LOG_FUNCTION(this << tcb << rs);
-    // Do nothing; PktsAcked handling for now
+    UpdatePacingRate(tcb);
+}
+
+void
+TcpPrague::UpdatePacingRate(Ptr<TcpSocketState> tcb) const
+{
+    NS_LOG_FUNCTION(this);
+
+    uint32_t pacingFactor;
+    if (tcb->m_cWnd < tcb->m_ssThresh / 2)
+    {
+        pacingFactor = tcb->m_pacingSsRatio;
+    }
+    else
+    {
+        pacingFactor = tcb->m_pacingCaRatio;
+    }
+
+    // m_pacingCaRatio and m_pacingSsRatio are in units of percentages
+    // multiplying the numerator by a pacing ratio and then by 1e4 (total
+    // of 1e6) is compensated by dividing by microseconds; resulting
+    // DataRate argument is in units of bits/sec
+    DataRate rate((std::max(tcb->m_cWnd, tcb->m_bytesInFlight) * 8 * pacingFactor * 1e4) /
+                  tcb->m_lastRtt.Get().GetMicroSeconds());
+    if (rate < tcb->m_maxPacingRate)
+    {
+        NS_LOG_DEBUG("Pacing rate updated to: " << rate);
+        tcb->m_pacingRate = rate;
+    }
+    else
+    {
+        NS_LOG_DEBUG("Pacing capped by max pacing rate: " << tcb->m_maxPacingRate);
+        tcb->m_pacingRate = tcb->m_maxPacingRate;
+    }
 }
 
 uint32_t

@@ -143,6 +143,13 @@ class TcpPrague : public TcpCongestionOps
      */
     void UpdateAlpha(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
+    /**
+     * \brief Update pacing parameters
+     *
+     * \param tcb internal congestion state
+     */
+    void UpdatePacingRate(Ptr<TcpSocketState> tcb) const;
+
     // documented in base class
     bool HasCongControl() const override;
     void CongControl(Ptr<TcpSocketState> tcb,
@@ -243,9 +250,10 @@ class TcpPrague : public TcpCongestionOps
     double m_g;                //!< Estimation gain
     bool m_useEct0;            //!< Use ECT(0) for ECN codepoint
 
-    double_t m_cWndCnt{0}; //!< Prague cWnd update counter in segments
-    bool m_sawCE{false};   //!< True if Prague has received ECE flag before
-    bool m_inLoss{false};  //!< True if a packet loss occurs
+    double_t m_cWndCnt{0};     //!< Prague cWnd update counter in segments
+    bool m_sawCE{false};       //!< True if Prague has received ECE flag before
+    bool m_inLoss{false};      //!< True if a packet loss occurs
+    bool m_initialized{false}; //!< Allows different behavior in Init() for multiple calls
 
     /* Related to RTT Independence */
     uint32_t m_round = 0;                                //!< Round count since last slow start exit
