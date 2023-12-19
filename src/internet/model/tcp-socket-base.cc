@@ -2315,6 +2315,7 @@ TcpSocketBase::ProcessSynSent(Ptr<Packet> packet, const TcpHeader& tcpHeader)
              m_tcb->m_nextTxSequence + SequenceNumber32(1) == tcpHeader.GetAckNumber())
     { // Handshake completed
         NS_LOG_DEBUG("SYN_SENT -> ESTABLISHED");
+        m_congestionControl->Init(m_tcb);
         m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
         m_tcb->m_congState = TcpSocketState::CA_OPEN;
         m_state = ESTABLISHED;
@@ -2380,6 +2381,7 @@ TcpSocketBase::ProcessSynRcvd(Ptr<Packet> packet,
         // possibly due to ACK lost in 3WHS. If in-sequence ACK is received, the
         // handshake is completed nicely.
         NS_LOG_DEBUG("SYN_RCVD -> ESTABLISHED");
+        m_congestionControl->Init(m_tcb);
         m_congestionControl->CongestionStateSet(m_tcb, TcpSocketState::CA_OPEN);
         m_tcb->m_congState = TcpSocketState::CA_OPEN;
         m_state = ESTABLISHED;
@@ -4534,6 +4536,8 @@ TcpSocketBase::SetCongestionControlAlgorithm(Ptr<TcpCongestionOps> algo)
 {
     NS_LOG_FUNCTION(this << algo);
     m_congestionControl = algo;
+    // In Linux, this call is deferred until SYN handshake, but if not
+    // called here, ECN configuration will not be set up properly
     m_congestionControl->Init(m_tcb);
 }
 
