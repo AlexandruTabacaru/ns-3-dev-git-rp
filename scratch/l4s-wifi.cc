@@ -170,6 +170,7 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(750000));
     // Enable pacing for Cubic
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
+    Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
     Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
