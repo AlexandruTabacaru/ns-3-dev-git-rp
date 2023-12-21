@@ -155,6 +155,7 @@ main(int argc, char* argv[])
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     uint16_t mcs = 2;
     uint32_t channelWidth = 80;
+    uint32_t spatialStreams = 1;
     bool flowControl = true;
     uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
     double scale = 1.0;     // default flow control scale factor
@@ -189,6 +190,7 @@ main(int argc, char* argv[])
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("channelWidth", "Width (MHz) of channel", channelWidth);
+    cmd.AddValue("spatialStreams", "Number of spatial streams", spatialStreams);
     cmd.AddValue("flowControl", "Whether to enable flow control (set also the limit)", flowControl);
     cmd.AddValue("limit", "Queue limit (bytes)", limit);
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
@@ -250,6 +252,9 @@ main(int argc, char* argv[])
                                    DoubleValue(46.6777));
     wifiPhy.SetChannel(wifiChannel.Create());
     wifiPhy.SetPcapDataLinkType(WifiPhyHelper::DLT_IEEE802_11_RADIO);
+    wifiPhy.Set("Antennas", UintegerValue(spatialStreams));
+    wifiPhy.Set("MaxSupportedTxSpatialStreams", UintegerValue(spatialStreams));
+    wifiPhy.Set("MaxSupportedRxSpatialStreams", UintegerValue(spatialStreams));
     wifiPhy.Set("ChannelSettings", StringValue(channelString));
 
     WifiHelper wifi;

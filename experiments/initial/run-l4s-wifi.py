@@ -13,13 +13,14 @@ path_to_ns3_script = "../../../ns3"
 
 # In future, add parametric job control here (multiprocessing.Pool)
 numCubic = 1
-numPrague = 1
+numPrague = 0
 numBackground = 0
-numBytes = 50000000
+numBytes = 100000000
 duration = 30
 mcs = 2
 channelWidth=80
-flowControl = 1
+spatialStreams=1
+flowControl = 0
 limit = 65535
 scale = 1
 # Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
@@ -34,6 +35,7 @@ arguments += " --numBytes=" + str(numBytes)
 arguments += " --duration=" + str(duration)
 arguments += " --mcs=" + str(mcs)
 arguments += " --channelWidth=" + str(channelWidth)
+arguments += " --spatialStreams=" + str(spatialStreams)
 arguments += " --flowControl=" + str(flowControl)
 arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
