@@ -157,8 +157,8 @@ main(int argc, char* argv[])
     uint32_t channelWidth = 80;
     uint32_t spatialStreams = 1;
     bool flowControl = true;
-    uint32_t limit = 65535; // default flow control limit (max A-MPDU size in bytes)
-    double scale = 1.0;     // default flow control scale factor
+    uint32_t limit = 65535;       // default flow control limit (max A-MPDU size in bytes)
+    double scale = 1.0;           // default flow control scale factor
     uint32_t rtsCtsThreshold = 0; // RTS/CTS disabled by default
     Time processingDelay = MicroSeconds(10);
     bool showProgress = false;
@@ -208,7 +208,8 @@ main(int argc, char* argv[])
     }
     if (rtsCtsThreshold > 0)
     {
-        Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", UintegerValue(rtsCtsThreshold));
+        Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold",
+                           UintegerValue(rtsCtsThreshold));
     }
     std::ostringstream ossDataMode;
     ossDataMode << "HeMcs" << mcs;
