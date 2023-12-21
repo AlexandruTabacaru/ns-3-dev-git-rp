@@ -17,6 +17,8 @@ numPrague = 0
 numBackground = 0
 numBytes = 100000000
 duration = 30
+# wanLinkDelay is 1/2 of the desired base RTT
+wanLinkDelay = "10ms"
 mcs = 2
 channelWidth=80
 spatialStreams=1
@@ -33,6 +35,7 @@ arguments += " --numPrague=" + str(numPrague)
 arguments += " --numBackground=" + str(numBackground)
 arguments += " --numBytes=" + str(numBytes)
 arguments += " --duration=" + str(duration)
+arguments += " --wanLinkDelay=" + wanLinkDelay
 arguments += " --mcs=" + str(mcs)
 arguments += " --channelWidth=" + str(channelWidth)
 arguments += " --spatialStreams=" + str(spatialStreams)
