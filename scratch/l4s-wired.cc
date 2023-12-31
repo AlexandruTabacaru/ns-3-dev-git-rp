@@ -74,6 +74,7 @@ std::ofstream g_filePragueSendInterval;
 std::ofstream g_filePraguePacingRate;
 std::ofstream g_filePragueCongState;
 std::ofstream g_filePragueEcnState;
+std::ofstream g_filePragueRtt;
 Time g_pragueThroughputInterval = MilliSeconds(100);
 void TracePragueThroughput();
 void TracePragueTx(Ptr<const Packet> packet,
@@ -85,6 +86,7 @@ void TracePraguePacingRate(DataRate oldVal, DataRate newVal);
 void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
                           TcpSocketState::TcpCongState_t newVal);
 void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
+void TracePragueRtt(Time oldVal, Time newVal);
 void TracePragueSocket(Ptr<Application>, uint32_t);
 
 uint32_t g_cubicData = 0;
@@ -95,6 +97,7 @@ std::ofstream g_fileCubicSsthresh;
 std::ofstream g_fileCubicSendInterval;
 std::ofstream g_fileCubicPacingRate;
 std::ofstream g_fileCubicCongState;
+std::ofstream g_fileCubicRtt;
 Time g_cubicThroughputInterval = MilliSeconds(100);
 void TraceCubicThroughput();
 void TraceCubicTx(Ptr<const Packet> packet,
@@ -105,6 +108,7 @@ void TraceCubicSsthresh(uint32_t oldVal, uint32_t newVal);
 void TraceCubicPacingRate(DataRate oldVal, DataRate newVal);
 void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
                          TcpSocketState::TcpCongState_t newVal);
+void TraceCubicRtt(Time oldVal, Time newVal);
 void TraceCubicSocket(Ptr<Application>, uint32_t);
 
 // Count the number of flows to wait for completion before stopping the simulation
@@ -311,6 +315,7 @@ main(int argc, char* argv[])
         g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
         g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
         g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
+        g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
     }
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
@@ -338,6 +343,7 @@ main(int argc, char* argv[])
         g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
         g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
         g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
+        g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
     }
     for (auto i = 0U; i < cubicClientApps.GetN(); i++)
     {
@@ -439,6 +445,7 @@ main(int argc, char* argv[])
     g_filePraguePacingRate.close();
     g_filePragueCongState.close();
     g_filePragueEcnState.close();
+    g_filePragueRtt.close();
     g_fileCubicThroughput.close();
     g_fileCubicCwnd.close();
     g_fileCubicSsthresh.close();
@@ -446,6 +453,7 @@ main(int argc, char* argv[])
     g_fileCubicPacingRate.close();
     g_fileCubicCongState.close();
     g_fileCubicCongState.close();
+    g_fileCubicRtt.close();
     Simulator::Destroy();
     return 0;
 }
@@ -527,6 +535,12 @@ TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_
 }
 
 void
+TracePragueRtt(Time oldVal, Time newVal)
+{
+    g_filePragueRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+}
+
+void
 TracePragueSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
@@ -543,6 +557,7 @@ TracePragueSocket(Ptr<Application> a, uint32_t i)
         tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TracePraguePacingRate));
         tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TracePragueCongState));
         tcp->TraceConnectWithoutContext("EcnState", MakeCallback(&TracePragueEcnState));
+        tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TracePragueRtt));
         Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
     }
 }
@@ -597,6 +612,12 @@ TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCo
 }
 
 void
+TraceCubicRtt(Time oldVal, Time newVal)
+{
+    g_fileCubicRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+}
+
+void
 TraceCubicSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
@@ -612,6 +633,7 @@ TraceCubicSocket(Ptr<Application> a, uint32_t i)
         tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TraceCubicSsthresh));
         tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TraceCubicPacingRate));
         tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceCubicCongState));
+        tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TraceCubicRtt));
         Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
     }
 }
