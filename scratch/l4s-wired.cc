@@ -212,9 +212,6 @@ main(int argc, char* argv[])
     // The following statements change this configuration on the bottleneck link
     TrafficControlHelper tch;
     tch.SetRootQueueDisc("ns3::DualPi2QueueDisc");
-#if 0
-    tch.SetRootQueueDisc("ns3::FqCoDelQueueDisc");
-#endif
     tch.SetQueueLimits("ns3::DynamicQueueLimits"); // enable BQL
     QueueDiscContainer routerQueueDiscContainer = tch.Install(routerDevices);
 
@@ -366,15 +363,7 @@ main(int argc, char* argv[])
 
     // Trace bytes in DualPi2 queue
     Ptr<DualPi2QueueDisc> dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>();
-#if 0
-    Ptr<FqCoDelQueueDisc> dualPi2 = routerQueueDiscContainer.Get(0)
-                                        ->GetObject<FqCoDelQueueDisc>();
-#endif
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
-#if 0
-    dualPi2->SetAttribute("UseL4s", BooleanValue(true));
-    dualPi2->SetAttribute("CeThreshold", TimeValue(MilliSeconds(1)));
-#endif
     g_fileBytesInDualPi2Queue.open("wired-dualpi2-bytes.dat", std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
 
