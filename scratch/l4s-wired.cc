@@ -64,6 +64,10 @@ std::ofstream g_fileBytesInAcBeQueue;
 void TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal);
 std::ofstream g_fileBytesInDualPi2Queue;
 void TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal);
+std::ofstream g_fileLSojourn;
+void TraceLSojourn(Time sojourn);
+std::ofstream g_fileCSojourn;
+void TraceCSojourn(Time sojourn);
 
 uint32_t g_pragueData = 0;
 Time g_lastSeenPrague = Seconds(0);
@@ -366,6 +370,10 @@ main(int argc, char* argv[])
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     g_fileBytesInDualPi2Queue.open("wired-dualpi2-bytes.dat", std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
+    g_fileLSojourn.open("wired-dualpi2-l-sojourn.dat", std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
+    g_fileCSojourn.open("wired-dualpi2-c-sojourn.dat", std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
 
     if (duration > Seconds(0))
     {
@@ -427,6 +435,8 @@ main(int argc, char* argv[])
     }
 
     g_fileBytesInDualPi2Queue.close();
+    g_fileLSojourn.close();
+    g_fileCSojourn.close();
     g_filePragueThroughput.close();
     g_filePragueCwnd.close();
     g_filePragueSsthresh.close();
@@ -465,6 +475,18 @@ void
 TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal)
 {
     g_fileBytesInDualPi2Queue << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TraceLSojourn(Time sojourn)
+{
+    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+}
+
+void
+TraceCSojourn(Time sojourn)
+{
+    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
 }
 
 void

@@ -79,6 +79,11 @@ std::ofstream g_fileDequeueThroughput;
 Time g_dequeueThroughputInterval = MilliSeconds(100);
 void TraceDequeueThroughput();
 
+std::ofstream g_fileLSojourn;
+void TraceLSojourn(Time sojourn);
+std::ofstream g_fileCSojourn;
+void TraceCSojourn(Time sojourn);
+
 uint32_t g_pragueData = 0;
 Time g_lastSeenPrague = Seconds(0);
 std::ofstream g_filePragueThroughput;
@@ -521,6 +526,10 @@ main(int argc, char* argv[])
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
+    g_fileLSojourn.open("wifi-dualpi2-l-sojourn.dat", std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
+    g_fileCSojourn.open("wifi-dualpi2-c-sojourn.dat", std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
 
     // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
     bool connected = apWifiMacQueue->TraceConnectWithoutContext(
@@ -589,6 +598,8 @@ main(int argc, char* argv[])
 
     g_fileBytesInAcBeQueue.close();
     g_fileBytesInDualPi2Queue.close();
+    g_fileLSojourn.close();
+    g_fileCSojourn.close();
     g_fileDequeue.close();
     g_fileDequeueThroughput.close();
     g_filePragueThroughput.close();
@@ -646,6 +657,18 @@ TraceDequeue(Ptr<const WifiMpdu> mpdu)
         g_fileDequeue << Now().GetSeconds() << " " << mpdu->GetPacket()->GetSize() << " "
                       << mpdu->GetHeader() << std::endl;
     }
+}
+
+void
+TraceLSojourn(Time sojourn)
+{
+    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+}
+
+void
+TraceCSojourn(Time sojourn)
+{
+    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
 }
 
 void
