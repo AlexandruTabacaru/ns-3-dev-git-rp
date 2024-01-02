@@ -94,6 +94,8 @@ The program output consists of many time-series data files, and PCAP traces for 
     * **wifi-dequeue-throughput.dat**: The throughput of the above dequeue trace is calculated on 100 ms intervals, and exported as a time series.
     * **wifi-queue-bytes.dat**:  Each time the size of the device queue (WifiMacQueue) changes, the new size (in bytes) is written.  Note that a total of 38 bytes per IP packet is added to the queued packets, for the Wi-Fi and LLC overhead (e.g., typically 1538 bytes for a 1500 byte IP packet).  This trace includes control and management frames.
     * **wifi-dualpi2-bytes.dat**:  Each time the size of the overlying DualPi2QueueDisc changes, the new size (in bytes) is written.  This aggregates both the L and C queues.  The packet size is the IP packet size (e.g., typically 1500 bytes).
+    * **wifi-dualpi2-l-sojourn.dat**: Sojourn time of L packets in the DualPi2QueueDisc (time from DualPi2 enqueue until the packet is dequeued into the WifiNetDevice).
+    * **wifi-dualpi2-C-sojourn.dat**: Sojourn time of C packets in the DualPi2QueueDisc.
 
 * Several time-series traces from the first foreground TCP Prague flow (note:  if there are N foreground flows, only the first is traced in these files):
     * **prague-throughput.dat**:  100 ms average of TCP throughput (just payload bytes, not counting headers)
@@ -103,6 +105,7 @@ The program output consists of many time-series data files, and PCAP traces for 
     * **prague-send-interval.dat**:  The time interval since the last segment was sent
     * **prague-cong-state.dat**:  The congestion state machine
     * **prague-ecn-state.dat**:  The ECN state machine
+    * **prague-rtt.dat**:  Each TCP RTT sample
 
 Files prefixed with 'cubic' are similar to the above Prague files (i.e., tracing the first foreground Cubicl flow).
 
@@ -140,6 +143,7 @@ Program Options:
     --wanLinkDelay:     one-way base delay from server to AP [+10ms]
     --mcs:              Index (0-11) of 11ax HE MCS [2]
     --channelWidth:     Width (MHz) of channel [80]
+    --spatialStreams:   Number of spatial streams [1]
     --flowControl:      Whether to enable flow control (set also the limit) [true]
     --limit:            Queue limit (bytes) [65535]
     --scale:            Scaling factor for queue limit [1]
@@ -171,6 +175,7 @@ Some notes on a few of these parameters:
 other values haven't been tested much.
 * **mcs**: Values between 0 and 11 are possible.  However, note that with this configuration, only MCS 0-2 will occupy the full AC_BE TXOP duration of 5.484 ms.  At higher MCS, the A-MPDU will take less than 5 ms to transmit.
 * **channelWidth**: Values of 20 (MHz), 40, 80, and 160 are allowed; default is 80.
+* **spatialStreams**: Number of spatial streams; default is 1.
 * **duration**:  Use this optional parameter to force the simulator to stop at a specific time.  By default, it will run until 1 second after the last TCP flow completed.
 * **flowControl**: This enables or disables the flow control coordination between the queues.  It is recommended not to change this (perhaps it will be removed in future versions)
 
@@ -205,12 +210,19 @@ file is stored in **version.diff**
 numCubic = 1
 numPrague = 1
 numBackground = 0
-numBytes = 50000000
-duration = 0
+numBytes = 100000000
+duration = 30
+# wanLinkDelay is 1/2 of the desired base RTT
+wanLinkDelay = "10ms"
 mcs = 2
+channelWidth=80
+spatialStreams=1
 flowControl = 1
 limit = 65535
 scale = 1
+# Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
+# Zero disables the explicit setting of the WifiRemoteStationManager attribute
+rtsCtsThreshold = 0
 showProgress = 0
 ~~~
 
