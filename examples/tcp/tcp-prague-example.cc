@@ -40,9 +40,11 @@
 //
 // - The box WR is a WAN router, aggregating all server links
 // - The box M1 is notionally an access network headend such as a CMTS or BRAS
-// - The box M2 is notionally an access network CPE device such as a cable or DSL modem
+// - The box M2 is notionally an access network CPE device such as a cable or
+// DSL modem
 // - The box M3 is notionally a home router (HR) running cake or FQ-CoDel
-// - The box LR is another LAN router, aggregating all client links (to home devices)
+// - The box LR is another LAN router, aggregating all client links (to home
+// devices)
 // - Three servers are connected to WR, three clients are connected to LR
 //
 // clients and servers are configured for ICMP measurements and TCP throughput
@@ -136,9 +138,10 @@
 //    --enablePcap:         enable Pcap [false]
 //    (additional arguments to control trace names)
 //
-// By default, ns3::TcpPrague is used as the first TCP, and the second TCP is disabled
-// For purposes of demonstration, the available options for configurable versions of
-// TCP are limited to ns3::TcpNewReno and ns3::TcpPrague
+// By default, ns3::TcpPrague is used as the first TCP, and the second TCP is
+// disabled For purposes of demonstration, the available options for
+// configurable versions of TCP are limited to ns3::TcpNewReno and
+// ns3::TcpPrague
 
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
@@ -192,7 +195,7 @@ TraceSecondRtt(std::ofstream* ofStream, Time oldRtt, Time newRtt)
 }
 
 void
-TracePingRtt(std::ofstream* ofStream, Time rtt)
+TracePingRtt(std::ofstream* ofStream, uint16_t seq [[maybe_unused]], Time rtt)
 {
     *ofStream << Simulator::Now().GetSeconds() << " " << rtt.GetSeconds() * 1000 << std::endl;
 }
@@ -489,11 +492,14 @@ main(int argc, char* argv[])
     std::ofstream firstTcpThroughputOfStream;
     firstTcpThroughputOfStream.open(firstTcpThroughputTraceFile.c_str(), std::ofstream::out);
     std::ofstream secondTcpRttOfStream;
-    secondTcpRttOfStream.open(secondTcpRttTraceFile.c_str(), std::ofstream::out);
     std::ofstream secondTcpCwndOfStream;
-    secondTcpCwndOfStream.open(secondTcpCwndTraceFile.c_str(), std::ofstream::out);
     std::ofstream secondTcpThroughputOfStream;
-    secondTcpThroughputOfStream.open(secondTcpThroughputTraceFile.c_str(), std::ofstream::out);
+    if (enableSecondTcp)
+    {
+        secondTcpRttOfStream.open(secondTcpRttTraceFile.c_str(), std::ofstream::out);
+        secondTcpCwndOfStream.open(secondTcpCwndTraceFile.c_str(), std::ofstream::out);
+        secondTcpThroughputOfStream.open(secondTcpThroughputTraceFile.c_str(), std::ofstream::out);
+    }
     std::ofstream m1DropOfStream;
     m1DropOfStream.open(m1DropTraceFile.c_str(), std::ofstream::out);
     std::ofstream m3DropOfStream;
@@ -650,12 +656,13 @@ main(int argc, char* argv[])
     ////////////////////////////////////////////////////////////
     // application setup                                      //
     ////////////////////////////////////////////////////////////
-    V4PingHelper pingHelper("192.168.1.2");
+    PingHelper pingHelper(Ipv4Address("192.168.1.2"));
     pingHelper.SetAttribute("Interval", TimeValue(pingInterval));
     pingHelper.SetAttribute("Size", UintegerValue(pingSize));
+    pingHelper.SetAttribute("VerboseMode", EnumValue(Ping::VerboseMode::SILENT));
     ApplicationContainer pingContainer = pingHelper.Install(pingServer);
-    Ptr<V4Ping> v4Ping = pingContainer.Get(0)->GetObject<V4Ping>();
-    v4Ping->TraceConnectWithoutContext("Rtt", MakeBoundCallback(&TracePingRtt, &pingOfStream));
+    Ptr<Ping> ping = pingContainer.Get(0)->GetObject<Ping>();
+    ping->TraceConnectWithoutContext("Rtt", MakeBoundCallback(&TracePingRtt, &pingOfStream));
     pingContainer.Start(Seconds(1));
     pingContainer.Stop(stopTime - Seconds(1));
 
@@ -728,18 +735,21 @@ main(int argc, char* argv[])
                         &TraceFirstThroughput,
                         &firstTcpThroughputOfStream,
                         throughputSamplingInterval);
-    // Setup scheduled traces; TCP traces must be hooked after socket creation
-    Simulator::Schedule(Seconds(15) + MilliSeconds(100),
-                        &ScheduleSecondTcpRttTraceConnection,
-                        &secondTcpRttOfStream);
-    Simulator::Schedule(Seconds(15) + MilliSeconds(100),
-                        &ScheduleSecondTcpCwndTraceConnection,
-                        &secondTcpCwndOfStream);
-    Simulator::Schedule(Seconds(15) + MilliSeconds(100), &ScheduleSecondPacketSinkConnection);
-    Simulator::Schedule(throughputSamplingInterval,
-                        &TraceSecondThroughput,
-                        &secondTcpThroughputOfStream,
-                        throughputSamplingInterval);
+    if (enableSecondTcp)
+    {
+        // Setup scheduled traces; TCP traces must be hooked after socket creation
+        Simulator::Schedule(Seconds(15) + MilliSeconds(100),
+                            &ScheduleSecondTcpRttTraceConnection,
+                            &secondTcpRttOfStream);
+        Simulator::Schedule(Seconds(15) + MilliSeconds(100),
+                            &ScheduleSecondTcpCwndTraceConnection,
+                            &secondTcpCwndOfStream);
+        Simulator::Schedule(Seconds(15) + MilliSeconds(100), &ScheduleSecondPacketSinkConnection);
+        Simulator::Schedule(throughputSamplingInterval,
+                            &TraceSecondThroughput,
+                            &secondTcpThroughputOfStream,
+                            throughputSamplingInterval);
+    }
     Simulator::Schedule(marksSamplingInterval,
                         &TraceMarksFrequency,
                         &m3MarksFrequencyOfStream,
@@ -761,9 +771,12 @@ main(int argc, char* argv[])
     firstTcpCwndOfStream.close();
     firstTcpRttOfStream.close();
     firstTcpThroughputOfStream.close();
-    secondTcpCwndOfStream.close();
-    secondTcpRttOfStream.close();
-    secondTcpThroughputOfStream.close();
+    if (enableSecondTcp)
+    {
+        secondTcpCwndOfStream.close();
+        secondTcpRttOfStream.close();
+        secondTcpThroughputOfStream.close();
+    }
     m1DropOfStream.close();
     m3DropOfStream.close();
     m3MarkOfStream.close();
