@@ -29,6 +29,7 @@ scale = 1
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
 rtsCtsThreshold = 0
 showProgress = 0
+useReno = 0
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
@@ -44,6 +45,7 @@ arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
 arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
 arguments += " --showProgress=" + str(showProgress)
+arguments += " --useReno=" + str(useReno)
 
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)

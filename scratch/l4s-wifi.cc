@@ -162,6 +162,7 @@ main(int argc, char* argv[])
     uint32_t numBytes = 50e6;             // default 50 MB
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
+    bool useReno = false;
     uint16_t mcs = 2;
     uint32_t channelWidth = 80;
     uint32_t spatialStreams = 1;
@@ -197,6 +198,7 @@ main(int argc, char* argv[])
     cmd.AddValue("numBytes", "Number of bytes for each TCP transfer", numBytes);
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
+    cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("channelWidth", "Width (MHz) of channel", channelWidth);
     cmd.AddValue("spatialStreams", "Number of spatial streams", spatialStreams);
@@ -234,6 +236,13 @@ main(int argc, char* argv[])
     // When using DCE with ns-3, or reading pcaps with Wireshark,
     // enable checksum computations in ns-3 models
     GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
+
+    if (useReno)
+    {
+        std::cout << "Using ns-3 LinuxReno model instead of Cubic" << std::endl;
+        Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+                           TypeIdValue(TcpLinuxReno::GetTypeId()));
+    }
 
     // Create the nodes and use containers for further configuration below
     NodeContainer serverNode;

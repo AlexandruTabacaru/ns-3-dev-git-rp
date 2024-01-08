@@ -145,6 +145,7 @@ main(int argc, char* argv[])
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     DataRate bottleneckRate = DataRate("100Mbps");
+    bool useReno = false;
     bool showProgress = false;
 
     // Increase some defaults (command-line can override below)
@@ -171,6 +172,7 @@ main(int argc, char* argv[])
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("bottleneckRate", "bottleneck data rate between routers", bottleneckRate);
+    cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
     cmd.Parse(argc, argv);
 
@@ -182,6 +184,13 @@ main(int argc, char* argv[])
     // When using DCE with ns-3, or reading pcaps with Wireshark,
     // enable checksum computations in ns-3 models
     GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
+
+    if (useReno)
+    {
+        std::cout << "Using ns-3 LinuxReno model instead of Cubic" << std::endl;
+        Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+                           TypeIdValue(TcpLinuxReno::GetTypeId()));
+    }
 
     // Create the nodes and use containers for further configuration below
     NodeContainer serverNode;

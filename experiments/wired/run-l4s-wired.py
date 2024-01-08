@@ -20,6 +20,7 @@ duration = 30
 wanLinkDelay = "10ms"
 bottleneckRate = "100Mbps"
 showProgress = 0
+useReno = 0
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
@@ -28,6 +29,7 @@ arguments += " --duration=" + str(duration)
 arguments += " --wanLinkDelay=" + wanLinkDelay
 arguments += " --bottleneckRate=" + bottleneckRate
 arguments += " --showProgress=" + str(showProgress)
+arguments += " --useReno=" + str(useReno)
 
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)

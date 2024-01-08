@@ -142,6 +142,7 @@ Program Options:
     --duration:         (optional) scheduled end of simulation [+0fs]
     --wanLinkDelay:     one-way base delay from server to AP [+10ms]
     --mcs:              Index (0-11) of 11ax HE MCS [2]
+    --useReno:          Use Linux Reno instead of Cubic [false]
     --channelWidth:     Width (MHz) of channel [80]
     --spatialStreams:   Number of spatial streams [1]
     --flowControl:      Whether to enable flow control (set also the limit) [true]
@@ -174,6 +175,7 @@ Some notes on a few of these parameters:
 * **processingDelay**:  This is the newly-added model of processing delay from the time that a packet arrives to be enqueued before it is available for actual transmission.  By default, it is 10 us;
 other values haven't been tested much.
 * **mcs**: Values between 0 and 11 are possible.  However, note that with this configuration, only MCS 0-2 will occupy the full AC_BE TXOP duration of 5.484 ms.  At higher MCS, the A-MPDU will take less than 5 ms to transmit.
+* **useReno**: Use ns-3's LinuxReno model instead of Cubic.  Note that this does not change the names of output files (still will be labeled 'cubic-*')
 * **channelWidth**: Values of 20 (MHz), 40, 80, and 160 are allowed; default is 80.
 * **spatialStreams**: Number of spatial streams; default is 1.
 * **duration**:  Use this optional parameter to force the simulator to stop at a specific time.  By default, it will run until 1 second after the last TCP flow completed.
