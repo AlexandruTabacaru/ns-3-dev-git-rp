@@ -189,6 +189,8 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::BulkSendApplication::SendSize", UintegerValue(1448));
     // Bypass Laqm when using Wi-Fi
     Config::SetDefault("ns3::DualPi2QueueDisc::DisableLaqm", BooleanValue(true));
+    // Set AC_BE max AMPDU to maximum 802.11ax value
+    Config::SetDefault("ns3::WifiMac::BE_MaxAmpduSize", UintegerValue(6500631));
 
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
