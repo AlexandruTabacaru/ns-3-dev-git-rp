@@ -703,15 +703,15 @@ WifiMac::ConfigureDcf(Ptr<Txop> dcf,
         cwMinValue = cwmin;
         cwMaxValue = cwmax;
         aifsnValue = 3;
-        txopLimitDsss = MicroSeconds(0);   // TODO should be MicroSeconds (3264)
-        txopLimitNoDsss = MicroSeconds(0); // TODO should be MicroSeconds (2528)
+        txopLimitDsss = MicroSeconds(3264);
+        txopLimitNoDsss = MicroSeconds(2528);
         break;
     case AC_BK:
         cwMinValue = cwmin;
         cwMaxValue = cwmax;
         aifsnValue = 7;
-        txopLimitDsss = MicroSeconds(0);   // TODO should be MicroSeconds (3264)
-        txopLimitNoDsss = MicroSeconds(0); // TODO should be MicroSeconds (2528)
+        txopLimitDsss = MicroSeconds(3264);
+        txopLimitNoDsss = MicroSeconds(2528);
         break;
     case AC_BE_NQOS:
         cwMinValue = cwmin;
