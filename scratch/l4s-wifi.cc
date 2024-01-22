@@ -19,7 +19,7 @@
 // Nodes 0                     Node 1                           Nodes 2+
 //
 // server ---------------------> AP -------------------------- > STA * N clients
-//         1 Gbps
+//         2 Gbps
 //         20 ms base RTT            BW 20/80/160 MHz            # N/2 for L4S flows
 //                                   Fixed MCS                   # N/2 for classic flows
 //
@@ -254,7 +254,7 @@ main(int argc, char* argv[])
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
-    pointToPoint.SetDeviceAttribute("DataRate", StringValue("1Gbps"));
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), apNode.Get(0));
 

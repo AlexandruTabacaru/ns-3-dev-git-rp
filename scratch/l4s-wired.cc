@@ -19,8 +19,8 @@
 // Nodes 0               Node 1                     Node 2          Nodes 3+
 //                                                         ------->
 // server -------------> router ------------------> router -------> N clients
-//        1 Gbps;               configurable rate;         -------> (foreground/background)
-//        configurable          100 us base RTT            1 Gbps;
+//        2 Gbps;               configurable rate;         -------> (foreground/background)
+//        configurable          100 us base RTT            2 Gbps;
 //        base RTT                                         100 us base RTT
 //
 //
@@ -203,7 +203,7 @@ main(int argc, char* argv[])
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
     pointToPoint.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("2p"));
-    pointToPoint.SetDeviceAttribute("DataRate", StringValue("1Gbps"));
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), routerNodes.Get(0));
 
@@ -211,7 +211,7 @@ main(int argc, char* argv[])
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
 
-    pointToPoint.SetDeviceAttribute("DataRate", StringValue("1Gbps"));
+    pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer clientDevices = pointToPoint.Install(routerNodes.Get(1), clientNodes.Get(0));
 
