@@ -71,7 +71,7 @@ TcpPrague::GetTypeId()
                 MakeUintegerChecker<uint32_t>())
             .AddAttribute("RttScalingMode",
                           "RTT Independence Scaling Heuristic",
-                          EnumValue(TcpPrague::RTT_CONTROL_NONE),
+                          EnumValue(TcpPrague::RTT_CONTROL_RATE),
                           MakeEnumAccessor(&TcpPrague::SetRttScalingMode),
                           MakeEnumChecker(TcpPrague::RTT_CONTROL_NONE,
                                           "None",
