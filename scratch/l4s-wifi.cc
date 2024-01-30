@@ -18,7 +18,7 @@
 
 // Nodes 0                     Node 1                           Nodes 2+
 //
-// server ---------------------> AP -------------------------- > STA * N clients
+// client ---------------------> AP -------------------------- > STA * N servers
 //         2 Gbps
 //         20 ms base RTT            BW 20/80/160 MHz            # N/2 for L4S flows
 //                                   Fixed MCS                   # N/2 for classic flows
@@ -27,6 +27,7 @@
 // The first Wi-Fi STA (node index 2) is the STA under test
 // Additional STA nodes (node indices 3+) for sending background load
 // 80 MHz 11ax (MCS 8) is initially configured in 5 GHz (channel 42)
+// Data transfer from client to server (iperf naming convention)
 //
 // Configuration inputs:
 // - number of Cubic flows under test
@@ -71,13 +72,14 @@ void TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal);
 std::ofstream g_fileBytesInDualPi2Queue;
 void TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal);
 
-uint32_t g_dequeuedData = 0;
-std::ofstream g_fileDequeue;
-void TraceDequeue(Ptr<const WifiMpdu> mpdu);
+uint32_t g_wifiThroughputData = 0;
+Time g_lastQosDataTime;
+std::ofstream g_fileWifiPhyTxPsduBegin;
+void TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double txPower);
 
-std::ofstream g_fileDequeueThroughput;
-Time g_dequeueThroughputInterval = MilliSeconds(100);
-void TraceDequeueThroughput();
+std::ofstream g_fileWifiThroughput;
+void TraceWifiThroughput();
+Time g_wifiThroughputInterval = MilliSeconds(100);
 
 std::ofstream g_fileLSojourn;
 void TraceLSojourn(Time sojourn);
@@ -99,6 +101,9 @@ void TracePragueThroughput();
 void TracePragueTx(Ptr<const Packet> packet,
                    const TcpHeader& header,
                    Ptr<const TcpSocketBase> socket);
+void TracePragueRx(Ptr<const Packet> packet,
+                   const TcpHeader& header,
+                   Ptr<const TcpSocketBase> socket);
 void TracePragueCwnd(uint32_t oldVal, uint32_t newVal);
 void TracePragueSsthresh(uint32_t oldVal, uint32_t newVal);
 void TracePraguePacingRate(DataRate oldVal, DataRate newVal);
@@ -106,7 +111,8 @@ void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
                           TcpSocketState::TcpCongState_t newVal);
 void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
 void TracePragueRtt(Time oldVal, Time newVal);
-void TracePragueSocket(Ptr<Application>, uint32_t);
+void TracePragueClientSocket(Ptr<Application>, uint32_t);
+void TracePragueServerSocket(Ptr<Application>);
 
 uint32_t g_cubicData = 0;
 Time g_lastSeenCubic = Seconds(0);
@@ -122,13 +128,17 @@ void TraceCubicThroughput();
 void TraceCubicTx(Ptr<const Packet> packet,
                   const TcpHeader& header,
                   Ptr<const TcpSocketBase> socket);
+void TraceCubicRx(Ptr<const Packet> packet,
+                  const TcpHeader& header,
+                  Ptr<const TcpSocketBase> socket);
 void TraceCubicCwnd(uint32_t oldVal, uint32_t newVal);
 void TraceCubicSsthresh(uint32_t oldVal, uint32_t newVal);
 void TraceCubicPacingRate(DataRate oldVal, DataRate newVal);
 void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
                          TcpSocketState::TcpCongState_t newVal);
 void TraceCubicRtt(Time oldVal, Time newVal);
-void TraceCubicSocket(Ptr<Application>, uint32_t);
+void TraceCubicClientSocket(Ptr<Application>, uint32_t);
+void TraceCubicServerSocket(Ptr<Application>);
 
 // Count the number of flows to wait for completion before stopping the simulation
 uint32_t g_flowsToClose = 0;
@@ -177,8 +187,8 @@ main(int argc, char* argv[])
     // ns-3 TCP does not automatically adjust MSS from the device MTU
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
     // ns-3 TCP socket buffer sizes do not dynamically grow, so set to ~3 * BWD product
-    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(750000));
-    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(750000));
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(30000000));
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(40000000));
     // Enable pacing for Cubic
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
@@ -191,6 +201,12 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::DualPi2QueueDisc::DisableLaqm", BooleanValue(true));
     // Set AC_BE max AMPDU to maximum 802.11ax value
     Config::SetDefault("ns3::WifiMac::BE_MaxAmpduSize", UintegerValue(6500631));
+#if 0
+    // Set AC_BE max AMSDU to four packets
+    Config::SetDefault("ns3::WifiMac::BE_MaxAmsduSize", UintegerValue(6500));
+#endif
+    // Update WifiMacQueue depth to 50 ms at 1 Gbps
+    Config::SetDefault("ns3::WifiMacQueue::MaxSize", QueueSizeValue(QueueSize("500p")));
 
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
@@ -213,8 +229,6 @@ main(int argc, char* argv[])
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
-    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
-                    "Error: configure at least one foreground flow");
     if (processingDelay > Seconds(0))
     {
         Config::SetDefault("ns3::WifiMacQueue::ProcessingDelay", TimeValue(processingDelay));
@@ -247,8 +261,8 @@ main(int argc, char* argv[])
     }
 
     // Create the nodes and use containers for further configuration below
-    NodeContainer serverNode;
-    serverNode.Create(1);
+    NodeContainer clientNode;
+    clientNode.Create(1);
     NodeContainer apNode;
     apNode.Create(1);
     NodeContainer staNodes;
@@ -258,7 +272,7 @@ main(int argc, char* argv[])
     PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
-    NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), apNode.Get(0));
+    NetDeviceContainer wanDevices = pointToPoint.Install(clientNode.Get(0), apNode.Get(0));
 
     // Wifi configuration; use the simpler Yans physical layer model
     YansWifiPhyHelper wifiPhy;
@@ -289,7 +303,7 @@ main(int argc, char* argv[])
     wifi.ConfigHeOptions("GuardInterval",
                          TimeValue(NanoSeconds(800)),
                          "MpduBufferSize",
-                         UintegerValue(64));
+                         UintegerValue(256));
 
     WifiMacHelper wifiMac;
     wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("l4s")));
@@ -328,7 +342,7 @@ main(int argc, char* argv[])
 
     // Internet and Linux stack installation
     InternetStackHelper internetStack;
-    internetStack.Install(serverNode);
+    internetStack.Install(clientNode);
     internetStack.Install(apNode);
     internetStack.Install(staNodes);
 
@@ -374,53 +388,53 @@ main(int argc, char* argv[])
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
     // Get pointers to the TcpL4Protocol instances of the primary nodes
-    Ptr<TcpL4Protocol> tcpL4ProtocolServer = serverNode.Get(0)->GetObject<TcpL4Protocol>();
+    Ptr<TcpL4Protocol> tcpL4ProtocolClient = clientNode.Get(0)->GetObject<TcpL4Protocol>();
     Ptr<TcpL4Protocol> tcpL4ProtocolSta = staNodes.Get(0)->GetObject<TcpL4Protocol>();
 
     // Application configuration for Prague flows under test
     uint16_t port = 100;
-    ApplicationContainer pragueServerApps;
     ApplicationContainer pragueClientApps;
+    ApplicationContainer pragueServerApps;
     for (auto i = 0U; i < numPrague; i++)
     {
         BulkSendHelper bulk("ns3::TcpSocketFactory",
                             InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulk.SetAttribute("MaxBytes", UintegerValue(numBytes));
         bulk.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * MilliSeconds(10)));
-        pragueServerApps.Add(bulk.Install(serverNode.Get(0)));
+        pragueClientApps.Add(bulk.Install(clientNode.Get(0)));
         NS_LOG_DEBUG("Creating Prague foreground flow " << i);
         PacketSinkHelper sink =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
         sink.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * MilliSeconds(10)));
-        pragueClientApps.Add(sink.Install(staNodes.Get(0)));
+        pragueServerApps.Add(sink.Install(staNodes.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
             Seconds(1.0) - TimeStep(1),
-            MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+            MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
 
     // Application configuration for Cubic flows under test
     port = 200;
-    ApplicationContainer cubicServerApps;
     ApplicationContainer cubicClientApps;
+    ApplicationContainer cubicServerApps;
     for (auto i = 0U; i < numCubic; i++)
     {
         BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
                                  InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulkCubic.SetAttribute("MaxBytes", UintegerValue(numBytes));
         bulkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * MilliSeconds(10)));
-        cubicServerApps.Add(bulkCubic.Install(serverNode.Get(0)));
+        cubicClientApps.Add(bulkCubic.Install(clientNode.Get(0)));
         NS_LOG_DEBUG("Creating Cubic foreground flow " << i);
         PacketSinkHelper sinkCubic =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
         sinkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * MilliSeconds(10)));
-        cubicClientApps.Add(sinkCubic.Install(staNodes.Get(0)));
+        cubicServerApps.Add(sinkCubic.Install(staNodes.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
             Seconds(1.05) - TimeStep(1),
-            MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+            MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
 
     // Add a cubic application on the server for each background flow
@@ -428,21 +442,36 @@ main(int argc, char* argv[])
     port = 300;
     Simulator::Schedule(
         Seconds(1.1) - TimeStep(1),
-        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolSta));
+        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     for (auto i = 0U; i < numBackground; i++)
     {
-        ApplicationContainer serverAppBackground;
+        ApplicationContainer clientAppBackground;
         BulkSendHelper bulkBackground("ns3::TcpSocketFactory",
                                       InetSocketAddress(interfaces1.GetAddress(0), port + i));
         bulkBackground.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        serverAppBackground = bulkBackground.Install(staNodes.Get(1 + i));
-        serverAppBackground.Start(Seconds(1.1));
-        ApplicationContainer clientAppBackground;
+        clientAppBackground = bulkBackground.Install(staNodes.Get(1 + i));
+        clientAppBackground.Start(Seconds(1.1));
+        ApplicationContainer serverAppBackground;
         PacketSinkHelper sinkBackground =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        clientAppBackground = sinkBackground.Install(serverNode.Get(0));
-        clientAppBackground.Start(Seconds(1.1));
+        serverAppBackground = sinkBackground.Install(clientNode.Get(0));
+        serverAppBackground.Start(Seconds(1.1));
+    }
+
+    if (!numCubic && !numPrague && !numBackground)
+    {
+        uint16_t udpPort = 9;
+        UdpServerHelper server(udpPort);
+        ApplicationContainer serverApp = server.Install(staNodes.Get(0));
+        serverApp.Start(Seconds(1.0));
+
+        UdpClientHelper client(InetSocketAddress(wifiInterfaces.GetAddress(1), udpPort));
+        client.SetAttribute("MaxPackets", UintegerValue(4294967295U));
+        client.SetAttribute("Interval", TimeValue(Time("0.00001"))); // packets/s
+        client.SetAttribute("PacketSize", UintegerValue(1440));
+        ApplicationContainer clientApp = client.Install(clientNode.Get(0));
+        clientApp.Start(Seconds(1.1));
     }
 
     // Control the random variable stream assignments for Wi-Fi models (the value 100 is arbitrary)
@@ -465,10 +494,12 @@ main(int argc, char* argv[])
     apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
                                                MakeCallback(&TraceBytesInAcBeQueue));
 
-    g_fileDequeue.open("wifi-dequeue-events.dat", std::ofstream::out);
-    apWifiMacQueue->TraceConnectWithoutContext("Dequeue", MakeCallback(&TraceDequeue));
-    g_fileDequeueThroughput.open("wifi-dequeue-throughput.dat", std::ofstream::out);
-    Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
+    Ptr<WifiPhy> apPhy = apDevice.Get(0)->GetObject<WifiNetDevice>()->GetPhy();
+    NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
+    g_fileWifiPhyTxPsduBegin.open("wifi-phy-tx-psdu-begin.dat", std::ofstream::out);
+    apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
+    g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
+    Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
 
     // Throughput and latency for foreground flows, and set up close callbacks
     if (pragueClientApps.GetN())
@@ -485,16 +516,23 @@ main(int argc, char* argv[])
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(Seconds(1.0) + i * MilliSeconds(10) + TimeStep(1),
-                            MakeBoundCallback(&TracePragueSocket, pragueServerApps.Get(i), i));
+        Simulator::Schedule(
+            Seconds(1.0) + i * MilliSeconds(10) + TimeStep(1),
+            MakeBoundCallback(&TracePragueClientSocket, pragueClientApps.Get(i), i));
+        if (!i)
+        {
+            Simulator::Schedule(
+                Seconds(1.0) + MilliSeconds(100),
+                MakeBoundCallback(&TracePragueServerSocket, pragueServerApps.Get(0)));
+        }
         std::ostringstream oss;
         oss << "Prague:" << i;
-        NS_LOG_DEBUG("Setting up callbacks on Prague sockets " << pragueClientApps.Get(i));
-        pragueClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
+        NS_LOG_DEBUG("Setting up callbacks on Prague sockets " << pragueServerApps.Get(i));
+        pragueServerApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerClose",
             oss.str(),
             MakeCallback(&HandlePeerClose));
-        pragueClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
+        pragueServerApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerError",
             oss.str(),
             MakeCallback(&HandlePeerError));
@@ -514,16 +552,21 @@ main(int argc, char* argv[])
     {
         // The TCP sockets that we want to connect
         Simulator::Schedule(Seconds(1.05) + i * MilliSeconds(10) + TimeStep(1),
-                            MakeBoundCallback(&TraceCubicSocket, cubicServerApps.Get(i), i));
+                            MakeBoundCallback(&TraceCubicClientSocket, cubicClientApps.Get(i), i));
+        if (!i)
+        {
+            Simulator::Schedule(Seconds(1.0) + MilliSeconds(100),
+                                MakeBoundCallback(&TraceCubicServerSocket, cubicServerApps.Get(0)));
+        }
         std::ostringstream oss;
         oss << "Cubic:" << i;
         NS_LOG_DEBUG("Setting up callbacks on Cubic sockets " << i << " "
-                                                              << cubicClientApps.Get(i));
-        cubicClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
+                                                              << cubicServerApps.Get(i));
+        cubicServerApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerClose",
             oss.str(),
             MakeCallback(&HandlePeerClose));
-        cubicClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
+        cubicServerApps.Get(i)->GetObject<PacketSink>()->TraceConnect(
             "PeerError",
             oss.str(),
             MakeCallback(&HandlePeerError));
@@ -611,8 +654,8 @@ main(int argc, char* argv[])
     g_fileBytesInDualPi2Queue.close();
     g_fileLSojourn.close();
     g_fileCSojourn.close();
-    g_fileDequeue.close();
-    g_fileDequeueThroughput.close();
+    g_fileWifiPhyTxPsduBegin.close();
+    g_fileWifiThroughput.close();
     g_filePragueThroughput.close();
     g_filePragueCwnd.close();
     g_filePragueSsthresh.close();
@@ -660,38 +703,62 @@ TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal)
 }
 
 void
-TraceDequeue(Ptr<const WifiMpdu> mpdu)
+TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double txPower)
 {
-    if (mpdu->GetHeader().GetType() == WIFI_MAC_QOSDATA)
+    NS_ASSERT(psduMap.size() == 1);
+    bool isQosData = false;
+    const auto& it [[maybe_unused]] = psduMap.begin();
+    auto nMpdus = it->second->GetNMpdus();
+    uint32_t totalAmpduSize = 0;
+    for (std::size_t i = 0; i < nMpdus; i++)
     {
-        g_dequeuedData += mpdu->GetPacket()->GetSize();
-        g_fileDequeue << Now().GetSeconds() << " " << mpdu->GetPacket()->GetSize() << " "
-                      << mpdu->GetHeader() << std::endl;
+        if (it->second->GetHeader(i).IsQosData())
+        {
+            isQosData = true;
+            totalAmpduSize += it->second->GetAmpduSubframeSize(i);
+            g_wifiThroughputData += it->second->GetAmpduSubframeSize(i);
+        }
+    }
+    if (isQosData)
+    {
+        g_fileWifiPhyTxPsduBegin << Now().GetSeconds() << " "
+                                 << (Now() - g_lastQosDataTime).GetMicroSeconds() << " "
+                                 << WifiPhy::CalculateTxDuration(psduMap,
+                                                                 txVector,
+                                                                 WifiPhyBand::WIFI_PHY_BAND_5GHZ)
+                                        .GetMicroSeconds()
+                                 << " " << nMpdus << " " << totalAmpduSize << std::endl;
+        g_lastQosDataTime = Now();
     }
 }
 
 void
 TraceLSojourn(Time sojourn)
 {
-    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
 TraceCSojourn(Time sojourn)
 {
-    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
 TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_pragueData += packet->GetSize();
     if (g_lastSeenPrague > Seconds(0))
     {
         g_filePragueSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
                                  << (Now() - g_lastSeenPrague).GetSeconds() << std::endl;
     }
     g_lastSeenPrague = Now();
+}
+
+void
+TracePragueRx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    g_pragueData += packet->GetSize();
 }
 
 void
@@ -741,16 +808,16 @@ TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_
 void
 TracePragueRtt(Time oldVal, Time newVal)
 {
-    g_filePragueRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+    g_filePragueRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
-TracePragueSocket(Ptr<Application> a, uint32_t i)
+TracePragueClientSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
-    NS_ASSERT_MSG(bulk, "Application failed");
-    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
-    NS_ASSERT_MSG(s, "Socket downcast failed");
+    NS_ASSERT_MSG(bulk, "Application downcast failed");
+    Ptr<Socket> s = bulk->GetSocket();
+    NS_ASSERT_MSG(s, "Socket empty");
     Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
     NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
     tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TracePragueTx));
@@ -767,15 +834,32 @@ TracePragueSocket(Ptr<Application> a, uint32_t i)
 }
 
 void
+TracePragueServerSocket(Ptr<Application> a)
+{
+    Ptr<PacketSink> sink = DynamicCast<PacketSink>(a);
+    NS_ASSERT_MSG(sink, "Application downcast failed");
+    Ptr<Socket> s = sink->GetAcceptedSockets().front();
+    NS_ASSERT_MSG(s, "Socket empty");
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
+    NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
+    tcp->TraceConnectWithoutContext("Rx", MakeCallback(&TracePragueRx));
+}
+
+void
 TraceCubicTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_cubicData += packet->GetSize();
     if (g_lastSeenCubic > Seconds(0))
     {
         g_fileCubicSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
                                 << (Now() - g_lastSeenCubic).GetSeconds() << std::endl;
     }
     g_lastSeenCubic = Now();
+}
+
+void
+TraceCubicRx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    g_cubicData += packet->GetSize();
 }
 
 void
@@ -818,11 +902,11 @@ TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCo
 void
 TraceCubicRtt(Time oldVal, Time newVal)
 {
-    g_fileCubicRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+    g_fileCubicRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
-TraceCubicSocket(Ptr<Application> a, uint32_t i)
+TraceCubicClientSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
     NS_ASSERT_MSG(bulk, "Application failed");
@@ -843,13 +927,25 @@ TraceCubicSocket(Ptr<Application> a, uint32_t i)
 }
 
 void
-TraceDequeueThroughput()
+TraceCubicServerSocket(Ptr<Application> a)
 {
-    g_fileDequeueThroughput << Now().GetSeconds() << " " << std::fixed
-                            << (g_dequeuedData * 8) / g_dequeueThroughputInterval.GetSeconds() / 1e6
-                            << std::endl;
-    Simulator::Schedule(g_dequeueThroughputInterval, &TraceDequeueThroughput);
-    g_dequeuedData = 0;
+    Ptr<PacketSink> sink = DynamicCast<PacketSink>(a);
+    NS_ASSERT_MSG(sink, "Application downcast failed");
+    Ptr<Socket> s = sink->GetAcceptedSockets().front();
+    NS_ASSERT_MSG(s, "Socket empty");
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
+    NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
+    tcp->TraceConnectWithoutContext("Rx", MakeCallback(&TraceCubicRx));
+}
+
+void
+TraceWifiThroughput()
+{
+    g_fileWifiThroughput << Now().GetSeconds() << " " << std::fixed
+                         << (g_wifiThroughputData * 8) / g_wifiThroughputInterval.GetSeconds() / 1e6
+                         << std::endl;
+    Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
+    g_wifiThroughputData = 0;
 }
 
 void
