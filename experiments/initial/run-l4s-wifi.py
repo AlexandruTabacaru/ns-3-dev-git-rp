@@ -15,15 +15,15 @@ path_to_ns3_script = "../../../ns3"
 numCubic = 1
 numPrague = 1
 numBackground = 0
-numBytes = 100000000
-duration = 30
+numBytes = 0
+duration = 20
 # wanLinkDelay is 1/2 of the desired base RTT
-wanLinkDelay = "10ms"
-mcs = 2
-channelWidth=80
-spatialStreams=1
+wanLinkDelay = "2500us"
+mcs = 11
+channelWidth=20
+spatialStreams=2
 flowControl = 1
-limit = 65535
+limit = 100000
 scale = 1
 # Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
@@ -51,6 +51,8 @@ arguments += " --useReno=" + str(useReno)
 plotTitle = "Cubic=" + str(numCubic)
 plotTitle += " Prague=" + str(numPrague)
 plotTitle += " Background=" + str(numBackground)
+plotTitle += " Base RTT= 2*" + str(wanLinkDelay)
+plotTitle += " Flow control=" + str(flowControl)
 
 # Make a unique timestamped results directory
 formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -137,5 +139,10 @@ try:
 except:
     pass
 
+# Report to terminal
+with open("run.txt", "r") as runfile:
+    for line in runfile:
+        print(line.strip())
+runfile.close()
 
 sys.exit()
