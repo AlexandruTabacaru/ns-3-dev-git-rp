@@ -66,7 +66,7 @@ TcpPrague::GetTypeId()
             .AddAttribute(
                 "RttTransitionDelay",
                 "Number of rounds post Slow Start after which RTT independence is enabled",
-                UintegerValue(100),
+                UintegerValue(4),
                 MakeUintegerAccessor(&TcpPrague::m_rttTransitionDelay),
                 MakeUintegerChecker<uint32_t>())
             .AddAttribute("RttScalingMode",
