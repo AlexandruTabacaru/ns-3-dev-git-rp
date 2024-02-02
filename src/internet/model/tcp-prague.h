@@ -261,6 +261,7 @@ class TcpPrague : public TcpCongestionOps
     uint32_t m_rttTransitionDelay; //!< Amount of post-SS rounds to transition to be RTT independent
     Time m_alphaStamp;             //!< EWMA update timestamp
     Time m_rttVirt;                //!< virtual RTT
+    Time m_cwrStamp;               //!< Last time ReduceCwnd() was run
     double_t m_aiAckIncrease;      //!< AI increase per non-CE ACKed MSS
 };
 

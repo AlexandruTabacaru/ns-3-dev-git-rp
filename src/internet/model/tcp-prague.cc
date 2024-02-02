@@ -232,6 +232,13 @@ TcpPrague::ReduceCwnd(Ptr<TcpSocketState> tcb)
 {
     NS_LOG_FUNCTION(this << tcb);
 
+    if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE && m_rttVirt > (Simulator::Now () - m_cwrStamp))
+    {
+        NS_LOG_DEBUG("Suppressing ReduceCwnd() since last reduction was at " << m_cwrStamp.As (Time::S));
+        return;
+    }
+    m_cwrStamp = Simulator::Now ();
+
     uint32_t cwnd_segs = tcb->m_cWnd / tcb->m_segmentSize;
     double_t reduction = m_alpha * cwnd_segs / 2.0;
     m_cWndCnt -= reduction;
