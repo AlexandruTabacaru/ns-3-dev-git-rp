@@ -22,6 +22,8 @@ wanLinkDelay = "2500us"
 mcs = 11
 channelWidth=20
 spatialStreams=2
+# Default WifiMacQueue size is now 5000 packets, but can be changed below
+wifiQueueSize = "500p"
 flowControl = 1
 limit = 100000
 scale = 1
@@ -40,6 +42,7 @@ arguments += " --wanLinkDelay=" + wanLinkDelay
 arguments += " --mcs=" + str(mcs)
 arguments += " --channelWidth=" + str(channelWidth)
 arguments += " --spatialStreams=" + str(spatialStreams)
+arguments += " --wifiQueueSize=" + wifiQueueSize
 arguments += " --flowControl=" + str(flowControl)
 arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
