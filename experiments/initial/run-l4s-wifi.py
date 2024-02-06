@@ -23,7 +23,7 @@ mcs = 11
 channelWidth=20
 spatialStreams=2
 # Default WifiMacQueue size is now 5000 packets, but can be changed below
-wifiQueueSize = "500p"
+wifiQueueSize = "5000p"
 flowControl = 1
 limit = 100000
 scale = 1
