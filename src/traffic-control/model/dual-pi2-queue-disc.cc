@@ -182,9 +182,9 @@ DualPi2QueueDisc::GetQueueSize() const
 }
 
 void
-DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
+DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
 {
-    NS_LOG_FUNCTION(this << newBytes);
+    NS_LOG_FUNCTION(this << pendingBytes);
     if (!GetNetDeviceQueueInterface() || !GetNetDeviceQueueInterface()->GetTxQueue(0)->IsStopped())
     {
         NS_LOG_DEBUG("Queue is not stopped so no need to process the value");
@@ -192,17 +192,17 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
     }
     else
     {
-        NS_LOG_DEBUG("Queue is stopped; process the reported value " << newBytes);
-        // newBytes represents the Wi-Fi framed value of any packet
+        NS_LOG_DEBUG("Queue is stopped; process the reported value " << pendingBytes);
+        // pendingBytes represents the Wi-Fi framed value of any packet
         // For every QueueDiscItem packet in this queue, add 38 bytes
         // for its queue size below.
         NS_LOG_DEBUG("QueueDisc holds " << GetNBytes() << " bytes in " << GetNPackets()
                                         << " packets");
         uint32_t queueDiscPending = GetNBytes() + 38 * GetNPackets();
         NS_LOG_DEBUG("The amount to be queued at WifiMacQueue is " << queueDiscPending);
-        if (newBytes > queueDiscPending)
+        if (pendingBytes > queueDiscPending)
         {
-            NS_LOG_DEBUG("WifiMacQueue can handle the pending " << newBytes);
+            NS_LOG_DEBUG("WifiMacQueue can handle the pending " << pendingBytes);
             return;
         }
     }
@@ -214,23 +214,23 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
     uint32_t cPackets [[maybe_unused]] = GetInternalQueue(CLASSIC)->GetNPackets();
 
     NS_LOG_DEBUG("State before PendingDequeue logic: pendingBytes "
-                 << newBytes << " l4sBytes " << lBytes << " l4sPackets " << lPackets
+                 << pendingBytes << " l4sBytes " << lBytes << " l4sPackets " << lPackets
                  << " classicBytes " << cBytes << " cPackets " << cPackets);
 
     // Dequeue enough packets to use up to queueDiscPending bytes, and add to staging queues
     // Keep track of how many of these are L4S packets and are marked
     // Dequeue using the scheduler logic which will apply Laqm and coupled marking, and drops
 
-    uint32_t pendingBytes = newBytes;
+    uint32_t pendingBytesLeft = pendingBytes;
     uint32_t markedCount = 0;      // How many of those L4S packets are marked
     uint32_t maxIterations = 1000; // Prevent a deadlock simulation loop
     for (uint32_t i = 0; i <= maxIterations; i++)
     {
         NS_ASSERT_MSG(i < maxIterations, "Error: infinite loop");
-        auto eligible = CanSchedule(pendingBytes);
+        auto eligible = CanSchedule(pendingBytesLeft);
         if (!eligible.first && !eligible.second)
         {
-            NS_LOG_DEBUG("Cannot schedule further with pendingBytes " << pendingBytes);
+            NS_LOG_DEBUG("Cannot schedule further with pendingBytesLeft " << pendingBytesLeft);
             break;
         }
         auto scheduled = Scheduler(eligible);
@@ -239,9 +239,10 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             bool marked = false;
             auto qdItem = DequeueFromL4sQueue(marked);
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
-            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient pending bytes");
+            NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
+                          "Error, insufficient pending bytes");
             AddToL4sStagingQueue(qdItem);
-            pendingBytes -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
+            pendingBytesLeft -= (qdItem->GetSize() + 38); // 38 bytes per packet will be added
             if (marked)
             {
                 NS_LOG_INFO("Moved marked L4S packet to staging queue; size "
@@ -261,12 +262,13 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes)
             bool dropped [[maybe_unused]] = false;
             auto qdItem = DequeueFromClassicQueue(dropped);
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
-            NS_ASSERT_MSG(qdItem->GetSize() <= pendingBytes, "Error, insufficient pending bytes");
+            NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
+                          "Error, insufficient pending bytes");
             NS_LOG_INFO("Moved CLASSIC packet to staging queue; size "
                         << qdItem->GetSize() << "; timestamp "
                         << qdItem->GetTimeStamp().GetMicroSeconds() << " us");
             AddToClassicStagingQueue(qdItem);
-            pendingBytes -= (qdItem->GetSize() + 38);
+            pendingBytesLeft -= (qdItem->GetSize() + 38);
         }
         else
         {

@@ -67,7 +67,7 @@ WifiMacQueue::GetTypeId()
             .AddTraceSource("PendingDequeue",
                             "Number of bytes about to be dequeued.",
                             MakeTraceSourceAccessor(&WifiMacQueue::m_tracePendingDequeue),
-                            "ns3::TracedValueCallback::Uint32");
+                            "ns3::WifiMacQueue::PendingDequeueCallback");
     return tid;
 }
 
@@ -315,7 +315,7 @@ WifiMacQueue::DequeueIfQueued(const std::list<Ptr<const WifiMpdu>>& mpdus)
     if (bytesToDequeue)
     {
         NS_LOG_DEBUG("About to dequeue " << bytesToDequeue << " bytes");
-        m_tracePendingDequeue = bytesToDequeue;
+        m_tracePendingDequeue(bytesToDequeue);
     }
     DoDequeue(iterators);
 }

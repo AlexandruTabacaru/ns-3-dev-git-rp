@@ -94,10 +94,9 @@ class DualPi2QueueDisc : public QueueDisc
     /**
      * Callback to be notified of pending bytes about to be dequeued.
      *
-     * \param oldBytes Old value of the quantity (ignore)
-     * \param newBytes New value of the quantity (use this value)
+     * \param pendingBytes Number of bytes to be dequeued
      */
-    void PendingDequeueCallback(uint32_t oldBytes, uint32_t newBytes);
+    void PendingDequeueCallback(uint32_t pendingBytes);
 
   protected:
     // Documented in base class

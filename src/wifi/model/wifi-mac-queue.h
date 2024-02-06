@@ -308,6 +308,12 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
      */
     Time GetProcessingDelay() const;
 
+    /**
+     * Callback signature for `PendingDequeue` trace source.
+     * \param size Size of the pending dequeue in bytes.
+     */
+    typedef void (*PendingDequeueCallback)(uint32_t size);
+
   protected:
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetContainer;
 
@@ -363,7 +369,7 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
 
     /// Traced callback: fired when a packet is dropped due to lifetime expiration
     TracedCallback<Ptr<const WifiMpdu>> m_traceExpired;
-    TracedValue<uint32_t> m_tracePendingDequeue{0}; //!< Byte count of pending dequeue
+    TracedCallback<uint32_t> m_tracePendingDequeue; //!< Byte count of pending dequeue
 
     NS_LOG_TEMPLATE_DECLARE; //!< redefinition of the log component
 };
