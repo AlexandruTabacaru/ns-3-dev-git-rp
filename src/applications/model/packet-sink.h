@@ -115,7 +115,14 @@ class PacketSink : public Application
      *
      * \param socket The socket reporting the event
      */
-    typedef void (*SocketCallback)(Ptr<const Socket> socket);
+    typedef void (*ConstSocketCallback)(Ptr<const Socket> socket);
+
+    /**
+     * TracedCallback signature for an accept event
+     *
+     * \param socket The socket reporting the event
+     */
+    typedef void (*SocketCallback)(Ptr<Socket> socket);
 
   protected:
     void DoDispose() override;
@@ -217,6 +224,8 @@ class PacketSink : public Application
     /// Callbacks for tracing the peer close events
     TracedCallback<Ptr<const Socket>> m_tracePeerClose;
     TracedCallback<Ptr<const Socket>> m_tracePeerError;
+    /// Callback for tracing accept events
+    TracedCallback<Ptr<Socket>> m_traceAccept;
 };
 
 } // namespace ns3

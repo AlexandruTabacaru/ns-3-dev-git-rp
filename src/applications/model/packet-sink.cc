@@ -80,10 +80,14 @@ PacketSink::GetTypeId()
             .AddTraceSource("PeerClose",
                             "The peer closed the connection",
                             MakeTraceSourceAccessor(&PacketSink::m_tracePeerClose),
-                            "ns3::PacketSink::SocketCallback")
+                            "ns3::PacketSink::ConstSocketCallback")
             .AddTraceSource("PeerError",
                             "The peer closed the connection with an error",
                             MakeTraceSourceAccessor(&PacketSink::m_tracePeerError),
+                            "ns3::PacketSink::ConstSocketCallback")
+            .AddTraceSource("Accept",
+                            "A socket connection has been accepted",
+                            MakeTraceSourceAccessor(&PacketSink::m_traceAccept),
                             "ns3::PacketSink::SocketCallback");
     return tid;
 }
@@ -318,6 +322,7 @@ PacketSink::HandleAccept(Ptr<Socket> s, const Address& from)
     NS_LOG_FUNCTION(this << s << from);
     s->SetRecvCallback(MakeCallback(&PacketSink::HandleRead, this));
     m_socketList.push_back(s);
+    m_traceAccept(s);
 }
 
 } // Namespace ns3
