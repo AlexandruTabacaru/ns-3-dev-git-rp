@@ -112,7 +112,7 @@ void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
 void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
 void TracePragueRtt(Time oldVal, Time newVal);
 void TracePragueClientSocket(Ptr<Application>, uint32_t);
-void TracePragueServerSocket(Ptr<Application>);
+void TracePragueServerSocket(Ptr<Socket>);
 
 uint32_t g_cubicData = 0;
 Time g_lastSeenCubic = Seconds(0);
@@ -138,7 +138,7 @@ void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
                          TcpSocketState::TcpCongState_t newVal);
 void TraceCubicRtt(Time oldVal, Time newVal);
 void TraceCubicClientSocket(Ptr<Application>, uint32_t);
-void TraceCubicServerSocket(Ptr<Application>);
+void TraceCubicServerSocket(Ptr<Socket>);
 
 // Count the number of flows to wait for completion before stopping the simulation
 uint32_t g_flowsToClose = 0;
@@ -524,9 +524,9 @@ main(int argc, char* argv[])
             MakeBoundCallback(&TracePragueClientSocket, pragueClientApps.Get(i), i));
         if (!i)
         {
-            Simulator::Schedule(
-                Seconds(1.0) + MilliSeconds(100),
-                MakeBoundCallback(&TracePragueServerSocket, pragueServerApps.Get(0)));
+            pragueServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+                "Accept",
+                MakeCallback(&TracePragueServerSocket));
         }
         std::ostringstream oss;
         oss << "Prague:" << i;
@@ -558,8 +558,9 @@ main(int argc, char* argv[])
                             MakeBoundCallback(&TraceCubicClientSocket, cubicClientApps.Get(i), i));
         if (!i)
         {
-            Simulator::Schedule(Seconds(1.0) + MilliSeconds(100),
-                                MakeBoundCallback(&TraceCubicServerSocket, cubicServerApps.Get(0)));
+            cubicServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+                "Accept",
+                MakeCallback(&TraceCubicServerSocket));
         }
         std::ostringstream oss;
         oss << "Cubic:" << i;
@@ -837,12 +838,8 @@ TracePragueClientSocket(Ptr<Application> a, uint32_t i)
 }
 
 void
-TracePragueServerSocket(Ptr<Application> a)
+TracePragueServerSocket(Ptr<Socket> s)
 {
-    Ptr<PacketSink> sink = DynamicCast<PacketSink>(a);
-    NS_ASSERT_MSG(sink, "Application downcast failed");
-    Ptr<Socket> s = sink->GetAcceptedSockets().front();
-    NS_ASSERT_MSG(s, "Socket empty");
     Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
     NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
     tcp->TraceConnectWithoutContext("Rx", MakeCallback(&TracePragueRx));
@@ -930,12 +927,8 @@ TraceCubicClientSocket(Ptr<Application> a, uint32_t i)
 }
 
 void
-TraceCubicServerSocket(Ptr<Application> a)
+TraceCubicServerSocket(Ptr<Socket> s)
 {
-    Ptr<PacketSink> sink = DynamicCast<PacketSink>(a);
-    NS_ASSERT_MSG(sink, "Application downcast failed");
-    Ptr<Socket> s = sink->GetAcceptedSockets().front();
-    NS_ASSERT_MSG(s, "Socket empty");
     Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
     NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
     tcp->TraceConnectWithoutContext("Rx", MakeCallback(&TraceCubicRx));
