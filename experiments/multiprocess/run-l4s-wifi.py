@@ -9,39 +9,6 @@ import numpy as np
 import re
 
 
-def buildArguments(
-    numCubic,
-    numPrague,
-    numBackground,
-    numBytes,
-    duration,
-    wanLinkDelay,
-    mcs,
-    channelWidth,
-    spatialStreams,
-    flowControl,
-    limit,
-    scale,
-):
-    arguments = " --numCubic=" + str(numCubic)
-    arguments += " --numPrague=" + str(numPrague)
-    arguments += " --numBackground=" + str(numBackground)
-    arguments += " --numBytes=" + str(numBytes)
-    arguments += " --duration=" + str(duration)
-    arguments += " --wanLinkDelay=" + wanLinkDelay
-    arguments += " --mcs=" + str(mcs)
-    arguments += " --channelWidth=" + str(channelWidth)
-    arguments += " --spatialStreams=" + str(spatialStreams)
-    arguments += " --flowControl=" + str(flowControl)
-    arguments += " --limit=" + str(limit)
-    arguments += " --scale=" + str(scale)
-    arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
-    arguments += " --showProgress=" + str(showProgress)
-    arguments += " --useReno=" + str(useReno)
-
-    return arguments
-
-
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
     plotTitle = "Cubic=" + str(numCubic)
@@ -295,21 +262,22 @@ def processResults(root_dir):
                 else 0
             )
 
-            # Merge stats into the results template, prefixing keys with the category
-            if stats_cubic and stats_prague:
-                for key in stats_cubic:
-                    test_results_template[f"{key} {direction} Cubic"] = stats_cubic[key]
-                test_results_template[
-                    f"Average Bandwidth {direction} Cubic"
-                ] = bandwidth_cubic
+            # Add cubic and prague stats to the test results template, handling cases where one might not exist
+            if stats_cubic:
+                for key, value in stats_cubic.items():
+                    test_results_template[f"{key} {direction} Cubic"] = value
+                if bandwidth_cubic is not None:
+                    test_results_template[
+                        f"Average Bandwidth {direction} Cubic"
+                    ] = bandwidth_cubic
 
-                for key in stats_prague:
-                    test_results_template[f"{key} {direction} Prague"] = stats_prague[
-                        key
-                    ]
-                test_results_template[
-                    f"Average Bandwidth {direction} Prague"
-                ] = bandwidth_prague
+            if stats_prague:
+                for key, value in stats_prague.items():
+                    test_results_template[f"{key} {direction} Prague"] = value
+                if bandwidth_prague is not None:
+                    test_results_template[
+                        f"Average Bandwidth {direction} Prague"
+                    ] = bandwidth_prague
 
         all_results.append(test_results_template)
 
