@@ -307,5 +307,5 @@ ax9.set_ylabel("Bytes in DualPI2", fontsize=8)
 ax9.set_title("Bytes in overlying DualPI2 AC_BE queue", fontsize=8)
 
 fig.suptitle(title)
-plt.savefig(plotname, format="pdf")
+plt.savefig(resultsDir + "/" + plotname, format="pdf")
 plt.close()
