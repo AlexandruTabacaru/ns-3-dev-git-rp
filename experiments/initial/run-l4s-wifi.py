@@ -24,6 +24,11 @@ channelWidth=20
 spatialStreams=2
 # Default WifiMacQueue size is now 5000 packets, but can be changed below
 wifiQueueSize = "5000p"
+# If maxAmsduSize is zero, it will disable A-MSDU.  If non-zero, it will
+# try to form A-MSDUs (BE access category) up to the number of bytes specified
+maxAmsduSize = 0
+# The following three variables are related; if the first is disabled,
+# the second two will have no effect
 flowControl = 1
 limit = 100000
 scale = 1
@@ -31,6 +36,7 @@ scale = 1
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
 rtsCtsThreshold = 0
 showProgress = 0
+enablePcap = 1
 useReno = 0
 
 arguments = " --numCubic=" + str(numCubic)
@@ -47,7 +53,9 @@ arguments += " --flowControl=" + str(flowControl)
 arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
 arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
+arguments += " --maxAmsduSize=" + str(maxAmsduSize)
 arguments += " --showProgress=" + str(showProgress)
+arguments += " --enablePcap=" + str(enablePcap)
 arguments += " --useReno=" + str(useReno)
 
 # Build a plot title; customize as needed
