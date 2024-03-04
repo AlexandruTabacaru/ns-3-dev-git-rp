@@ -164,6 +164,7 @@ main(int argc, char* argv[])
     double staDistance = 1; // meters; distance of 10 m or more will cause packet loss at MCS 11
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
+    bool enablePcap = true;
 
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
@@ -227,6 +228,7 @@ main(int argc, char* argv[])
     cmd.AddValue("rtsCtsThreshold", "RTS/CTS threshold (bytes)", rtsCtsThreshold);
     cmd.AddValue("processingDelay", "Notional packet processing delay", processingDelay);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
+    cmd.AddValue("enablePcap", "Whether to enable PCAP trace output", enablePcap);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
@@ -497,12 +499,15 @@ main(int argc, char* argv[])
     wifi.AssignStreams(wifiDevices, 100);
 
     // PCAP traces
-    pointToPoint.EnablePcapAll("l4s-wifi");
-    wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
-    internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
-                                 staNodes.Get(0)->GetObject<Ipv4>(),
-                                 1,
-                                 true);
+    if (enablePcap)
+    {
+        pointToPoint.EnablePcapAll("l4s-wifi");
+        wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
+        internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
+                                     staNodes.Get(0)->GetObject<Ipv4>(),
+                                     1,
+                                     true);
+    }
 
     // Set up traces
     // Bytes and throughput in WifiMacQueue
