@@ -161,7 +161,7 @@ main(int argc, char* argv[])
 {
     // Variable declaration, and constants
     std::string wifiControlMode = "OfdmRate24Mbps";
-    double staDistance = 10; // meters
+    double staDistance = 1; // meters; distance of 10 m or more will cause packet loss at MCS 11
     const double pi = 3.1415927;
     Time progressInterval = Seconds(5);
 
