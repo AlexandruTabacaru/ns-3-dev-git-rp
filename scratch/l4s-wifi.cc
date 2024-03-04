@@ -185,6 +185,7 @@ main(int argc, char* argv[])
     uint32_t rtsCtsThreshold = 0; // RTS/CTS disabled by default
     Time processingDelay = MicroSeconds(10);
     bool showProgress = false;
+    uint32_t maxAmsduSize = 0; // zero means A-MSDU is disabled
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -204,10 +205,6 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::DualPi2QueueDisc::DisableLaqm", BooleanValue(true));
     // Set AC_BE max AMPDU to maximum 802.11ax value
     Config::SetDefault("ns3::WifiMac::BE_MaxAmpduSize", UintegerValue(6500631));
-#if 0
-    // Set AC_BE max AMSDU to four packets
-    Config::SetDefault("ns3::WifiMac::BE_MaxAmsduSize", UintegerValue(6500));
-#endif
 
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
@@ -227,6 +224,7 @@ main(int argc, char* argv[])
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
     cmd.AddValue("rtsCtsThreshold", "RTS/CTS threshold (bytes)", rtsCtsThreshold);
     cmd.AddValue("processingDelay", "Notional packet processing delay", processingDelay);
+    cmd.AddValue("maxAmsduSize", "BE Max A-MSDU size in bytes", maxAmsduSize);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
     cmd.AddValue("enablePcap", "Whether to enable PCAP trace output", enablePcap);
     cmd.Parse(argc, argv);
@@ -257,6 +255,8 @@ main(int argc, char* argv[])
     GlobalValue::Bind("ChecksumEnabled", BooleanValue(true));
 
     Config::SetDefault("ns3::WifiMacQueue::MaxSize", StringValue(wifiQueueSize));
+    // Set AC_BE max AMSDU to four packets
+    Config::SetDefault("ns3::WifiMac::BE_MaxAmsduSize", UintegerValue(maxAmsduSize));
 
     if (useReno)
     {
