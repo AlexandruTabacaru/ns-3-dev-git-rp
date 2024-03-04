@@ -154,7 +154,7 @@ ax1.plot(
     marker="",
     color="black",
 )
-ax1.set_xlim(
+ax1.set_ylim(
     0,
 )
 #ax1.set_xlabel("Time (s)", fontsize=8)
@@ -174,7 +174,7 @@ ax2.plot(
     marker="",
     color="black",
 )
-ax2.set_xlim(
+ax2.set_ylim(
     0,
 )
 #ax2.set_xlabel("Time (s)", fontsize=8)
@@ -195,7 +195,7 @@ ax3.plot(
     marker="",
     color="black",
 )
-ax3.set_xlim(
+ax3.set_ylim(
     0,
 )
 #ax3.set_xlabel("Time (s)", fontsize=8)
@@ -211,7 +211,7 @@ ax4.plot(
     marker="",
     color="black",
 )
-ax4.set_xlim(
+ax4.set_ylim(
     0,
 )
 #ax4.set_xlabel("Time (s)", fontsize=8)
@@ -227,7 +227,7 @@ ax5.plot(
     marker="",
     color="black",
 )
-ax5.set_xlim(
+ax5.set_ylim(
     0,
 )
 #ax5.set_ylim(0, 120)
@@ -249,7 +249,7 @@ ax6.plot(
     marker="",
     color="black",
 )
-ax6.set_xlim(
+ax6.set_ylim(
     0,
 )
 #ax6.set_xlabel("Time (s)", fontsize=8)
@@ -265,7 +265,7 @@ ax7.plot(
     marker="",
     color="black",
 )
-ax7.set_xlim(
+ax7.set_ylim(
     0,
 )
 #ax7.set_xlabel("Time (s)", fontsize=8)

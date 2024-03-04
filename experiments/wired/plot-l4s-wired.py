@@ -84,7 +84,7 @@ ax2.plot(
     color="black",
     label="100ms throughput samples",
 )
-ax2.set_xlim(
+ax2.set_ylim(
     0,
 )
 ax2.set_ylim(0, 120)
@@ -105,7 +105,7 @@ ax3.plot(
     color="black",
     label="100ms throughput samples",
 )
-ax3.set_xlim(
+ax3.set_ylim(
     0,
 )
 ax3.set_ylim(0, 120)
