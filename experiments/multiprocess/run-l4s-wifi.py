@@ -7,6 +7,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import re
+import multiprocessing
 
 
 def buildPlotTitle(numCubic, numPrague, numBackground):
@@ -19,9 +20,12 @@ def buildPlotTitle(numCubic, numPrague, numBackground):
 
 
 def stageResultsDirectory(rootResultsdir, label):
+    path_to_ns3_dir = "../../"
+    path_to_ns3_script = "../../ns3"
+
     # Create a unique timestamped results directory
     formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    resultsdir = os.path.join(rootResultsdir, label + "-" + formatted_date)
+    resultsdir = os.path.join(rootResultsdir, label + "_" + formatted_date)
     os.makedirs(resultsdir, exist_ok=False)
 
     # Copy the plotting file into the results directory
@@ -36,8 +40,10 @@ def stageResultsDirectory(rootResultsdir, label):
 
     return resultsdir
 
-
 def runNS3Build(build_filepath):
+    path_to_ns3_dir = "../../"
+    path_to_ns3_script = "../../ns3"
+
     try:
         with open(build_filepath, "w") as out:
             subprocess.run(
@@ -48,7 +54,9 @@ def runNS3Build(build_filepath):
         sys.exit(e.returncode)
 
 
-def runNS3Simulation(run_filepath, arguments):
+def runNS3Simulation(run_filepath, arguments, plotTitle):
+    path_to_ns3_dir = "../../"
+    path_to_ns3_script = "../../ns3"
     # Run l4s-wifi
     resultsDir = os.path.dirname(run_filepath)
     with open(run_filepath, "w") as out:
@@ -124,9 +132,7 @@ def parse_csv_to_dataframe(file_name):
 
             for col in df.columns:
                 if col != "Test Case":
-                    # Convert the value to string and strip quotes
                     value = str(row[col]).strip("\"'")
-                    # Add each field and its value to the command string
                     cmd_args.append(f"--{col}={value}")
 
             result_dict[row["Test Case"]] = " ".join(cmd_args)
@@ -154,52 +160,136 @@ def create_final_dataframe(results):
     df = pd.DataFrame(results)
     return df
 
-
 def is_cubic_or_prague(filename):
     port_match = re.search(r"192\.168\.1\.2\s(\d{3})", filename)
     if port_match:
-        port_number = int(
-            port_match.group(1)
-        )  # The first group captures the port number
+        port_number = int(port_match.group(1))
         if 100 <= port_number <= 199:
             return "prague"
         elif 200 <= port_number <= 299:
             return "cubic"
     return None
 
-
 def process_test_directory(test_dir_path):
-    # Initialize dictionaries to hold DataFrames for each category and direction
     data = {
         "cubic": {"UL": pd.DataFrame(), "DL": pd.DataFrame()},
-        "prague": {"UL": pd.DataFrame(), "DL": pd.DataFrame()},
+        "prague": {"UL": pd.DataFrame(), "DL": pd.DataFrame()}
     }
 
+    # Process latency files
     for file in os.listdir(test_dir_path):
         if file.endswith("latency.csv"):
             direction = "UL" if "192.168.1.2" in file.split(" to ")[0] else "DL"
             category = is_cubic_or_prague(file)
             if category:
-                df = pd.read_csv(os.path.join(test_dir_path, file))
-                # Calculate bandwidth
-                bandwidth = (df["Frame Length"].sum() / df["Timestamp"].max()) / 1000000
-                df["Bandwidth"] = bandwidth
-                if not data[category][direction].empty:
-                    data[category][direction] = pd.concat(
-                        [data[category][direction], df], ignore_index=True
-                    )
+                try:
+                    df = pd.read_csv(os.path.join(test_dir_path, file), encoding='ISO-8859-1')
+                    if not data[category][direction].empty:
+                        data[category][direction] = pd.concat([data[category][direction], df], ignore_index=True)
+                    else:
+                        data[category][direction] = df
+                except UnicodeDecodeError:
+                    print(f"Error decoding file: {file}")
+
+    # Process Bandwidth Calculation
+    for direction, summary_file in [("DL", "summary_table_downstream.csv"), ("UL", "summary_table_upstream.csv")]:
+        summary_path = os.path.join(test_dir_path, summary_file)
+        if os.path.exists(summary_path):
+            try:
+                summary_df = pd.read_csv(summary_path, encoding='ISO-8859-1')
+                # Assume 'Flow ID' column exists and categorization logic is applied here
+                for category in ['cubic', 'prague']:
+                    # Filter rows based on category using is_cubic_or_prague logic on 'Flow ID'
+                    filtered_df = summary_df[summary_df['Flow ID'].apply(lambda x: is_cubic_or_prague(x) == category)]
+                    bandwidth = filtered_df['Mean data rate (Mbps)'].sum() if not filtered_df.empty else 0
+                    if not data[category][direction].empty:
+                        data[category][direction]['Bandwidth (Mbps)'] = bandwidth
+                    else:
+                        # Create an empty DataFrame with a 'Bandwidth (Mbps)' column if it doesn't exist
+                        data[category][direction] = pd.DataFrame({'Bandwidth (Mbps)': [bandwidth]})
+            except UnicodeDecodeError as e:
+                print(f"Error reading {summary_file}: {e}")
+
+    # Process "CE %" from summary tables
+    for direction, summary_file in [("DL", "summary_table_downstream.csv"), ("UL", "summary_table_upstream.csv")]:
+        summary_path = os.path.join(test_dir_path, summary_file)
+        if os.path.exists(summary_path):
+            summary_df = pd.read_csv(summary_path, encoding='ISO-8859-1')
+            # Ensure 'Num CE' and 'Num Packets' are numeric and handle potential missing values
+            summary_df['Num CE'] = pd.to_numeric(summary_df['Num CE'], errors='coerce').fillna(0)
+            summary_df['Num Packets'] = pd.to_numeric(summary_df['Num Packets'], errors='coerce').fillna(1)  # Avoid division by zero
+            summary_df['CE %'] = (summary_df['Num CE'] / summary_df['Num Packets']) * 100
+            
+            for category in ['cubic', 'prague']:
+                filtered_df = summary_df[summary_df['Flow ID'].apply(lambda x: is_cubic_or_prague(x) == category)]
+                ce_percentage = filtered_df['CE %'].sum() if not filtered_df.empty else 0
+                
+                if 'CE %' not in data[category][direction].columns:
+                    data[category][direction] = data[category][direction].assign(**{'CE %': ce_percentage})
                 else:
-                    data[category][direction] = df
+                    data[category][direction]['CE %'] += ce_percentage
 
     return data
 
+def processResults(root_dir):
+    all_results = []
+
+    test_run_dirs = [
+        d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))
+    ]
+
+    for test_dir in test_run_dirs:
+        test_dir_path = os.path.join(root_dir, test_dir, "Test")
+        data = process_test_directory(test_dir_path)
+
+        # Initialize a template for the results dictionary for this test directory
+        test_results_template = {"Label": test_dir}
+
+        for direction in ["UL", "DL"]:
+            # Initialize default values
+            default_stats = {"Average Latency": None, "P10 Latency": None, "P90 Latency": None, "P99 Latency": None, "StdDev Latency": None}
+
+            # Compute statistics for cubic and prague if data is available
+            if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
+                stats_cubic = compute_statistics(data["cubic"][direction])
+            else:
+                stats_cubic = default_stats
+            bandwidth_cubic = data["cubic"][direction]["Bandwidth (Mbps)"].mean() if "Bandwidth (Mbps)" in data["cubic"][direction].columns else 0
+            ce_cubic = data["cubic"][direction]["CE %"].mean() if "CE %" in data["cubic"][direction].columns else 0
+
+            if not data["prague"][direction].empty and "Latency" in data["prague"][direction].columns:
+                stats_prague = compute_statistics(data["prague"][direction])
+            else:
+                stats_prague = default_stats
+            bandwidth_prague = data["prague"][direction]["Bandwidth (Mbps)"].mean() if "Bandwidth (Mbps)" in data["prague"][direction].columns else 0
+            ce_prague = data["prague"][direction]["CE %"].mean() if "CE %" in data["prague"][direction].columns else 0
+
+            # Merge cubic and prague stats into the results template
+            for key, value in stats_cubic.items():
+                test_results_template[f"{key} {direction} Cubic"] = value
+            test_results_template[f"Average Bandwidth {direction} Cubic (Mbps)"] = bandwidth_cubic
+            test_results_template[f"CE % {direction} Cubic"] = ce_cubic
+
+            for key, value in stats_prague.items():
+                test_results_template[f"{key} {direction} Prague"] = value
+            test_results_template[f"Average Bandwidth {direction} Prague (Mbps)"] = bandwidth_prague
+            test_results_template[f"CE % {direction} Prague"] = ce_prague
+
+        all_results.append(test_results_template)
+
+
+    df_results = pd.DataFrame(all_results)
+    results_csv_path = os.path.join(root_dir, "processed_results.csv")
+    df_results.to_csv(results_csv_path, index=False)
+
+    print(f"Combined results saved to {os.path.join(root_dir, 'processed_results.csv')}")
 
 def merge_input_with_results(root_dir):
     input_df = pd.read_csv("config.csv")  # Contains "Test Case"
-    results_df = pd.read_csv(os.path.join(root_dir, "results_combined.csv"))
+    results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
 
-    # Test Case should match first part of the Label
-    results_df["Test Case Match"] = results_df["Label"].apply(lambda x: x.split("-")[0])
+    # Match the test case label from directory names so they line up
+    results_df["Test Case Match"] = results_df["Label"].apply(lambda x: x.split("_")[0])
 
     merged_df = pd.merge(
         results_df,
@@ -224,116 +314,40 @@ def merge_input_with_results(root_dir):
     )
     merged_df = merged_df[new_column_order]
 
-    final_csv_path = os.path.join(root_dir, "merged_results.csv")
+    final_csv_path = os.path.join(root_dir, "final_results.csv")
     merged_df.to_csv(final_csv_path, index=False)
 
     print(f"Final merged results saved to {final_csv_path}")
 
-
-def processResults(root_dir):
-    all_results = []
-
-    test_run_dirs = [
-        d
-        for d in os.listdir(root_dir)
-        if os.path.isdir(os.path.join(root_dir, d)) and d.startswith("TC")
-    ]
-
-    for test_dir in test_run_dirs:
-        test_dir_path = os.path.join(root_dir, test_dir, "Test")
-        data = process_test_directory(test_dir_path)
-
-        # Initialize a template for the results dictionary
-        test_results_template = {"Label": test_dir}
-
-        # Collect and combine statistics for both categories side by side for each direction
-        for direction in ["UL", "DL"]:
-            # Compute statistics for both categories
-            stats_cubic = compute_statistics(data["cubic"][direction])
-            bandwidth_cubic = (
-                data["cubic"][direction]["Bandwidth"].mean()
-                if not data["cubic"][direction].empty
-                else 0
-            )
-            stats_prague = compute_statistics(data["prague"][direction])
-            bandwidth_prague = (
-                data["prague"][direction]["Bandwidth"].mean()
-                if not data["prague"][direction].empty
-                else 0
-            )
-
-            # Add cubic and prague stats to the test results template, handling cases where one might not exist
-            if stats_cubic:
-                for key, value in stats_cubic.items():
-                    test_results_template[f"{key} {direction} Cubic"] = value
-                if bandwidth_cubic is not None:
-                    test_results_template[
-                        f"Average Bandwidth {direction} Cubic"
-                    ] = bandwidth_cubic
-
-            if stats_prague:
-                for key, value in stats_prague.items():
-                    test_results_template[f"{key} {direction} Prague"] = value
-                if bandwidth_prague is not None:
-                    test_results_template[
-                        f"Average Bandwidth {direction} Prague"
-                    ] = bandwidth_prague
-
-        all_results.append(test_results_template)
-
-    df_results = pd.DataFrame(all_results)
-    df_results.to_csv(os.path.join(root_dir, "results_combined.csv"), index=False)
-
-    print(
-        f"Combined results with bandwidth saved to {os.path.join(root_dir, 'results_combined.csv')}"
-    )
-
-
-if __name__ == "__main__":
-    # If not executing this in an experiments subdirectory, need to change this
-    # The assumed starting directory is 'experiments/<name>'
+def run_simulation(test_case, arguments):
     path_to_ns3_dir = "../../"
-    # The assumed execution directory is 'experiments/<name>/results-YYmmdd--HHMMSS'
     path_to_ns3_script = "../../ns3"
 
-    # # In future, add parametric job control here (multiprocessing.Pool)
-    # numCubic = 1
-    # numPrague = 1
-    # numBackground = 0
-    # numBytes = 100000000
-    # duration = 30
-    # # wanLinkDelay is 1/2 of the desired base RTT
-    # wanLinkDelay = "10ms"
-    # mcs = 2
-    # channelWidth = 80
-    # spatialStreams = 1
-    # flowControl = 1
-    # limit = 65535
-    # scale = 1
-    #
-    # # Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
-    # # Zero disables the explicit setting of the WifiRemoteStationManager attribute
-    # rtsCtsThreshold = 0
-    # showProgress = 0
-    # useReno = 0
+    plotTitle = f"Simulation {test_case}"
 
-    configFile = "config.csv"
-    testCases = parse_csv_to_dataframe(configFile)
 
+    print(f"Test Case: {test_case}, Arguments: {arguments}")
+    resultsDir = stageResultsDirectory(rootResultsdir, test_case)
+    runNS3Simulation(os.path.join(resultsDir, "run.txt"), arguments, plotTitle)
+
+if __name__ == "__main__":
     # Create root multiprocessing directory
     formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
     rootResultsdir = "multiresults" + "-" + formatted_date
     os.makedirs(rootResultsdir, exist_ok=False)
 
-    for tc, arguments in testCases.items():
-        print(f"Test Case: {tc}, Arguments: {arguments}")
-        # plotTitle = buildPlotTitle(numCubic, numPrague, numBackground)
+    build_filepath = os.path.join(rootResultsdir, "build.txt")
+    runNS3Build(build_filepath)
 
-        plotTitle = tc
-        resultsDir = stageResultsDirectory(rootResultsdir, tc)
-        runNS3Build(os.path.join(resultsDir, "build.txt"))
-        runNS3Simulation(os.path.join(resultsDir, "run.txt"), arguments)
+    configFile = "config.csv"
+    testCases = parse_csv_to_dataframe(configFile)
 
+    pool_args = [(tc, args) for tc, args in testCases.items()]
+
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.starmap(run_simulation, pool_args)
+
+    # rootResultsdir = "multiresults-20240303-214151"
     processResults(rootResultsdir)
     merge_input_with_results(rootResultsdir)
     sys.exit()
