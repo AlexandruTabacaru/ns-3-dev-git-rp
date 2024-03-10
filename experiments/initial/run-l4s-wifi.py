@@ -36,6 +36,9 @@ scale = 1
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
 rtsCtsThreshold = 0
 showProgress = 0
+# enablePcapAll will generate pcap traces for all interfaces
+enablePcapAll = 0
+# enablePcap will generate pcap traces only for endpoints
 enablePcap = 1
 useReno = 0
 
@@ -55,6 +58,7 @@ arguments += " --scale=" + str(scale)
 arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
 arguments += " --maxAmsduSize=" + str(maxAmsduSize)
 arguments += " --showProgress=" + str(showProgress)
+arguments += " --enablePcapAll=" + str(enablePcapAll)
 arguments += " --enablePcap=" + str(enablePcap)
 arguments += " --useReno=" + str(useReno)
 
