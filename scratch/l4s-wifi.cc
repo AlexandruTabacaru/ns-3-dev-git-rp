@@ -98,6 +98,7 @@ std::ofstream g_filePragueEcnState;
 std::ofstream g_filePragueRtt;
 Time g_pragueThroughputInterval = MilliSeconds(100);
 void TracePragueThroughput();
+void CalculatePragueThroughput();
 void TracePragueTx(Ptr<const Packet> packet,
                    const TcpHeader& header,
                    Ptr<const TcpSocketBase> socket);
@@ -111,7 +112,7 @@ void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
                           TcpSocketState::TcpCongState_t newVal);
 void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
 void TracePragueRtt(Time oldVal, Time newVal);
-void TracePragueClientSocket(Ptr<Application>, uint32_t);
+void TracePragueClientSocket(Ptr<Application>, uint32_t, bool, bool);
 void TracePragueServerSocket(Ptr<Socket>);
 
 uint32_t g_cubicData = 0;
@@ -125,6 +126,7 @@ std::ofstream g_fileCubicCongState;
 std::ofstream g_fileCubicRtt;
 Time g_cubicThroughputInterval = MilliSeconds(100);
 void TraceCubicThroughput();
+void CalculateCubicThroughput();
 void TraceCubicTx(Ptr<const Packet> packet,
                   const TcpHeader& header,
                   Ptr<const TcpSocketBase> socket);
@@ -137,7 +139,7 @@ void TraceCubicPacingRate(DataRate oldVal, DataRate newVal);
 void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
                          TcpSocketState::TcpCongState_t newVal);
 void TraceCubicRtt(Time oldVal, Time newVal);
-void TraceCubicClientSocket(Ptr<Application>, uint32_t);
+void TraceCubicClientSocket(Ptr<Application>, uint32_t, bool, bool);
 void TraceCubicServerSocket(Ptr<Socket>);
 
 // Count the number of flows to wait for completion before stopping the simulation
@@ -163,9 +165,6 @@ main(int argc, char* argv[])
     std::string wifiControlMode = "OfdmRate24Mbps";
     double staDistance = 1; // meters; distance of 10 m or more will cause packet loss at MCS 11
     const double pi = 3.1415927;
-    Time progressInterval = Seconds(5);
-    bool enablePcapAll = false;
-    bool enablePcap = true;
 
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
@@ -187,6 +186,11 @@ main(int argc, char* argv[])
     Time processingDelay = MicroSeconds(10);
     bool showProgress = false;
     uint32_t maxAmsduSize = 0; // zero means A-MSDU is disabled
+    Time progressInterval = Seconds(5);
+    bool enablePcapAll = false;
+    bool enablePcap = true;
+    bool enableTracesAll = false;
+    bool enableTraces = true;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -231,6 +235,12 @@ main(int argc, char* argv[])
                  "Whether to enable PCAP trace output at all interfaces",
                  enablePcapAll);
     cmd.AddValue("enablePcap", "Whether to enable PCAP trace output only at endpoints", enablePcap);
+    cmd.AddValue("enableTracesAll",
+                 "Whether to enable full time-series trace output",
+                 enableTracesAll);
+    cmd.AddValue("enableTraces",
+                 "Whether to enable time-series traces necessary for plot-l4s-wifi.py",
+                 enableTraces);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
@@ -523,38 +533,55 @@ main(int argc, char* argv[])
 
     // Set up traces
     // Bytes and throughput in WifiMacQueue
-    g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
     Ptr<WifiMacQueue> apWifiMacQueue =
         apDevice.Get(0)->GetObject<WifiNetDevice>()->GetMac()->GetTxopQueue(AC_BE);
-    NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
-    apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
-                                               MakeCallback(&TraceBytesInAcBeQueue));
-
-    Ptr<WifiPhy> apPhy = apDevice.Get(0)->GetObject<WifiNetDevice>()->GetPhy();
-    NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
-    g_fileWifiPhyTxPsduBegin.open("wifi-phy-tx-psdu-begin.dat", std::ofstream::out);
-    apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
-    g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
-    Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
+    if (enableTracesAll || enableTraces)
+    {
+        g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
+        NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
+        apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
+                                                   MakeCallback(&TraceBytesInAcBeQueue));
+    }
+    if (enableTracesAll)
+    {
+        Ptr<WifiPhy> apPhy = apDevice.Get(0)->GetObject<WifiNetDevice>()->GetPhy();
+        NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
+        g_fileWifiPhyTxPsduBegin.open("wifi-phy-tx-psdu-begin.dat", std::ofstream::out);
+        apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
+    }
+    if (enableTracesAll || enableTraces)
+    {
+        g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
+        Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
+    }
 
     // Throughput and latency for foreground flows, and set up close callbacks
     if (pragueClientApps.GetN())
     {
-        g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
-        g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
-        g_filePragueSsthresh.open("prague-ssthresh.dat", std::ofstream::out);
-        g_filePragueSendInterval.open("prague-send-interval.dat", std::ofstream::out);
-        g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
-        g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
-        g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
-        g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
+        if (enableTracesAll || enableTraces)
+        {
+            g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
+            g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
+            g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
+        }
+        if (enableTracesAll)
+        {
+            g_filePragueSsthresh.open("prague-ssthresh.dat", std::ofstream::out);
+            g_filePragueSendInterval.open("prague-send-interval.dat", std::ofstream::out);
+            g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
+            g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
+            g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
+        }
     }
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(
-            Seconds(1.0) + i * pragueStartOffset + TimeStep(1),
-            MakeBoundCallback(&TracePragueClientSocket, pragueClientApps.Get(i), i));
+        Simulator::Schedule(Seconds(1.0) + i * pragueStartOffset + TimeStep(1),
+                            MakeBoundCallback(&TracePragueClientSocket,
+                                              pragueClientApps.Get(i),
+                                              i,
+                                              enableTracesAll,
+                                              enableTraces));
         if (!i)
         {
             pragueServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
@@ -576,19 +603,30 @@ main(int argc, char* argv[])
 
     if (cubicClientApps.GetN())
     {
-        g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
-        g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
-        g_fileCubicSsthresh.open("cubic-ssthresh.dat", std::ofstream::out);
-        g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
-        g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
-        g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
-        g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+        if (enableTracesAll || enableTraces)
+        {
+            g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
+            g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
+            g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+        }
+        if (enableTracesAll)
+        {
+            g_fileCubicSsthresh.open("cubic-ssthresh.dat", std::ofstream::out);
+            g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
+            g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
+            g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
+            g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+        }
     }
     for (auto i = 0U; i < cubicClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
         Simulator::Schedule(Seconds(1.05) + i * cubicStartOffset + TimeStep(1),
-                            MakeBoundCallback(&TraceCubicClientSocket, cubicClientApps.Get(i), i));
+                            MakeBoundCallback(&TraceCubicClientSocket,
+                                              cubicClientApps.Get(i),
+                                              i,
+                                              enableTracesAll,
+                                              enableTraces));
         if (!i)
         {
             cubicServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
@@ -615,12 +653,19 @@ main(int argc, char* argv[])
                                         ->GetQueueDisc()
                                         ->GetObject<DualPi2QueueDisc>();
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
-    g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
-    dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
-    g_fileLSojourn.open("wifi-dualpi2-l-sojourn.dat", std::ofstream::out);
-    dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
-    g_fileCSojourn.open("wifi-dualpi2-c-sojourn.dat", std::ofstream::out);
-    dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+    if (enableTracesAll || enableTraces)
+    {
+        g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
+        dualPi2->TraceConnectWithoutContext("BytesInQueue",
+                                            MakeCallback(&TraceBytesInDualPi2Queue));
+    }
+    if (enableTracesAll)
+    {
+        g_fileLSojourn.open("wifi-dualpi2-l-sojourn.dat", std::ofstream::out);
+        dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
+        g_fileCSojourn.open("wifi-dualpi2-c-sojourn.dat", std::ofstream::out);
+        dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+    }
 
     // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
     bool connected = apWifiMacQueue->TraceConnectWithoutContext(
@@ -811,6 +856,15 @@ TracePragueThroughput()
 }
 
 void
+CalculatePragueThroughput()
+{
+    pragueThroughputCalculator.Update((g_pragueData * 8) / g_pragueThroughputInterval.GetSeconds() /
+                                      1e6);
+    Simulator::Schedule(g_pragueThroughputInterval, &CalculatePragueThroughput);
+    g_pragueData = 0;
+}
+
+void
 TracePragueCwnd(uint32_t oldVal, uint32_t newVal)
 {
     g_filePragueCwnd << Now().GetSeconds() << " " << newVal << std::endl;
@@ -849,7 +903,7 @@ TracePragueRtt(Time oldVal, Time newVal)
 }
 
 void
-TracePragueClientSocket(Ptr<Application> a, uint32_t i)
+TracePragueClientSocket(Ptr<Application> a, uint32_t i, bool enableTracesAll, bool enableTraces)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
     NS_ASSERT_MSG(bulk, "Application downcast failed");
@@ -860,13 +914,24 @@ TracePragueClientSocket(Ptr<Application> a, uint32_t i)
     tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TracePragueTx));
     if (i == 0)
     {
-        tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TracePragueCwnd));
-        tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TracePragueSsthresh));
-        tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TracePraguePacingRate));
-        tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TracePragueCongState));
-        tcp->TraceConnectWithoutContext("EcnState", MakeCallback(&TracePragueEcnState));
-        tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TracePragueRtt));
-        Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+        if (enableTracesAll || enableTraces)
+        {
+            tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TracePragueCwnd));
+            tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TracePragueRtt));
+            Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+        }
+        else
+        {
+            Simulator::Schedule(g_pragueThroughputInterval, &CalculatePragueThroughput);
+        }
+        if (enableTracesAll)
+        {
+            tcp->TraceConnectWithoutContext("SlowStartThreshold",
+                                            MakeCallback(&TracePragueSsthresh));
+            tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TracePraguePacingRate));
+            tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TracePragueCongState));
+            tcp->TraceConnectWithoutContext("EcnState", MakeCallback(&TracePragueEcnState));
+        }
     }
 }
 
@@ -908,6 +973,15 @@ TraceCubicThroughput()
 }
 
 void
+CalculateCubicThroughput()
+{
+    cubicThroughputCalculator.Update((g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() /
+                                     1e6);
+    Simulator::Schedule(g_cubicThroughputInterval, &CalculateCubicThroughput);
+    g_cubicData = 0;
+}
+
+void
 TraceCubicCwnd(uint32_t oldVal, uint32_t newVal)
 {
     g_fileCubicCwnd << Now().GetSeconds() << " " << newVal << std::endl;
@@ -939,7 +1013,7 @@ TraceCubicRtt(Time oldVal, Time newVal)
 }
 
 void
-TraceCubicClientSocket(Ptr<Application> a, uint32_t i)
+TraceCubicClientSocket(Ptr<Application> a, uint32_t i, bool enableTracesAll, bool enableTraces)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
     NS_ASSERT_MSG(bulk, "Application failed");
@@ -950,12 +1024,23 @@ TraceCubicClientSocket(Ptr<Application> a, uint32_t i)
     tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TraceCubicTx));
     if (i == 0)
     {
-        tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TraceCubicCwnd));
-        tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TraceCubicSsthresh));
-        tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TraceCubicPacingRate));
-        tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceCubicCongState));
-        tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TraceCubicRtt));
-        Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+        if (enableTracesAll || enableTraces)
+        {
+            tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TraceCubicCwnd));
+            tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TraceCubicRtt));
+            Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+        }
+        else
+        {
+            Simulator::Schedule(g_cubicThroughputInterval, &CalculateCubicThroughput);
+        }
+        if (enableTracesAll)
+        {
+            tcp->TraceConnectWithoutContext("SlowStartThreshold",
+                                            MakeCallback(&TraceCubicSsthresh));
+            tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TraceCubicPacingRate));
+            tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceCubicCongState));
+        }
     }
 }
 

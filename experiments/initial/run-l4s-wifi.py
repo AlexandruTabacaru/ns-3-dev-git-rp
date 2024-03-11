@@ -40,6 +40,10 @@ showProgress = 0
 enablePcapAll = 0
 # enablePcap will generate pcap traces only for endpoints
 enablePcap = 1
+# enableTracesAll will generate all time-series traces
+enableTracesAll = 0
+# enableTraces will generate time-series traces needed by plot-l4s-wifi.py
+enableTraces = 1
 useReno = 0
 
 arguments = " --numCubic=" + str(numCubic)
@@ -60,6 +64,8 @@ arguments += " --maxAmsduSize=" + str(maxAmsduSize)
 arguments += " --showProgress=" + str(showProgress)
 arguments += " --enablePcapAll=" + str(enablePcapAll)
 arguments += " --enablePcap=" + str(enablePcap)
+arguments += " --enableTracesAll=" + str(enableTracesAll)
+arguments += " --enableTraces=" + str(enableTraces)
 arguments += " --useReno=" + str(useReno)
 
 # Build a plot title; customize as needed
@@ -143,9 +149,10 @@ with open("version.diff", "w") as out:
     out.close()
 
 # Make a plot
-subprocess.run(
-    ["python3", "plot-l4s-wifi.py", plotTitle], stdout=subprocess.PIPE, text=True
-)
+if enableTracesAll or enableTraces:
+    subprocess.run(
+        ["python3", "plot-l4s-wifi.py", plotTitle], stdout=subprocess.PIPE, text=True
+    )
 
 try:
     subprocess.run(
