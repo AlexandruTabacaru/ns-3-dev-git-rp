@@ -177,7 +177,8 @@ main(int argc, char* argv[])
     uint16_t mcs = 2;
     uint32_t channelWidth = 80;
     uint32_t spatialStreams = 1;
-    // Default WifiMacQueue depth is roughly 300 ms at 200 Mbps ~= 5000 packets
+    // Default WifiMacQueue depth is roughly 40 ms at 2.4 Gbps ~= 8000 packets
+    // 2.4 Gbps is the maximum PHY rate for 160 MHz channels, 2 SS, MCS 11
     std::string wifiQueueSize = "5000p";
     bool flowControl = true;
     uint32_t limit = 65535;       // default flow control limit (max A-MPDU size in bytes)

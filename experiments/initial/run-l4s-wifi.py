@@ -22,8 +22,8 @@ wanLinkDelay = "2500us"
 mcs = 11
 channelWidth=20
 spatialStreams=2
-# Default WifiMacQueue size is now 5000 packets, but can be changed below
-wifiQueueSize = "5000p"
+# Default WifiMacQueue size is now 8000 packets, but can be changed below
+wifiQueueSize = "8000p"
 # If maxAmsduSize is zero, it will disable A-MSDU.  If non-zero, it will
 # try to form A-MSDUs (BE access category) up to the number of bytes specified
 maxAmsduSize = 0
