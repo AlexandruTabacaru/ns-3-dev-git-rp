@@ -47,6 +47,9 @@ def runNS3Build(build_filepath):
     try:
         with open(build_filepath, "w") as out:
             subprocess.run(
+                [path_to_ns3_script, "configure", "-d", "optimized"], stdout=out, stderr=out, check=True
+            )
+            subprocess.run(
                 [path_to_ns3_script, "build"], stdout=out, stderr=out, check=True
             )
     except subprocess.CalledProcessError as e:
@@ -62,6 +65,7 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
     with open(run_filepath, "w") as out:
         result = subprocess.run(
             [
+                "time",
                 path_to_ns3_script,
                 "run",
                 "--no-build",
@@ -72,6 +76,7 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
             ]
             + arguments.split(),
             stdout=out,
+            stderr=subprocess.STDOUT,
             text=True,
         )
     # Save the parameters used in a 'commandlog.txt' file
@@ -118,6 +123,47 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
             text=True,
         )
     except:
+        pass
+
+
+    # Clean up raw data files
+    try:
+        subprocess.run(
+            [
+                "rm",
+                resultsDir + "/" + "l4s-wifi-0-0.pcap",  
+                resultsDir + "/" + "l4s-wifi-1-0.pcap",  
+                resultsDir + "/" + "l4s-wifi-1-1.pcap",  
+                resultsDir + "/" + "l4s-wifi-2-0-ip.pcap",  
+                resultsDir + "/" + "l4s-wifi-2-0.pcap",
+                resultsDir + "/" + "cubic-cong-state.dat",   
+                resultsDir + "/" + "cubic-rtt.dat",            
+                resultsDir + "/" + "cubic-throughput.dat",        
+                resultsDir + "/" + "wifi-dualpi2-l-sojourn.dat",  
+                resultsDir + "/" + "wifi-throughput.dat",
+                resultsDir + "/" + "cubic-cwnd.dat",         
+                resultsDir + "/" + "cubic-send-interval.dat",  
+                resultsDir + "/" + "wifi-dualpi2-bytes.dat",      
+                resultsDir + "/" + "wifi-phy-tx-psdu-begin.dat",
+                resultsDir + "/" + "cubic-pacing-rate.dat",  
+                resultsDir + "/" + "cubic-ssthresh.dat",       
+                resultsDir + "/" + "wifi-dualpi2-c-sojourn.dat",  
+                resultsDir + "/" + "wifi-queue-bytes.dat",
+                resultsDir + "/" + "prague-cong-state.dat",  
+                resultsDir + "/" + "prague-ecn-state.dat",    
+                resultsDir + "/" + "prague-rtt.dat",            
+                resultsDir + "/" + "prague-ssthresh.dat",
+                resultsDir + "/" + "prague-cwnd.dat",        
+                resultsDir + "/" + "prague-pacing-rate.dat",  
+                resultsDir + "/" + "prague-send-interval.dat",  
+                resultsDir + "/" + "prague-throughput.dat",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+
+        )
+    except: 
         pass
 
 
