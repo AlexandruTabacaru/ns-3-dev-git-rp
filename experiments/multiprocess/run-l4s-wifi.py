@@ -117,7 +117,7 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
                 "/var/www/html/flaskapp/multiflow_ns3.sh",
                 resultsDir + "/" + "l4s-wifi-2-0-ip.pcap",
                 resultsDir + "/" + "l4s-wifi-0-0.pcap",
-                resultsDir + "/" + "Test",
+                resultsDir,
             ],
             stdout=subprocess.PIPE,
             text=True,
@@ -285,7 +285,7 @@ def processResults(root_dir):
     ]
 
     for test_dir in test_run_dirs:
-        test_dir_path = os.path.join(root_dir, test_dir, "Test")
+        test_dir_path = os.path.join(root_dir, test_dir)
         data = process_test_directory(test_dir_path)
 
         # Initialize a template for the results dictionary for this test directory
