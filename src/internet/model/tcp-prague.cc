@@ -51,7 +51,7 @@ TcpPrague::GetTypeId()
             .AddAttribute("AlphaOnInit",
                           "Initial alpha value",
                           DoubleValue(1.0),
-                          MakeDoubleAccessor(&TcpPrague::SetPragueAlpha),
+                          MakeDoubleAccessor(&TcpPrague::m_alpha),
                           MakeDoubleChecker<double>(0, 1))
             .AddAttribute("UseEct0",
                           "Use ECT(0) for ECN codepoint, if false use ECT(1)",
@@ -376,14 +376,6 @@ TcpPrague::NewRound(Ptr<TcpSocketState> tcb)
         ++m_round;
     }
     AiAckIncrease(tcb);
-}
-
-void
-TcpPrague::SetPragueAlpha(double alpha)
-{
-    NS_LOG_FUNCTION(this << alpha);
-
-    m_alpha = alpha;
 }
 
 void

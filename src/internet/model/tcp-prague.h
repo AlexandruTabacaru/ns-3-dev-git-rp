@@ -208,13 +208,6 @@ class TcpPrague : public TcpCongestionOps
     void EnterLoss(Ptr<TcpSocketState> tcb);
 
     /**
-     * \brief Sets the value of m_alpha
-     *
-     * \param alpha Prague alpha parameter
-     */
-    void SetPragueAlpha(double alpha);
-
-    /**
      * \brief Changes state of m_ceState to true
      *
      * \param tcb internal congestion state
