@@ -200,8 +200,9 @@ TcpPrague::UpdatePacingRate(Ptr<TcpSocketState> tcb) const
     // multiplying the numerator by a pacing ratio and then by 1e4 (total
     // of 1e6) is compensated by dividing by microseconds; resulting
     // DataRate argument is in units of bits/sec
-    DataRate rate((std::max(tcb->m_cWnd, tcb->m_bytesInFlight) * 8 * pacingFactor * 1e4) /
-                  tcb->m_lastRtt.Get().GetMicroSeconds());
+    uint64_t r = static_cast<uint64_t>(std::max(tcb->m_cWnd, tcb->m_bytesInFlight)) * 8 *
+                 pacingFactor * 1e4 / static_cast<uint64_t>(tcb->m_lastRtt.Get().GetMicroSeconds());
+    DataRate rate(r);
     if (rate < tcb->m_maxPacingRate)
     {
         NS_LOG_DEBUG("Pacing rate updated to: " << rate);
