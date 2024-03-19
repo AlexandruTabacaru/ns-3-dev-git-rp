@@ -80,7 +80,11 @@ TcpPrague::GetTypeId()
                                           TcpPrague::RTT_CONTROL_SCALABLE,
                                           "Scalable",
                                           TcpPrague::RTT_CONTROL_ADDITIVE,
-                                          "Additive"));
+                                          "Additive"))
+            .AddTraceSource("Alpha",
+                            "Value of TCP Prague alpha variable",
+                            MakeTraceSourceAccessor(&TcpPrague::m_alpha),
+                            "ns3::TracedValueCallback::Double");
     return tid;
 }
 

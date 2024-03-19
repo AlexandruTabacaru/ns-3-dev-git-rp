@@ -24,6 +24,8 @@
 
 #include "tcp-congestion-ops.h"
 
+#include "ns3/traced-value.h"
+
 namespace ns3
 {
 
@@ -234,7 +236,7 @@ class TcpPrague : public TcpCongestionOps
     uint32_t m_ackedBytesTotal;     //!< Total number of acked bytes
     SequenceNumber32 m_priorRcvNxt; //!< Sequence number of the first missing byte in data
     bool m_priorRcvNxtFlag; //!< Variable used in setting the value of m_priorRcvNxt for first time
-    double m_alpha;         //!< Parameter used to estimate the amount of network congestion
+    TracedValue<double> m_alpha; //!< Parameter used to estimate the amount of network congestion
     SequenceNumber32
         m_nextSeq;      //!< TCP sequence number threshold for beginning a new observation window
     bool m_nextSeqFlag; //!< Variable used in setting the value of m_nextSeq for first time
