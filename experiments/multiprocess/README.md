@@ -40,3 +40,7 @@ rtsCtsThreshold = 0
 showProgress = 0  
 enablePcap = 1  
 useReno = 0  
+
+# Publishing results
+
+To distribute the results of a test, a standalone HTML file may be generated. This is achieved using docToolchain, which requires Docker to be installed on the host system to run correctly.
