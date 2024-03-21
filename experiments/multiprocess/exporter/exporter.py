@@ -6,7 +6,6 @@ import subprocess
 import sys
 import argparse
 import shutil
-from typing import Any
 import jinja2
 import csv
 
@@ -16,7 +15,6 @@ def export(
     dct_path: Path,
     output_file_path: Path,
     log_file_path: str = "./log.txt",
-    template_name: str = "basic_export",
 ) -> None:
     """
     Given a CSV full of aggregated data measured on NS3, writes HTML displaying the results in output_file_path.
@@ -45,7 +43,7 @@ def export(
     jinja_env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(templates_dir), undefined=jinja2.StrictUndefined
     )
-    export_template = jinja_env.get_template(f"{template_name}.adoc.jinja")
+    export_template = jinja_env.get_template("split_tables.adoc.jinja")
 
     # Convert data back into csv
     csv_str = io.StringIO()
@@ -126,13 +124,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Given a CSV full of aggregated data measured on NS3, generates an HTML file displaying the results.",
     )
-    parser.add_argument(
-        "-t",
-        "--template",
-        choices=["basic_export", "split_tables"],
-        default="split_tables",
-        help="Template that will be used for export",
-    )
     parser.add_argument("input_csv", help="Path to the input CSV")
     parser.add_argument(
         "dct_path", help="Path to a directory containing a docToolchain project"
@@ -148,7 +139,7 @@ def main():
     dct_path = dct_project(args.dct_path)
     output_file_path = not_a_directory(args.output_file)
 
-    export(input_csv_path, dct_path, output_file_path, template_name=args.template)
+    export(input_csv_path, dct_path, output_file_path)
 
 
 if __name__ == "__main__":
