@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-import io
 from pathlib import Path
 import subprocess
 import sys
 import argparse
 import shutil
 import jinja2
-import csv
 
 
 def export(
