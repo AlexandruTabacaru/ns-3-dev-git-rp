@@ -35,7 +35,13 @@ ifdef::backend-html5[]
 ++++
 endif::backend-html5[]
 
-[%header,format=csv]
-|===
-include::target.csv[]
-|===
+// additional style to prevent line wrapping inside table
+ifdef::backend-html5[]
+++++
+<style>
+table * {white-space: nowrap;}
+</style>
+++++
+endif::backend-html5[]
+
+include::body.adoc[]

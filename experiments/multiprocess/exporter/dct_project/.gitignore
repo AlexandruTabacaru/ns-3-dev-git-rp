@@ -3,4 +3,4 @@ build/*
 .idea
 .vscode/*
 .DS_Store
-docs/template/target.csv
+docs/template/body.adoc

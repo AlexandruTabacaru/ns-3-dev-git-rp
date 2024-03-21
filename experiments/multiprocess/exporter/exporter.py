@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+import io
 from pathlib import Path
 import subprocess
 import sys
 import argparse
 import shutil
+import jinja2
+import csv
 
 
 def export(
@@ -30,9 +33,29 @@ def export(
     - stdout and stderr from docToolchain will be logged in the file at log_file_path
     """
 
-    # Copy csv into the docToolchain project to be incorporated in the build
-    build_csv_path = dct_path / "docs" / "template" / "target.csv"
-    shutil.copy(input_csv_path, build_csv_path)
+    # Read csv in
+    with input_csv_path.open(newline="") as csv_in:
+        reader = csv.DictReader(csv_in)
+        data = [row for row in reader]
+
+    # Initialize Jinja2
+    templates_dir = dct_path / "jinja_templates"
+    jinja_env = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(templates_dir), undefined=jinja2.StrictUndefined
+    )
+    basic_export_template = jinja_env.get_template("basic_export.adoc.jinja")
+
+    # Convert data back into csv
+    csv_str = io.StringIO()
+    writer = csv.DictWriter(
+        csv_str, quoting=csv.QUOTE_NONNUMERIC, fieldnames=data[0].keys()
+    )
+    writer.writerows(data)
+
+    # Render jinja template into AsciiDoc file
+    template_input = {"raw_csv": csv_str.getvalue()}
+    document_path = dct_path / "docs" / "template" / "body.adoc"
+    render_to_file(basic_export_template, document_path, template_input)
 
     # Execute docToolchain
     try:
@@ -51,6 +74,13 @@ def export(
     # Copy the HTML created by docToolchain into output_file_path
     built_html = dct_path / "build" / "html5" / "template" / "experiment-results.html"
     shutil.copy(built_html, output_file_path)
+
+
+# Render a Jinja2 template to an output file at path
+def render_to_file(template: jinja2.Template, path: Path, data: dict) -> None:
+    content = template.render(data)
+    with path.open("w") as output_file:
+        output_file.write(content)
 
 
 def existing_filepath(filepath: str) -> Path:
