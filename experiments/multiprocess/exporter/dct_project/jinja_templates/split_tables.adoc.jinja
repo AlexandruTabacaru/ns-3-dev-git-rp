@@ -29,7 +29,7 @@
 *** stem:[P99PDV =] 99^th^ percentile packet latency - 1^st^ percentile packet latency
 *** Using all packets delivered per flow type
 
-
+{% if focused_csvs|length > 0 %}
 == DualPI2 Prague(a) vs. Cubic(b)
 
 === Table Legend
@@ -51,27 +51,19 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 |====
 ====
 
-=== 20 MHz Channel
+{% endif %}
+
+
+{% for focused_csv in focused_csvs %}
+=== {{ focused_csv.name }}
 
 [options="header"]
+[%header,format=csv]
 |====
-||1v1|1+1|2+2|4+4
-|2ms base RTT| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms
-|10ms base RTT| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms
-|50ms base RTT| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms| 0.0 +
-6.9ms
+{{ focused_csv.content }}
 |====
+
+{% endfor %}
 
 == Detailed Results
 
