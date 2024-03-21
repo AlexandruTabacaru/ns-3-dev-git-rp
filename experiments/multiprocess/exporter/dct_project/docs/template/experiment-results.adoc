@@ -35,11 +35,25 @@ ifdef::backend-html5[]
 ++++
 endif::backend-html5[]
 
-// additional style to prevent line wrapping inside table
+// miscellaneous additional styles
 ifdef::backend-html5[]
 ++++
 <style>
-table * {white-space: nowrap;}
+.rawdata * {white-space: nowrap;}
+div:has(> .rawdata) {overflow-x: auto; border: 1px solid #e7e7e9}
+
+.sidebarblock {
+	width: 40%;
+	padding-left: 0.5rem;
+	margin-left: 0.5rem;
+	float: right;
+	box-shadow: inset 5px 0 5px -5px #29627e;
+	font-style: italic;
+}
+.sidebarblock > p {
+	margin: 0.5rem;
+}
+
 </style>
 ++++
 endif::backend-html5[]

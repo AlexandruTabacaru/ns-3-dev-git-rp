@@ -1,0 +1,82 @@
+:stem:
+
+== Simulation KPIs
+
+****
+[options="header"]
+|====
+|LRR|ratio
+|stem:[0]|stem:[1:1]
+|stem:[0.1]|stem:[~1.25:1]
+|stem:[0.2]|stem:[~1.6:1]
+|stem:[0.3]|stem:[~2:1]
+|stem:[0.4]|stem:[~2.5.:1]
+|stem:[0.5]|stem:[~3.:1]
+|====
+****
+
+
+* Throughput Performance
+** *LogRateRatio*, stem:[text(LRR) = log_10(text(rate)_a/text(rate)_b)]
+*** Using average per-flow throughput
+*** e.g.
+**** stem:[rate_a =] average, per-flow Prague throughput
+**** stem:[rate_b =] average, per-flow Cubic throughput
+*** stem:[0 = 1:1] ratio
+*** stem:[+0.3 ~~ 2:1] ratio, stem:[-0.3 ~~ 1:2] ratio
+* Latency Performance
+** "*Latency Benefit*" stem:[= (text(P99PDV)_b) - (P99PDV_a)]
+*** stem:[P99PDV =] 99^th^ percentile packet latency - 1^st^ percentile packet latency
+*** Using all packets delivered per flow type
+
+
+== DualPI2 Prague(a) vs. Cubic(b)
+
+=== Table Legend
+
+[NOTE]
+====
+.1v1
+Comparing performance of a lone prague flow to performance of a lone cubic flow
+
+.n+n
+stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
+
+.Key
+[options="header"]
+|====
+|Cell Data
+|0.0 <- LRR +
+6.9ms <- Latency Benefit
+|====
+====
+
+=== 20 MHz Channel
+
+[options="header"]
+|====
+||1v1|1+1|2+2|4+4
+|2ms base RTT| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms
+|10ms base RTT| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms
+|50ms base RTT| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms| 0.0 +
+6.9ms
+|====
+
+== Detailed Results
+
+[.rawdata]
+[%header,format=csv]
+|===
+{{ raw_csv }}
+|===
