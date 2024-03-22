@@ -67,8 +67,23 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 
 == Detailed Results
 
-[.rawdata]
+[.rawdata#detailedTable]
 [%header,format=csv]
 |===
 {{ raw_csv }}
 |===
+
+
+ifdef::backend-html5[]
+++++
+<script>
+let table = new DataTable('#detailedTable', {
+    pageLength: 10,
+    layout: {
+        top2Start: 'buttons'
+    },
+    buttons: [{ extend: 'copy', text: 'Copy to clipboard' }, 'csv', 'excel'],
+});
+</script>
+++++
+endif::backend-html5[]

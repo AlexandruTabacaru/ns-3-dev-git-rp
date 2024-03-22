@@ -35,12 +35,25 @@ ifdef::backend-html5[]
 ++++
 endif::backend-html5[]
 
+// DataTables JavaScript library
+ifdef::backend-html5[]
+++++
+<style>
+include::../../thirdparty/DataTables/datatables.min.css[]
+</style>
+<script>
+include::../../thirdparty/DataTables/datatables.min.js[]
+</script>
+++++
+endif::backend-html5[]
+
 // miscellaneous additional styles
 ifdef::backend-html5[]
 ++++
 <style>
-.rawdata * {white-space: nowrap;}
-div:has(> .rawdata) {overflow-x: auto; border: 1px solid #e7e7e9}
+/*div:has(> .rawdata) {overflow-x: auto; border: 1px solid #e7e7e9}*/
+div:has(> .rawdata) {overflow-x: auto;}
+th, td { white-space: nowrap; }
 
 .sidebarblock {
 	width: 40%;
