@@ -51,8 +51,7 @@ endif::backend-html5[]
 ifdef::backend-html5[]
 ++++
 <style>
-/*div:has(> .rawdata) {overflow-x: auto; border: 1px solid #e7e7e9}*/
-div:has(> .rawdata) {overflow-x: auto;}
+div:has(> #detailedTable) {overflow-x: auto;}
 th, td { white-space: nowrap; }
 
 .sidebarblock {

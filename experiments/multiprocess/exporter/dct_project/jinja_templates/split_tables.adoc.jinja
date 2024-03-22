@@ -57,6 +57,7 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 {% for focused_csv in focused_csvs %}
 === {{ focused_csv.name }}
 
+[.focusedTable]
 [options="header"]
 [%header,format=csv]
 |====
@@ -67,7 +68,7 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 
 == Detailed Results
 
-[.rawdata#detailedTable]
+[#detailedTable]
 [%header,format=csv]
 |===
 {{ raw_csv }}
@@ -77,13 +78,31 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 ifdef::backend-html5[]
 ++++
 <script>
-let table = new DataTable('#detailedTable', {
+let detailedTable = new DataTable('#detailedTable', {
     pageLength: 10,
     layout: {
-        top2Start: 'buttons'
+        topStart: 'search',
+        topEnd: 'pageLength',
+        top2Start: {
+            buttons: ['searchBuilder']
+        },
+        top2End: 'buttons',
     },
     buttons: [{ extend: 'copy', text: 'Copy to clipboard' }, 'csv', 'excel'],
+    select: true
 });
+let focusedTables = new DataTable('.focusedTable', {
+    layout: {
+        topStart: null,
+        topEnd: 'buttons',
+        bottomStart: 'info',
+        bottomEnd: null
+    },
+    paging: false,
+    buttons: [{ extend: 'copy', text: 'Copy to clipboard' }, 'csv', 'excel'],
+    select: true
+});
+
 </script>
 ++++
 endif::backend-html5[]
