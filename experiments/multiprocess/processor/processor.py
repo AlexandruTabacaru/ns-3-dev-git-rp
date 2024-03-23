@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import re
+from collections import defaultdict
 
 def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
@@ -196,7 +197,7 @@ def post_process(root_dir, hidden_columns):
     df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
     detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
-    df.to_csv(post_processed_final_csv_path, index=False)
+    df.to_csv(detailed_csv_path, index=False)
 
     print(f"Post Processed Final merged results saved to {detailed_csv_path}")
 
