@@ -217,5 +217,10 @@ if __name__ == "__main__":
 
     # rootResultsdir = "multiresults-20240303-214151"
     processResults(rootResultsdir)
+
     merge_input_with_results(rootResultsdir)
+
+    hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
+    post_process(rootResultsdir, hidden_columns)
+    process_summary_csv(rootResultsdir)
     sys.exit()
