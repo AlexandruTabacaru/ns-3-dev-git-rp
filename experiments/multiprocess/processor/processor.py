@@ -143,6 +143,64 @@ def processResults(root_dir):
 
     print(f"Combined results saved to {os.path.join(root_dir, 'processed_results.csv')}")
 
+def post_process(root_dir, hidden_columns):
+    df = pd.read_csv(os.path.join(root_dir, "results.csv"))
+
+    # Extract TS# values from the Test Case column
+    df['TS#'] = df['Test Case'].str.extract(r'TS(\d+)').astype(int)
+
+    # Compute the max_ts value
+    max_ts = df['TS#'].max()
+
+    df['Log Rate Ratio'] = np.nan
+    df['Latency Benefit'] = np.nan
+
+    for index, row in df.iterrows():
+        test_case = row['Test Case']
+        tc_num = int(test_case.split('-')[1][2:])  # Extract TC# as integer
+
+        if tc_num == 1:
+            continue
+
+        # For TC2 and above, compute values
+        if tc_num >= 2:
+            if tc_num == 2:
+                # For TC2, use different rows for Prague and Cubic values
+                target_index = index - max_ts
+                if target_index >= 0:
+                    try:
+                        df.at[index, 'Log Rate Ratio'] = round(np.log10(
+                            row['Average Bandwidth DL Prague (Mbps)'] /
+                            df.at[target_index, 'Average Bandwidth DL Cubic (Mbps)']
+                        ), 3)
+                        df.at[index, 'Latency Benefit'] = round(
+                            (df.at[target_index, 'P99 Latency DL Cubic'] - 
+                            row['P99 Latency DL Prague']),3)
+                    except ZeroDivisionError:
+                        df.at[index, 'Log Rate Ratio'] = np.nan
+            else:
+                # For TC3 and above, use same row values
+                try:
+                    df.at[index, 'Log Rate Ratio'] = round(np.log10(
+                        row['Average Bandwidth DL Prague (Mbps)'] / 
+                        row['Average Bandwidth DL Cubic (Mbps)']
+                    ),3)
+                except ZeroDivisionError:
+                    df.at[index, 'Log Rate Ratio'] = np.nan
+                df.at[index, 'Latency Benefit'] = round(
+                    row['P99 Latency DL Cubic'] - 
+                    row['P99 Latency DL Prague'],3)
+
+    # Drop temporary columns
+    columns_to_drop = ['Test Case Match', 'AP', 'TC', 'TS', 'LS', 'TS#'] + hidden_columns
+    df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
+
+    detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
+    df.to_csv(post_processed_final_csv_path, index=False)
+
+    print(f"Post Processed Final merged results saved to {detailed_csv_path}")
+
+
 def merge_input_with_results(root_dir):
     input_df = pd.read_csv("config.csv")  # Contains "Test Case"
     results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
@@ -183,7 +241,7 @@ def merge_input_with_results(root_dir):
     # columns_to_drop = ['Test Case Match', 'AP', 'TC', 'TS', 'LS']
     # sorted_merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
-    final_csv_path = os.path.join(root_dir, "final_results.csv")
+    final_csv_path = os.path.join(root_dir, "results.csv")
     sorted_merged_df.to_csv(final_csv_path, index=False)
 
     print(f"Final merged results saved to {final_csv_path}")
