@@ -245,3 +245,49 @@ def merge_input_with_results(root_dir):
     sorted_merged_df.to_csv(final_csv_path, index=False)
 
     print(f"Final merged results saved to {final_csv_path}")
+
+def process_summary_csv(rootResultsdir):
+    df = pd.read_csv(os.path.join(rootResultsdir, "detailed_results.csv"))
+
+    # Use subset of csv
+    data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit']].copy()
+
+    # Process the Test Case to determine the number of files, rows, and columns
+    data_subset['LS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[-1][2:])) # Number of CSV files
+    data_subset['TS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[2][2:])) # Number of rows
+    data_subset['TC'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[1][2:])) # Number of columns
+
+    # Filter out TC1
+    valid_data_subset = data_subset[(data_subset['TC'] > 1) & data_subset['Log Rate Ratio'].notna() & data_subset['Latency Benefit'].notna()]
+
+    max_ls = valid_data_subset['LS'].max()
+    max_ts = valid_data_subset['TS'].max()
+
+    output_data_valid = defaultdict(lambda: np.zeros((max_ts, max(valid_data_subset['TC']) - 1), dtype=object))
+
+    row_labels_map = {1: "2ms base RTT", 2: "10ms base RTT", 3: "50ms base RTT"}
+    column_labels_map = {2: "1v1", 3: "1+1", 4: "2+2", 5: "4+4"}
+
+    for _, row in valid_data_subset.iterrows():
+        output_index = row['LS']
+        row_index = row['TS'] - 1
+        col_index = row['TC'] - 2
+
+        cell_content = f"{row['Log Rate Ratio']:+.1f} +\n{row['Latency Benefit']:.1f}ms"
+
+        output_data_valid[(output_index, row['channelWidth'])][row_index, col_index] = cell_content
+
+    # Generate CSV files
+    output_files = []
+    for (ls_index, channel_width), data_matrix in output_data_valid.items():
+        # Create a DataFrame for the CSV output
+        df_output = pd.DataFrame(data_matrix, columns=[column_labels_map[i+2] for i in range(data_matrix.shape[1])])
+        df_output.index = [row_labels_map[i+1] for i in range(max_ts)]
+        df_output.index.name = ""
+
+
+        file_name = os.path.join(rootResultsdir, f"{channel_width}_MHz_Channel.csv")
+        df_output.to_csv(file_name)
+
+        print(f"Summary csv saved to {file_name}")
+
