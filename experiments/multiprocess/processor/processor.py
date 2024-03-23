@@ -158,23 +158,32 @@ def merge_input_with_results(root_dir):
         how="left",
     )
 
-    # Remove the temp column after merging
-    merged_df.drop("Test Case Match", axis=1, inplace=True)
+    # Extract AP#, LS#, TC#, TS# for sorting
+    merged_df[['AP', 'TC', 'TS', 'LS']] = merged_df['Test Case'].str.extract(r'AP(\d+)-TC(\d+)-TS(\d+)-LS(\d+)')
+    merged_df[['AP', 'TC', 'TS', 'LS']] = merged_df[['AP', 'TC', 'TS', 'LS']].astype(int)
 
-    input_columns = [col for col in input_df.columns if col != "Test Case"]
-    new_column_order = (
-        ["Label"]
-        + input_columns
-        + [
-            col
-            for col in merged_df.columns
-            if col not in input_columns + ["Label", "Test Case Match"]
-        ]
-    )
-    merged_df = merged_df[new_column_order]
+    # Generate the 'link' column
+    merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]")
+    merged_df['Label'] = merged_df['link']
+
+    # Sort by AP#, LS#, TC#, TS#
+    sorted_merged_df = merged_df.sort_values(by=['AP', 'LS', 'TC', 'TS'])
+
+    # Reorder columns to place 'Label', 'Test Case', input_df columns, then the rest
+    input_df_columns = [col for col in input_df.columns if col != 'Test Case']  # Avoid duplicating 'Test Case'
+    final_columns = ['Label', 'Test Case'] + input_df_columns + \
+                    [col for col in sorted_merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['AP', 'TC', 'TS', 'LS', 'Test Case Match']]
+
+    # Add 'link' as the last column
+    final_columns = [col for col in final_columns if col != 'link'] + ['link']
+
+    sorted_merged_df = sorted_merged_df[final_columns]
+
+    # Drop temporary columns
+    # columns_to_drop = ['Test Case Match', 'AP', 'TC', 'TS', 'LS']
+    # sorted_merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
     final_csv_path = os.path.join(root_dir, "final_results.csv")
-    merged_df.to_csv(final_csv_path, index=False)
+    sorted_merged_df.to_csv(final_csv_path, index=False)
 
     print(f"Final merged results saved to {final_csv_path}")
-
