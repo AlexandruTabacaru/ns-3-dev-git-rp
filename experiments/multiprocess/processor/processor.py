@@ -3,14 +3,14 @@ import pandas as pd
 import numpy as np
 import re
 
-def compute_statistics(dataframe):
+def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
         return {
-            "Average Latency": np.mean(dataframe["Latency"]) * 1000,
-            "P10 Latency": np.percentile(dataframe["Latency"], 10) * 1000,
-            "P90 Latency": np.percentile(dataframe["Latency"], 90) * 1000,
-            "P99 Latency": np.percentile(dataframe["Latency"], 99) * 1000,
-            "StdDev": np.std(dataframe["Latency"], ddof=1) * 1000,
+            "Average Latency": round(np.mean(dataframe["Latency"]) * 1000, digits),
+            "P10 Latency": round(np.percentile(dataframe["Latency"], 10) * 1000, digits),
+            "P90 Latency": round(np.percentile(dataframe["Latency"], 90) * 1000, digits),
+            "P99 Latency": round(np.percentile(dataframe["Latency"], 99) * 1000, digits),
+            "StdDev": round(np.std(dataframe["Latency"], ddof=1) * 1000, digits),
         }
     return None
 
