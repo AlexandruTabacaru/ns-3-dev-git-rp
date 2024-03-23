@@ -3,9 +3,10 @@ import os
 import shutil
 import subprocess
 import sys
+import pandas as pd
 from datetime import datetime
 import multiprocessing
-from processor import processor
+from processor.processor import processResults, merge_input_with_results
 
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
