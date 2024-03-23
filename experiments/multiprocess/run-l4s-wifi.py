@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import multiprocessing
-from processor.processor import processResults, merge_input_with_results
+from processor.processor import processResults, merge_input_with_results, process_summary_csv
 
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
