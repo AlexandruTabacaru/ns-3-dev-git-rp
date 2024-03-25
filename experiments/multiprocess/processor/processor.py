@@ -194,7 +194,7 @@ def post_process(root_dir, hidden_columns):
                     row['P99 Latency DL Prague'],3)
 
     # Drop temporary columns
-    columns_to_drop = ['Test Case Match', 'AP', 'TC', 'TS', 'LS', 'TS#'] + hidden_columns
+    columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS', 'TS#'] + hidden_columns
     df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
     detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
@@ -219,21 +219,21 @@ def merge_input_with_results(root_dir):
         how="left",
     )
 
-    # Extract AP#, LS#, TC#, TS# for sorting
-    merged_df[['AP', 'TC', 'TS', 'LS']] = merged_df['Test Case'].str.extract(r'AP(\d+)-TC(\d+)-TS(\d+)-LS(\d+)')
-    merged_df[['AP', 'TC', 'TS', 'LS']] = merged_df[['AP', 'TC', 'TS', 'LS']].astype(int)
+    # Extract MS#, AP#, LS#, TC#, TS# for sorting
+    merged_df[['MS', 'AP', 'TC', 'TS', 'LS']] = merged_df['Test Case'].str.extract(r'MS(\d+)-AP(\d+)-TC(\d+)-TS(\d+)-LS(\d+)')
+    merged_df[['MS', 'AP', 'TC', 'TS', 'LS']] = merged_df[['MS', 'AP', 'TC', 'TS', 'LS']].astype(int)
 
     # Generate the 'link' column
     merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]")
     merged_df['Label'] = merged_df['link']
 
-    # Sort by AP#, LS#, TC#, TS#
-    sorted_merged_df = merged_df.sort_values(by=['AP', 'LS', 'TC', 'TS'])
+    # Sort by MS#, AP#, LS#, TC#, TS#
+    sorted_merged_df = merged_df.sort_values(by=['MS', 'AP', 'LS', 'TC', 'TS'])
 
     # Reorder columns to place 'Label', 'Test Case', input_df columns, then the rest
     input_df_columns = [col for col in input_df.columns if col != 'Test Case']  # Avoid duplicating 'Test Case'
     final_columns = ['Label', 'Test Case'] + input_df_columns + \
-                    [col for col in sorted_merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['AP', 'TC', 'TS', 'LS', 'Test Case Match']]
+                    [col for col in sorted_merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['MS', 'AP', 'TC', 'TS', 'LS', 'Test Case Match']]
 
     # Add 'link' as the last column
     final_columns = [col for col in final_columns if col != 'link'] + ['link']
@@ -241,7 +241,7 @@ def merge_input_with_results(root_dir):
     sorted_merged_df = sorted_merged_df[final_columns]
 
     # Drop temporary columns
-    # columns_to_drop = ['Test Case Match', 'AP', 'TC', 'TS', 'LS']
+    # columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS']
     # sorted_merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
     final_csv_path = os.path.join(root_dir, "results.csv")
@@ -256,9 +256,10 @@ def process_summary_csv(rootResultsdir):
     data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit']].copy()
 
     # Process the Test Case to determine the number of files, rows, and columns
-    data_subset['LS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[-1][2:])) # Number of CSV files
-    data_subset['TS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[2][2:])) # Number of rows
-    data_subset['TC'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[1][2:])) # Number of columns
+    # Test Case format: MS#-AP#-LS#-TC#-TS#
+    data_subset['LS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[2][2:])) # Number of CSV files
+    data_subset['TC'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[3][2:])) # Number of rows
+    data_subset['TS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[4][2:])) # Number of columns
 
     # Filter out TC1
     valid_data_subset = data_subset[(data_subset['TC'] > 1) & data_subset['Log Rate Ratio'].notna() & data_subset['Latency Benefit'].notna()]
