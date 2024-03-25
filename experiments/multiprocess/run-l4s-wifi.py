@@ -7,6 +7,8 @@ import pandas as pd
 from datetime import datetime
 import multiprocessing
 from processor.processor import processResults, merge_input_with_results, process_summary_csv, post_process
+from exporter.exporter import export
+from pathlib import Path
 
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
@@ -221,6 +223,9 @@ if __name__ == "__main__":
     merge_input_with_results(rootResultsdir)
 
     hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
-    post_process(rootResultsdir, hidden_columns)
-    process_summary_csv(rootResultsdir)
+    detailed_csv = post_process(rootResultsdir, hidden_columns)
+    summary_csvs = process_summary_csv(rootResultsdir)
+
+    # Export html files
+    export(detailed_csv, summary_csvs, Path("./exporter/dct_project"), rootResultsdir)
     sys.exit()

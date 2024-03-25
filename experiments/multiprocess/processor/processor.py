@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 from collections import defaultdict
+from pathlib import Path
 
 def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
@@ -200,6 +201,7 @@ def post_process(root_dir, hidden_columns):
     df.to_csv(detailed_csv_path, index=False)
 
     print(f"Post Processed Final merged results saved to {detailed_csv_path}")
+    return Path(detailed_csv_path)
 
 
 def merge_input_with_results(root_dir):
@@ -290,5 +292,8 @@ def process_summary_csv(rootResultsdir):
         file_name = os.path.join(rootResultsdir, f"{channel_width}_MHz_Channel.csv")
         df_output.to_csv(file_name)
 
+        output_files.append(Path(file_name))
+
         print(f"Summary csv saved to {file_name}")
 
+    return output_files
