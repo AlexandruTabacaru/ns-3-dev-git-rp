@@ -269,12 +269,7 @@ TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
 
-    bool updateCwnd = true;
-    if (m_inLoss)
-    {
-        updateCwnd = false;
-    }
-    if (updateCwnd)
+    if (!m_inLoss)
     {
         uint32_t acked = segmentsAcked;
         if (tcb->m_cWnd < tcb->m_ssThresh)
@@ -508,6 +503,8 @@ TcpPrague::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t
         break;
     case TcpSocketState::CA_EVENT_CWND_RESTART:
     case TcpSocketState::CA_EVENT_LOSS:
+        EnterLoss(tcb);
+        break;
     case TcpSocketState::CA_EVENT_TX_START:
     default:
         break;
@@ -531,7 +528,7 @@ TcpPrague::CongestionStateSet(Ptr<TcpSocketState> tcb,
         ReduceCwnd(tcb);
         break;
     case TcpSocketState::CA_DISORDER:
-    case TcpSocketState::CA_LOSS:
+    case TcpSocketState::CA_LOSS:  // No need to act here; CA_EVENT_LOSS will cover
     default:
         break;
     }
