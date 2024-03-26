@@ -4,6 +4,7 @@ import numpy as np
 import re
 from collections import defaultdict
 from pathlib import Path
+import json
 
 def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
@@ -80,11 +81,11 @@ def process_test_directory(test_dir_path):
             summary_df['Num CE'] = pd.to_numeric(summary_df['Num CE'], errors='coerce').fillna(0)
             summary_df['Num Packets'] = pd.to_numeric(summary_df['Num Packets'], errors='coerce').fillna(1)  # Avoid division by zero
             summary_df['CE %'] = (summary_df['Num CE'] / summary_df['Num Packets']) * 100
-
+            
             for category in ['cubic', 'prague']:
                 filtered_df = summary_df[summary_df['Flow ID'].apply(lambda x: is_cubic_or_prague(x) == category)]
                 ce_percentage = filtered_df['CE %'].sum() if not filtered_df.empty else 0
-
+                
                 if 'CE %' not in data[category][direction].columns:
                     data[category][direction] = data[category][direction].assign(**{'CE %': ce_percentage})
                 else:
@@ -92,7 +93,7 @@ def process_test_directory(test_dir_path):
 
     return data
 
-def processResults(root_dir):
+def process_results(root_dir):
     all_results = []
 
     test_run_dirs = [
@@ -224,7 +225,7 @@ def merge_input_with_results(root_dir):
     merged_df[['MS', 'AP', 'LS', 'TC', 'TS']] = merged_df[['MS', 'AP', 'LS', 'TC', 'TS']].astype(int)
 
     # Generate the 'link' column
-    merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]")
+    merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]/")
     merged_df['Label'] = merged_df['link']
 
     # Sort by MS#, AP#, LS#, TC#, TS#
@@ -250,6 +251,11 @@ def merge_input_with_results(root_dir):
     print(f"Final merged results saved to {final_csv_path}")
 
 def process_summary_csv(rootResultsdir):
+    # Load the configuration from campaigns.json
+    script_dir = os.path.dirname(__file__)
+    with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
+        campaigns_config = json.load(config_file)
+
     df = pd.read_csv(os.path.join(rootResultsdir, "detailed_results.csv"))
 
     # Use subset of csv
@@ -257,9 +263,10 @@ def process_summary_csv(rootResultsdir):
 
     # Process the Test Case to determine the number of files, rows, and columns
     # Test Case format: MS#-AP#-LS#-TC#-TS#
-    data_subset['LS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[2][2:])) # Number of CSV files
-    data_subset['TC'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[3][2:])) # Number of rows
-    data_subset['TS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[4][2:])) # Number of columns
+    data_subset['MS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[0][2:]))  # Number of Campaigns
+    data_subset['LS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[2][2:]))  # Number of CSV files
+    data_subset['TC'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[3][2:]))  # Number of rows
+    data_subset['TS'] = data_subset['Test Case'].apply(lambda x: int(x.split('-')[4][2:]))  # Number of columns
 
     # Filter out TC1
     valid_data_subset = data_subset[(data_subset['TC'] > 1) & data_subset['Log Rate Ratio'].notna() & data_subset['Latency Benefit'].notna()]
@@ -273,28 +280,39 @@ def process_summary_csv(rootResultsdir):
     column_labels_map = {2: "1v1", 3: "1+1", 4: "2+2", 5: "4+4"}
 
     for _, row in valid_data_subset.iterrows():
-        output_index = row['LS']
+        ms_index = row['MS']
+        ls_index = row['LS']
         row_index = row['TS'] - 1
         col_index = row['TC'] - 2
 
         cell_content = f"{row['Log Rate Ratio']:+.1f} +\n{row['Latency Benefit']:.1f}ms"
 
-        output_data_valid[(output_index, row['channelWidth'])][row_index, col_index] = cell_content
+        output_data_valid[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = cell_content
 
     # Generate CSV files
     output_files = []
-    for (ls_index, channel_width), data_matrix in output_data_valid.items():
+    for (ms_index, ls_index, channel_width), data_matrix in output_data_valid.items():
+        ms_prefix = campaigns_config["MS"][str(ms_index)]  # Use the MS prefix from the config
+        ls_prefix = campaigns_config["LS"][str(ls_index)]  # Use the LS prefix from the config
+
+        # Construct the file name dynamically based on MS and LS
+        if ms_prefix:
+            file_name = f"{ms_prefix}_{ls_prefix}_Channel.csv"
+        else:
+            file_name = f"{ls_prefix}_Channel.csv"
+
+        file_name = file_name.replace(" ", "_")  # Replace spaces with underscores for file naming
+        full_path = os.path.join(rootResultsdir, file_name)
+
         # Create a DataFrame for the CSV output
         df_output = pd.DataFrame(data_matrix, columns=[column_labels_map[i+2] for i in range(data_matrix.shape[1])])
         df_output.index = [row_labels_map[i+1] for i in range(max_ts)]
         df_output.index.name = ""
 
+        df_output.to_csv(full_path)
 
-        file_name = os.path.join(rootResultsdir, f"{channel_width}_MHz_Channel.csv")
-        df_output.to_csv(file_name)
+        output_files.append(Path(full_path))
 
-        output_files.append(Path(file_name))
-
-        print(f"Summary csv saved to {file_name}")
+        print(f"Summary csv saved to {full_path}")
 
     return output_files

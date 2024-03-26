@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import multiprocessing
-from processor.processor import processResults, merge_input_with_results, process_summary_csv, post_process
+from processor.processor import process_results, merge_input_with_results, process_summary_csv, post_process
 from exporter.exporter import export
 from pathlib import Path
 
@@ -218,7 +218,7 @@ if __name__ == "__main__":
         pool.starmap(run_simulation, pool_args)
 
     # rootResultsdir = "multiresults-20240303-214151"
-    processResults(rootResultsdir)
+    process_results(rootResultsdir)
 
     merge_input_with_results(rootResultsdir)
 
