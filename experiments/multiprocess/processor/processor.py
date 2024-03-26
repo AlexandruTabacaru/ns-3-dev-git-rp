@@ -80,11 +80,11 @@ def process_test_directory(test_dir_path):
             summary_df['Num CE'] = pd.to_numeric(summary_df['Num CE'], errors='coerce').fillna(0)
             summary_df['Num Packets'] = pd.to_numeric(summary_df['Num Packets'], errors='coerce').fillna(1)  # Avoid division by zero
             summary_df['CE %'] = (summary_df['Num CE'] / summary_df['Num Packets']) * 100
-            
+
             for category in ['cubic', 'prague']:
                 filtered_df = summary_df[summary_df['Flow ID'].apply(lambda x: is_cubic_or_prague(x) == category)]
                 ce_percentage = filtered_df['CE %'].sum() if not filtered_df.empty else 0
-                
+
                 if 'CE %' not in data[category][direction].columns:
                     data[category][direction] = data[category][direction].assign(**{'CE %': ce_percentage})
                 else:
@@ -159,7 +159,7 @@ def post_process(root_dir, hidden_columns):
 
     for index, row in df.iterrows():
         test_case = row['Test Case']
-        tc_num = int(test_case.split('-')[1][2:])  # Extract TC# as integer
+        tc_num = int(test_case.split('-')[3][2:])  # Extract TC# as integer
 
         if tc_num == 1:
             continue
@@ -220,8 +220,8 @@ def merge_input_with_results(root_dir):
     )
 
     # Extract MS#, AP#, LS#, TC#, TS# for sorting
-    merged_df[['MS', 'AP', 'TC', 'TS', 'LS']] = merged_df['Test Case'].str.extract(r'MS(\d+)-AP(\d+)-TC(\d+)-TS(\d+)-LS(\d+)')
-    merged_df[['MS', 'AP', 'TC', 'TS', 'LS']] = merged_df[['MS', 'AP', 'TC', 'TS', 'LS']].astype(int)
+    merged_df[['MS', 'AP', 'LS', 'TC', 'TS']] = merged_df['Test Case'].str.extract(r'MS(\d+)-AP(\d+)-LS(\d+)-TC(\d+)-TS(\d+)')
+    merged_df[['MS', 'AP', 'LS', 'TC', 'TS']] = merged_df[['MS', 'AP', 'LS', 'TC', 'TS']].astype(int)
 
     # Generate the 'link' column
     merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]")
