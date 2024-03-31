@@ -16,26 +16,30 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-// Nodes 0                     Node 1                           Nodes 2+
+// Nodes 0                     Node 1                           Node 2
 //
-// client ---------------------> AP -------------------------- > STA * N servers
-//         10 Gbps
-//         20 ms base RTT            BW 20/80/160 MHz            # N/2 for L4S flows
-//                                   Fixed MCS                   # N/2 for classic flows
+// client ---------------------> AP -------------------------- > STA (server)
+//       10 Gbps
+//       configurable delay            channel widths 20/80/160 MHz
+//                                     Configurable MCS
+//                                     Configurable num. spatial streams
 //
-// One server with Prague and Cubic TCP connections to the STA under test
-// The first Wi-Fi STA (node index 2) is the STA under test
-// Additional STA nodes (node indices 3+) for sending background load
-// 80 MHz 11ax (MCS 8) is initially configured in 5 GHz (channel 42)
-// Data transfer from client to server (iperf naming convention)
+//                       ----  ----  ----  ---- > TCP data transfer direction
+//                       < -  -  -  -  -  -   -   ACK direction
+//
+// 0..N flows from client to server can be configured, for both Prague
+// and Cubic.  A special case is if zero Prague and Cubic flows are
+// configured, for which UDP saturating traffic will be sent-- this can be
+// used to test for maximum possible throughput of a configuration.
+// Data transfer is from client to server (iperf naming convention).
 //
 // Configuration inputs:
 // - number of Cubic flows under test
 // - number of Prague flows under test
-// - number of background flows
-// - number of bytes for TCP flows
+// - number of bytes for TCP flows, or zero bytes for unlimited
+// - duration of application flow
 // - whether to disable flow control
-// - Wi-Fi queue limit when flow control is enabled (base limit and scale factor)
+// - Wi-Fi aggregation queue limit when flow control is enabled (scale factor)
 //
 // Behavior:
 // - at around simulation time 1 second, each flow starts
@@ -48,6 +52,8 @@
 // 3) queue depth of the WifiMacQueue AC_BE queue
 // 4) dequeue events of the WifiMacQueue
 // 5) Socket statistics for the first foreground Prague and Cubic flows defined
+//    (i.e., if multiple Prague or Cubic are configured, only the first such
+//    flow is traced in detail)
 
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
@@ -169,7 +175,6 @@ main(int argc, char* argv[])
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
     uint32_t numPrague = 1;
-    uint32_t numBackground = 0;
     uint32_t numBytes = 50e6;             // default 50 MB
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
@@ -216,7 +221,6 @@ main(int argc, char* argv[])
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
     cmd.AddValue("numCubic", "Number of foreground Cubic flows", numCubic);
     cmd.AddValue("numPrague", "Number of foreground Prague flows", numPrague);
-    cmd.AddValue("numBackground", "Number of background flows", numBackground);
     cmd.AddValue("numBytes", "Number of bytes for each TCP transfer", numBytes);
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
@@ -286,7 +290,7 @@ main(int argc, char* argv[])
     NodeContainer apNode;
     apNode.Create(1);
     NodeContainer staNodes;
-    staNodes.Create(1 + numBackground);
+    staNodes.Create(1);
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
@@ -473,29 +477,7 @@ main(int argc, char* argv[])
             MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
 
-    // Add a cubic application on the server for each background flow
-    // Send the traffic from a different STA.
-    port = 300;
-    Simulator::Schedule(
-        Seconds(1.1) - TimeStep(1),
-        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
-    for (auto i = 0U; i < numBackground; i++)
-    {
-        ApplicationContainer clientAppBackground;
-        BulkSendHelper bulkBackground("ns3::TcpSocketFactory",
-                                      InetSocketAddress(interfaces1.GetAddress(0), port + i));
-        bulkBackground.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        clientAppBackground = bulkBackground.Install(staNodes.Get(1 + i));
-        clientAppBackground.Start(Seconds(1.1));
-        ApplicationContainer serverAppBackground;
-        PacketSinkHelper sinkBackground =
-            PacketSinkHelper("ns3::TcpSocketFactory",
-                             InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        serverAppBackground = sinkBackground.Install(clientNode.Get(0));
-        serverAppBackground.Start(Seconds(1.1));
-    }
-
-    if (!numCubic && !numPrague && !numBackground)
+    if (!numCubic && !numPrague)
     {
         uint16_t udpPort = 9;
         UdpServerHelper server(udpPort);
@@ -682,7 +664,6 @@ main(int argc, char* argv[])
         Simulator::Stop(Seconds(1000));
     }
     std::cout << "Foreground flows: Cubic: " << numCubic << " Prague: " << numPrague << std::endl;
-    std::cout << "Background flows: " << numBackground << std::endl;
     if (showProgress)
     {
         std::cout << std::endl;

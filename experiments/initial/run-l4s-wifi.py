@@ -14,7 +14,6 @@ path_to_ns3_script = "../../../ns3"
 # In future, add parametric job control here (multiprocessing.Pool)
 numCubic = 1
 numPrague = 1
-numBackground = 0
 numBytes = 0
 duration = 20
 # wanLinkDelay is 1/2 of the desired base RTT
@@ -48,7 +47,6 @@ useReno = 0
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
-arguments += " --numBackground=" + str(numBackground)
 arguments += " --numBytes=" + str(numBytes)
 arguments += " --duration=" + str(duration)
 arguments += " --wanLinkDelay=" + wanLinkDelay
@@ -71,7 +69,6 @@ arguments += " --useReno=" + str(useReno)
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)
 plotTitle += " Prague=" + str(numPrague)
-plotTitle += " Background=" + str(numBackground)
 plotTitle += " Base RTT= 2*" + str(wanLinkDelay)
 plotTitle += " Flow control=" + str(flowControl)
 
