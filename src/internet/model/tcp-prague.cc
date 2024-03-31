@@ -50,7 +50,9 @@ TcpPrague::GetTypeId()
                           MakeDoubleChecker<double>(0, 1))
             .AddAttribute("AlphaOnInit",
                           "Initial alpha value",
-                          DoubleValue(1.0),
+                          // GWhite testing 3/19/24
+                          // DoubleValue(1.0),
+                          DoubleValue(0.0),
                           MakeDoubleAccessor(&TcpPrague::m_alpha),
                           MakeDoubleChecker<double>(0, 1))
             .AddAttribute("UseEct0",
@@ -246,6 +248,11 @@ TcpPrague::ReduceCwnd(Ptr<TcpSocketState> tcb)
 
     uint32_t cwnd_segs = tcb->m_cWnd / tcb->m_segmentSize;
     double_t reduction = m_alpha * cwnd_segs / 2.0;
+    // GWhite testing 3/19/24
+    if (!m_sawCE)
+    {
+        reduction = cwnd_segs / 2.0;
+    }
     m_cWndCnt -= reduction;
     NS_LOG_DEBUG("ReduceCwnd: alpha " << m_alpha << " cwnd_segs " << cwnd_segs << " reduction "
                                       << reduction << " m_cWndCnt " << m_cWndCnt);
@@ -588,17 +595,20 @@ TcpPrague::ShouldUpdateEwma(Ptr<TcpSocketState> tcb)
     bool pragueE2eRttElapsed = !(tcb->m_txBuffer->HeadSequence() < m_nextSeq);
 
     // Instead of Linux-like tcp_mstamp, use simulator time
-    bool targetRttElapsed = false;
-    if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE)
-    {
-        targetRttElapsed =
-            (GetTargetRtt(tcb).GetSeconds() <=
-             std::max(Simulator::Now().GetSeconds() - m_alphaStamp.GetSeconds(), 0.0));
-    }
+    // GWhite testing 3/19/24
+    // bool targetRttElapsed = false;
+    // if (m_rttScalingMode != RttScalingMode_t::RTT_CONTROL_NONE)
+    // {
+    //     targetRttElapsed =
+    //         (GetTargetRtt(tcb).GetSeconds() <=
+    //          std::max(Simulator::Now().GetSeconds() - m_alphaStamp.GetSeconds(), 0.0));
+    // }
     NS_LOG_DEBUG("pragueE2eRttElapsed " << pragueE2eRttElapsed << " m_nextTxSequence "
                                         << tcb->m_nextTxSequence << " m_nextSeq " << m_nextSeq);
-    return (pragueE2eRttElapsed && ((m_rttScalingMode == RttScalingMode_t::RTT_CONTROL_NONE) ||
-                                    !IsRttIndependent(tcb) || targetRttElapsed));
+    // GWhite testing 3/19/24
+    // return (pragueE2eRttElapsed && ((m_rttScalingMode == RttScalingMode_t::RTT_CONTROL_NONE) ||
+    //                                 !IsRttIndependent(tcb) || targetRttElapsed));
+    return (pragueE2eRttElapsed);
 }
 
 void
