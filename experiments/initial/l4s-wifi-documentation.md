@@ -79,6 +79,13 @@ The simulation is configured, by default, to run until one second has elapsed si
 last TCP flow has completed.  This stopping time can be overridden at the command line
 by passing the 'duration' argument.
 
+The above Prague and Cubic flows are sent on one AP to one STA; if there are multiple TCP
+flows, then they will share the same access category (AC) and DCF instance.  If more contention
+in the network is desired than two DCF instances (the single AC in the downlink and a single
+AC in the uplink for TCP ACK transmisssions), additional STAs can be enabled to send
+a saturating load of UDP datagrams.  The **numBackgroundUdp** parameter configures the number of additional
+UDP senders.
+
 ###2.3 Output files
 
 The program output consists of many time-series data files, and PCAP traces for dumps a lot of output:
@@ -141,6 +148,7 @@ Program Options:
     --duration:         (optional) scheduled end of simulation [+0fs]
     --wanLinkDelay:     one-way base delay from server to AP [+10ms]
     --useReno:          Use Linux Reno instead of Cubic [false]
+    --numBackgroundUdp: Number of background UDP flows [0]
     --mcs:              Index (0-11) of 11ax HE MCS [2]
     --channelWidth:     Width (MHz) of channel [80]
     --spatialStreams:   Number of spatial streams [1]
@@ -217,6 +225,7 @@ file is stored in **version.diff**
 numCubic = 1
 numPrague = 1
 numBytes = 0
+numBackgroundUdp = 0
 duration = 20
 # wanLinkDelay is 1/2 of the desired base RTT
 wanLinkDelay = "2500us"

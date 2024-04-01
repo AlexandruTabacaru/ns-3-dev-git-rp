@@ -15,6 +15,7 @@ path_to_ns3_script = "../../../ns3"
 numCubic = 1
 numPrague = 1
 numBytes = 0
+numBackgroundUdp = 0
 duration = 20
 # wanLinkDelay is 1/2 of the desired base RTT
 wanLinkDelay = "2500us"
@@ -48,6 +49,7 @@ useReno = 0
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
 arguments += " --numBytes=" + str(numBytes)
+arguments += " --numBackgroundUdp=" + str(numBackgroundUdp)
 arguments += " --duration=" + str(duration)
 arguments += " --wanLinkDelay=" + wanLinkDelay
 arguments += " --mcs=" + str(mcs)
@@ -69,6 +71,7 @@ arguments += " --useReno=" + str(useReno)
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)
 plotTitle += " Prague=" + str(numPrague)
+plotTitle += " BackgroundUdp=" + str(numBackgroundUdp)
 plotTitle += " Base RTT= 2*" + str(wanLinkDelay)
 plotTitle += " Flow control=" + str(flowControl)
 

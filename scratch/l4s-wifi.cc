@@ -33,11 +33,19 @@
 // used to test for maximum possible throughput of a configuration.
 // Data transfer is from client to server (iperf naming convention).
 //
+// In addition (not depicted in the diagram), a configurable number of additional
+// STAs are added to the same Wi-Fi channel, communicating with another AP
+// (also on the same channel, but configured with a different SSID).  These STAs,
+// if configured, will send saturating UDP traffic on the channel, to create
+// contention on the channel.  The other STAs are configured on a different
+// BSS and are served by a different AP.
+//
 // Configuration inputs:
 // - number of Cubic flows under test
 // - number of Prague flows under test
 // - number of bytes for TCP flows, or zero bytes for unlimited
-// - duration of application flow
+// - duration of TCP application flows
+// - number of UDP senders
 // - whether to disable flow control
 // - Wi-Fi aggregation queue limit when flow control is enabled (scale factor)
 //
@@ -171,6 +179,9 @@ main(int argc, char* argv[])
     std::string wifiControlMode = "OfdmRate24Mbps";
     double staDistance = 1; // meters; distance of 10 m or more will cause packet loss at MCS 11
     const double pi = 3.1415927;
+    DataRate obssUdpRate{"2400Mbps"}; // MCS 6 maximum PHY rate with 160 MHz channel and 4 SS
+    DataRate perStaUdpRate;           // Will be updated below
+    Time obssUdpStartTime{Seconds(1)};
 
     // Variables that can be changed by command-line argument
     uint32_t numCubic = 1;
@@ -179,6 +190,7 @@ main(int argc, char* argv[])
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
     Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
     bool useReno = false;
+    uint32_t numBackgroundUdp = 0;
     uint16_t mcs = 2;
     uint32_t channelWidth = 80;
     uint32_t spatialStreams = 1;
@@ -225,6 +237,7 @@ main(int argc, char* argv[])
     cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
+    cmd.AddValue("numBackgroundUdp", "Number of background UDP flows", numBackgroundUdp);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
     cmd.AddValue("channelWidth", "Width (MHz) of channel", channelWidth);
     cmd.AddValue("spatialStreams", "Number of spatial streams", spatialStreams);
@@ -289,14 +302,23 @@ main(int argc, char* argv[])
     clientNode.Create(1);
     NodeContainer apNode;
     apNode.Create(1);
-    NodeContainer staNodes;
-    staNodes.Create(1);
+    NodeContainer staNode;
+    staNode.Create(1);
+    // NodeContainers for nodes outside of the BSS under test (OBSS)
+    NodeContainer obssClientNode;
+    obssClientNode.Create(1);
+    NodeContainer obssApNode;
+    obssApNode.Create(1);
+    NodeContainer obssStaNodes;
+    obssStaNodes.Create(numBackgroundUdp);
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("10Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(clientNode.Get(0), apNode.Get(0));
+    NetDeviceContainer obssWanDevices =
+        pointToPoint.Install(obssClientNode.Get(0), obssApNode.Get(0));
 
     // Wifi configuration; use the simpler Yans physical layer model
     YansWifiPhyHelper wifiPhy;
@@ -334,18 +356,26 @@ main(int argc, char* argv[])
     NetDeviceContainer apDevice = wifi.Install(wifiPhy, wifiMac, apNode);
 
     wifiMac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("l4s")));
-    NetDeviceContainer staDevices = wifi.Install(wifiPhy, wifiMac, staNodes);
+    NetDeviceContainer staDevices = wifi.Install(wifiPhy, wifiMac, staNode);
+
+    // OBSS configuration
+    wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("obss")));
+    NetDeviceContainer obssApDevice = wifi.Install(wifiPhy, wifiMac, obssApNode);
+
+    wifiMac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("obss")));
+    NetDeviceContainer obssStaDevices = wifi.Install(wifiPhy, wifiMac, obssStaNodes);
 
     // Set positions
     MobilityHelper mobility;
     Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator>();
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    // Set postion for AP
+    // Set position for AP
     positionAlloc->Add(Vector(0.0, 0.0, 0.0)); // X,Y,Z cartesian
 
     // Set position for STAs; simple routine to distribute around a ring of distance 'staDistance'
-    double angle = (static_cast<double>(360) / (staNodes.GetN()));
-    for (uint32_t i = 0; i < staNodes.GetN(); ++i)
+    uint32_t numSta = staNode.GetN() + obssStaNodes.GetN();
+    double angle = (static_cast<double>(360) / numSta);
+    for (uint32_t i = 0; i < numSta; ++i)
     {
         positionAlloc->Add(Vector(staDistance * cos((i * angle * pi) / 180),
                                   staDistance * sin((i * angle * pi) / 180),
@@ -355,20 +385,21 @@ main(int argc, char* argv[])
     // Create some additional container objects to simplify the below configuration
     NodeContainer wifiNodes;
     wifiNodes.Add(apNode);
-    wifiNodes.Add(staNodes);
-    NetDeviceContainer wifiDevices;
-    wifiDevices.Add(apDevice);
-    wifiDevices.Add(staDevices);
+    wifiNodes.Add(staNode);
 
     // Add Mobility (position objects) to the Wi-Fi nodes, for propagation
     mobility.SetPositionAllocator(positionAlloc);
     mobility.Install(wifiNodes);
+    mobility.Install(obssApNode);
+    mobility.Install(obssStaNodes);
 
-    // Internet and Linux stack installation
+    // Internet stack installation
     InternetStackHelper internetStack;
     internetStack.Install(clientNode);
-    internetStack.Install(apNode);
-    internetStack.Install(staNodes);
+    internetStack.Install(obssClientNode);
+    internetStack.Install(wifiNodes);
+    internetStack.Install(obssApNode);
+    internetStack.Install(obssStaNodes);
 
     // By default, Ipv4AddressHelper below will configure a MqQueueDisc
     // with FqCoDelQueueDisc as child queue discs (one per AC)
@@ -405,15 +436,44 @@ main(int argc, char* argv[])
     Ipv4AddressHelper address;
     address.SetBase("10.1.1.0", "255.255.255.0");
     Ipv4InterfaceContainer interfaces1 = address.Assign(wanDevices);
+    NetDeviceContainer wifiDevices;
+    wifiDevices.Add(apDevice);
+    wifiDevices.Add(staDevices);
     address.SetBase("192.168.1.0", "255.255.255.0");
     Ipv4InterfaceContainer wifiInterfaces = address.Assign(wifiDevices);
+    // OBSS network
+    address.SetBase("172.16.1.0", "255.255.255.0");
+    NetDeviceContainer obssWifiDevices;
+    obssWifiDevices.Add(obssApDevice);
+    obssWifiDevices.Add(obssStaDevices);
+    Ipv4InterfaceContainer obssWifiInterfaces = address.Assign(obssWifiDevices);
+    address.SetBase("20.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer interfaces2 = address.Assign(obssWanDevices);
 
-    // Use a helper to add static routes
-    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+    // The staNode and clientNode both need a static IPv4 route added; the AP node does not
+    // The obssStaNodes and obssClientNode both need static IPv4 routes added
+    Ptr<Ipv4StaticRouting> staticRouting;
+    staticRouting = Ipv4RoutingHelper::GetRouting<Ipv4StaticRouting>(
+        clientNode.Get(0)->GetObject<Ipv4>()->GetRoutingProtocol());
+    staticRouting->SetDefaultRoute("10.1.1.2", 1); // next hop, outgoing interface index
+    staticRouting = Ipv4RoutingHelper::GetRouting<Ipv4StaticRouting>(
+        staNode.Get(0)->GetObject<Ipv4>()->GetRoutingProtocol());
+    staticRouting->SetDefaultRoute("192.168.1.1", 1); // next hop, outgoing interface index
+    staticRouting = Ipv4RoutingHelper::GetRouting<Ipv4StaticRouting>(
+        obssClientNode.Get(0)->GetObject<Ipv4>()->GetRoutingProtocol());
+    staticRouting->SetDefaultRoute("20.1.1.2", 1); // next hop, outgoing interface index
+    for (uint32_t i = 0; i < numBackgroundUdp; i++)
+    {
+        staticRouting = Ipv4RoutingHelper::GetRouting<Ipv4StaticRouting>(
+            obssStaNodes.Get(i)->GetObject<Ipv4>()->GetRoutingProtocol());
+        staticRouting->SetDefaultRoute("172.16.1.1", 1); // next hop, outgoing interface index
+    }
+
+    // Application traffic configuration
 
     // Get pointers to the TcpL4Protocol instances of the primary nodes
     Ptr<TcpL4Protocol> tcpL4ProtocolClient = clientNode.Get(0)->GetObject<TcpL4Protocol>();
-    Ptr<TcpL4Protocol> tcpL4ProtocolSta = staNodes.Get(0)->GetObject<TcpL4Protocol>();
+    Ptr<TcpL4Protocol> tcpL4ProtocolSta = staNode.Get(0)->GetObject<TcpL4Protocol>();
 
     // Application configuration for Prague flows under test
     uint16_t port = 100;
@@ -438,7 +498,7 @@ main(int argc, char* argv[])
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
         sink.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * pragueStartOffset));
-        pragueServerApps.Add(sink.Install(staNodes.Get(0)));
+        pragueServerApps.Add(sink.Install(staNode.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
             Seconds(1.0) - TimeStep(1),
@@ -468,7 +528,7 @@ main(int argc, char* argv[])
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
         sinkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * cubicStartOffset));
-        cubicServerApps.Add(sinkCubic.Install(staNodes.Get(0)));
+        cubicServerApps.Add(sinkCubic.Install(staNode.Get(0)));
         g_flowsToClose++;
         // This is where, at time 50 ms after the first start time (Seconds(1)),
         // the TCP type is changed from Prague to Cubic
@@ -477,11 +537,12 @@ main(int argc, char* argv[])
             MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
 
+    // Allow the primary network to send saturating UDP traffic if no TCP is configured
     if (!numCubic && !numPrague)
     {
         uint16_t udpPort = 9;
         UdpServerHelper server(udpPort);
-        ApplicationContainer serverApp = server.Install(staNodes.Get(0));
+        ApplicationContainer serverApp = server.Install(staNode.Get(0));
         serverApp.Start(Seconds(1.0));
 
         UdpClientHelper client(InetSocketAddress(wifiInterfaces.GetAddress(1), udpPort));
@@ -495,13 +556,37 @@ main(int argc, char* argv[])
     // Control the random variable stream assignments for Wi-Fi models (the value 100 is arbitrary)
     wifi.AssignStreams(wifiDevices, 100);
 
+    // OBSS traffic configuration
+
+    if (numBackgroundUdp)
+    {
+        perStaUdpRate = obssUdpRate * (1.0 / numBackgroundUdp);
+
+        uint16_t udpPort = 999;
+        std::string socketType = "ns3::UdpSocketFactory";
+
+        PacketSinkHelper packetSinkHelper(socketType,
+                                          InetSocketAddress(Ipv4Address::GetAny(), udpPort));
+        packetSinkHelper.SetAttribute("StartTime", TimeValue(obssUdpStartTime));
+        packetSinkHelper.Install(obssClientNode.Get(0));
+
+        OnOffHelper onOffHelper(socketType, InetSocketAddress(interfaces2.GetAddress(0), udpPort));
+        onOffHelper.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        onOffHelper.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        onOffHelper.SetAttribute("PacketSize", UintegerValue(1472));
+        onOffHelper.SetAttribute("MaxBytes", UintegerValue(0)); // Zero means no sending limits
+        onOffHelper.SetAttribute("DataRate", DataRateValue(perStaUdpRate));
+        onOffHelper.SetAttribute("StartTime", TimeValue(obssUdpStartTime));
+        onOffHelper.Install(obssStaNodes);
+    }
+
     // PCAP traces
     if (enablePcapAll)
     {
         pointToPoint.EnablePcapAll("l4s-wifi");
         wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
         internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
-                                     staNodes.Get(0)->GetObject<Ipv4>(),
+                                     staNode.Get(0)->GetObject<Ipv4>(),
                                      1,
                                      true);
     }
@@ -509,7 +594,7 @@ main(int argc, char* argv[])
     {
         pointToPoint.EnablePcap("l4s-wifi", wanDevices.Get(0));
         internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
-                                     staNodes.Get(0)->GetObject<Ipv4>(),
+                                     staNode.Get(0)->GetObject<Ipv4>(),
                                      1,
                                      true);
     }
@@ -664,6 +749,11 @@ main(int argc, char* argv[])
         Simulator::Stop(Seconds(1000));
     }
     std::cout << "Foreground flows: Cubic: " << numCubic << " Prague: " << numPrague << std::endl;
+    if (numBackgroundUdp)
+    {
+        std::cout << "Background UDP flows: " << numBackgroundUdp << " at per-STA rate of "
+                  << perStaUdpRate.GetBitRate() / 1e6 << " Mbps" << std::endl;
+    }
     if (showProgress)
     {
         std::cout << std::endl;
