@@ -536,24 +536,21 @@ main(int argc, char* argv[])
     // Bytes and throughput in WifiMacQueue
     Ptr<WifiMacQueue> apWifiMacQueue =
         apDevice.Get(0)->GetObject<WifiNetDevice>()->GetMac()->GetTxopQueue(AC_BE);
+    Ptr<WifiPhy> apPhy = apDevice.Get(0)->GetObject<WifiNetDevice>()->GetPhy();
+    NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
     if (enableTracesAll || enableTraces)
     {
         g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
         NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
         apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
                                                    MakeCallback(&TraceBytesInAcBeQueue));
+        apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
+        g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
+        Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
     }
     if (enableTracesAll)
     {
-        Ptr<WifiPhy> apPhy = apDevice.Get(0)->GetObject<WifiNetDevice>()->GetPhy();
-        NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
         g_fileWifiPhyTxPsduBegin.open("wifi-phy-tx-psdu-begin.dat", std::ofstream::out);
-        apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
-    }
-    if (enableTracesAll || enableTraces)
-    {
-        g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
-        Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
     }
 
     // Throughput and latency for foreground flows, and set up close callbacks
