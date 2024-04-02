@@ -226,6 +226,8 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::BulkSendApplication::SendSize", UintegerValue(1448));
     // Bypass Laqm when using Wi-Fi
     Config::SetDefault("ns3::DualPi2QueueDisc::DisableLaqm", BooleanValue(true));
+    // Set Classic AQM target to 30ms
+    Config::SetDefault("ns3::DualPi2QueueDisc::Target", TimeValue(MilliSeconds(30)));
     // Set AC_BE max AMPDU to maximum 802.11ax value
     Config::SetDefault("ns3::WifiMac::BE_MaxAmpduSize", UintegerValue(6500631));
 
