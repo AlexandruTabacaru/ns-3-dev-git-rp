@@ -113,17 +113,17 @@ def process_results(root_dir):
 
             # Compute statistics for cubic and prague if data is available
             if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
-                stats_cubic = compute_statistics(data["cubic"][direction])
+                stats_cubic = compute_statistics(data["cubic"][direction],digits=0)
             else:
                 stats_cubic = default_stats
-            bandwidth_cubic = data["cubic"][direction]["Bandwidth (Mbps)"].mean() if "Bandwidth (Mbps)" in data["cubic"][direction].columns else 0
+            bandwidth_cubic = round(data["cubic"][direction]["Bandwidth (Mbps)"].mean()) if "Bandwidth (Mbps)" in data["cubic"][direction].columns else 0
             ce_cubic = data["cubic"][direction]["CE %"].mean() if "CE %" in data["cubic"][direction].columns else 0
 
             if not data["prague"][direction].empty and "Latency" in data["prague"][direction].columns:
-                stats_prague = compute_statistics(data["prague"][direction])
+                stats_prague = compute_statistics(data["prague"][direction],digits=0)
             else:
                 stats_prague = default_stats
-            bandwidth_prague = data["prague"][direction]["Bandwidth (Mbps)"].mean() if "Bandwidth (Mbps)" in data["prague"][direction].columns else 0
+            bandwidth_prague = round(data["prague"][direction]["Bandwidth (Mbps)"].mean()) if "Bandwidth (Mbps)" in data["prague"][direction].columns else 0
             ce_prague = data["prague"][direction]["CE %"].mean() if "CE %" in data["prague"][direction].columns else 0
 
             # Merge cubic and prague stats into the results template
