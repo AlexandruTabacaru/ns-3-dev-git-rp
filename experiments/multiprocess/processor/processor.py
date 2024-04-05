@@ -147,6 +147,10 @@ def process_results(root_dir):
     print(f"Combined results saved to {os.path.join(root_dir, 'processed_results.csv')}")
 
 def post_process(root_dir, hidden_columns):
+    
+    num_digits_lrr=1
+    num_digits_lat_ben=0
+    
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
 
     # Extract TS# values from the Test Case column
@@ -175,10 +179,10 @@ def post_process(root_dir, hidden_columns):
                         df.at[index, 'Log Rate Ratio'] = round(np.log10(
                             row['Average Bandwidth DL Prague (Mbps)'] /
                             df.at[target_index, 'Average Bandwidth DL Cubic (Mbps)']
-                        ), 3)
+                        ), num_digits_lrr)
                         df.at[index, 'Latency Benefit'] = round(
                             (df.at[target_index, 'P99 Latency DL Cubic'] - 
-                            row['P99 Latency DL Prague']),3)
+                            row['P99 Latency DL Prague']),num_digits_lat_ben)
                     except ZeroDivisionError:
                         df.at[index, 'Log Rate Ratio'] = np.nan
             else:
@@ -187,12 +191,12 @@ def post_process(root_dir, hidden_columns):
                     df.at[index, 'Log Rate Ratio'] = round(np.log10(
                         row['Average Bandwidth DL Prague (Mbps)'] / 
                         row['Average Bandwidth DL Cubic (Mbps)']
-                    ),3)
+                    ),num_digits_lrr)
                 except ZeroDivisionError:
                     df.at[index, 'Log Rate Ratio'] = np.nan
                 df.at[index, 'Latency Benefit'] = round(
                     row['P99 Latency DL Cubic'] - 
-                    row['P99 Latency DL Prague'],3)
+                    row['P99 Latency DL Prague'],num_digits_lat_ben)
 
     # Drop temporary columns
     columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS', 'TS#'] + hidden_columns
