@@ -162,6 +162,12 @@ def post_process(root_dir, hidden_columns):
     df['Log Rate Ratio'] = np.nan
     df['Latency Benefit'] = np.nan
 
+    # Initialize additional columns for tracking used values
+    df['calc_ABW_DL_Prague_Mbps'] = np.nan
+    df['calc_ABW_DL_Cubic_Mbps'] = np.nan
+    df['calc_P99_Latency_DL_Prague'] = np.nan
+    df['calc_P99_Latency_DL_Cubic'] = np.nan
+
     for index, row in df.iterrows():
         test_case = row['Test Case']
         tc_num = int(test_case.split('-')[3][2:])  # Extract TC# as integer
@@ -174,38 +180,54 @@ def post_process(root_dir, hidden_columns):
             if tc_num == 2:
                 # For TC2, use different rows for Prague and Cubic values
                 target_index = index - max_ts
-                if target_index >= 0:
-                    try:
-                        df.at[index, 'Log Rate Ratio'] = round(np.log10(
-                            row['Average Bandwidth DL Prague (Mbps)'] /
-                            df.at[target_index, 'Average Bandwidth DL Cubic (Mbps)']
-                        ), num_digits_lrr)
-                        df.at[index, 'Latency Benefit'] = round(
-                            (df.at[target_index, 'P99 Latency DL Cubic'] - 
-                            row['P99 Latency DL Prague']),num_digits_lat_ben)
-                    except ZeroDivisionError:
+                if target_index >= 0 and target_index < len(df):
+                    cubic_value = df.iloc[target_index]['Average Bandwidth DL Cubic (Mbps)']
+                    prague_value = row['Average Bandwidth DL Prague (Mbps)']
+                    if cubic_value > 0:  # Prevent division by zero
+                        df.at[index, 'Log Rate Ratio'] = round(np.log10(prague_value / cubic_value), 3)
+                        df.at[index, 'calc_ABW_DL_Prague_Mbps'] = prague_value
+                        df.at[index, 'calc_ABW_DL_Cubic_Mbps'] = cubic_value
+                    else:
                         df.at[index, 'Log Rate Ratio'] = np.nan
+
+                    df.at[index, 'Latency Benefit'] = round(df.iloc[target_index]['P99 Latency DL Cubic'] - row['P99 Latency DL Prague'], 3)
+                    df.at[index, 'calc_P99_Latency_DL_Prague'] = row['P99 Latency DL Prague']
+                    df.at[index, 'calc_P99_Latency_DL_Cubic'] = df.iloc[target_index]['P99 Latency DL Cubic']
             else:
                 # For TC3 and above, use same row values
-                try:
-                    df.at[index, 'Log Rate Ratio'] = round(np.log10(
-                        row['Average Bandwidth DL Prague (Mbps)'] / 
-                        row['Average Bandwidth DL Cubic (Mbps)']
-                    ),num_digits_lrr)
-                except ZeroDivisionError:
+                cubic_value = row['Average Bandwidth DL Cubic (Mbps)']
+                prague_value = row['Average Bandwidth DL Prague (Mbps)']
+                if cubic_value > 0:  # Prevent division by zero
+                    df.at[index, 'Log Rate Ratio'] = round(np.log10(prague_value / cubic_value), 3)
+                    df.at[index, 'calc_ABW_DL_Prague_Mbps'] = prague_value
+                    df.at[index, 'calc_ABW_DL_Cubic_Mbps'] = cubic_value
+                else:
                     df.at[index, 'Log Rate Ratio'] = np.nan
-                df.at[index, 'Latency Benefit'] = round(
-                    row['P99 Latency DL Cubic'] - 
-                    row['P99 Latency DL Prague'],num_digits_lat_ben)
 
-    # Drop temporary columns
-    columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS', 'TS#'] + hidden_columns
-    df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
+                df.at[index, 'Latency Benefit'] = round(row['P99 Latency DL Cubic'] - row['P99 Latency DL Prague'], 3)
+                df.at[index, 'calc_P99_Latency_DL_Prague'] = row['P99 Latency DL Prague']
+                df.at[index, 'calc_P99_Latency_DL_Cubic'] = row['P99 Latency DL Cubic']
 
+    # Temporary detailed results with calculation information used.
+    # Used by process_summmary_csv
+    calc_csv_path = os.path.join(root_dir, "calc_detailed_results.csv")
+    df.to_csv(calc_csv_path, index=False)
+    print(f"Intermediary calculated metrics saved to {calc_csv_path}")
+
+    # Specify columns intended to be dropped
+    intended_columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS', 'TS#',
+                                'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
+                                'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic'] + hidden_columns
+    columns_to_drop = [col for col in intended_columns_to_drop if col in df.columns]
+
+    # Drop the specified columns from the DataFrame
+    df.drop(columns=columns_to_drop, inplace=True)
+
+    # Save the cleaned DataFrame to "detailed_results.csv"
     detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
     df.to_csv(detailed_csv_path, index=False)
-
     print(f"Post Processed Final merged results saved to {detailed_csv_path}")
+
     return Path(detailed_csv_path)
 
 
@@ -260,10 +282,12 @@ def process_summary_csv(rootResultsdir):
     with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
         campaigns_config = json.load(config_file)
 
-    df = pd.read_csv(os.path.join(rootResultsdir, "detailed_results.csv"))
+    df = pd.read_csv(os.path.join(rootResultsdir, "calc_detailed_results.csv"))
 
     # Use subset of csv
-    data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit']].copy()
+    data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit',
+                      'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
+                      'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic']].copy()
 
     # Process the Test Case to determine the number of files, rows, and columns
     # Test Case format: MS#-AP#-LS#-TC#-TS#
@@ -279,44 +303,57 @@ def process_summary_csv(rootResultsdir):
     max_ts = valid_data_subset['TS'].max()
 
     output_data_valid = defaultdict(lambda: np.zeros((max_ts, max(valid_data_subset['TC']) - 1), dtype=object))
+    output_data_extended = defaultdict(lambda: np.zeros((max_ts, max(valid_data_subset['TC']) - 1), dtype=object))
 
     row_labels_map = {1: "2ms base RTT", 2: "10ms base RTT", 3: "50ms base RTT"}
     column_labels_map = {2: "1v1", 3: "1+1", 4: "2+2", 5: "4+4"}
 
     for _, row in valid_data_subset.iterrows():
-        ms_index = row['MS']
-        ls_index = row['LS']
-        row_index = row['TS'] - 1
-        col_index = row['TC'] - 2
+        ms_index, ls_index, row_index, col_index = row['MS'], row['LS'], row['TS'] - 1, row['TC'] - 2
 
+        # Original cell content
         cell_content = f"{row['Log Rate Ratio']:+.1f} +\n{row['Latency Benefit']:.1f}ms"
-
         output_data_valid[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = cell_content
 
-    # Generate CSV files
+        # Extended cell content
+        extended_cell_content = (f"{row['Log Rate Ratio']:+.1f} "
+                         f"[a: {row['calc_ABW_DL_Prague_Mbps']:.1f}, b: {row['calc_ABW_DL_Cubic_Mbps']:.1f}] +\n"
+                         f"{row['Latency Benefit']:.1f}ms "
+                         f"[a: {row['calc_P99_Latency_DL_Prague']:.1f}, b: {row['calc_P99_Latency_DL_Cubic']:.1f}]")
+        output_data_extended[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = extended_cell_content
+
+    # Generate original and extended CSV files
     output_files = []
     for (ms_index, ls_index, channel_width), data_matrix in output_data_valid.items():
         ms_prefix = campaigns_config["MS"][str(ms_index)]  # Use the MS prefix from the config
         ls_prefix = campaigns_config["LS"][str(ls_index)]  # Use the LS prefix from the config
 
         # Construct the file name dynamically based on MS and LS
-        if ms_prefix:
-            file_name = f"{ms_prefix}_{ls_prefix}_Channel.csv"
-        else:
-            file_name = f"{ls_prefix}_Channel.csv"
+        file_name_base = f"{ms_prefix}_" if ms_prefix else ""
+        file_name = f"{file_name_base}{ls_prefix}_Channel_{channel_width}MHz.csv".replace(" ", "_")
+        extended_file_name = f"{file_name_base}{ls_prefix}_Channel_{channel_width}MHz_extended.csv".replace(" ", "_")
 
-        file_name = file_name.replace(" ", "_")  # Replace spaces with underscores for file naming
+ 
         full_path = os.path.join(rootResultsdir, file_name)
+        extended_full_path = os.path.join(rootResultsdir, extended_file_name)
 
-        # Create a DataFrame for the CSV output
-        df_output = pd.DataFrame(data_matrix, columns=[column_labels_map[i+2] for i in range(data_matrix.shape[1])])
-        df_output.index = [row_labels_map[i+1] for i in range(max_ts)]
+        # Save original summary CSV
+        df_output = pd.DataFrame(data_matrix, columns=[column_labels_map[i + 2] for i in range(data_matrix.shape[1])])
+        df_output.index = [row_labels_map[i + 1] for i in range(max_ts)]
         df_output.index.name = ""
-
         df_output.to_csv(full_path)
-
         output_files.append(Path(full_path))
 
+        # Save extended summary CSV
+        extended_matrix = output_data_extended[(ms_index, ls_index, channel_width)]
+        df_extended_output = pd.DataFrame(extended_matrix, columns=[column_labels_map[i + 2] for i in range(extended_matrix.shape[1])])
+        df_extended_output.index = [row_labels_map[i + 1] for i in range(max_ts)]
+        df_extended_output.index.name = ""
+        df_extended_output.to_csv(extended_full_path)
+        output_files.append(Path(extended_full_path))
+
         print(f"Summary csv saved to {full_path}")
+        print(f"Extended summary csv saved to {extended_full_path}")
 
     return output_files
+
