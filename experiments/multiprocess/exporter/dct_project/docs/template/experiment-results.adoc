@@ -66,6 +66,9 @@ th, td { white-space: nowrap; }
 	margin: 0.5rem;
 }
 
+.darkgray {
+  color: DarkGray;
+}
 </style>
 ++++
 endif::backend-html5[]
