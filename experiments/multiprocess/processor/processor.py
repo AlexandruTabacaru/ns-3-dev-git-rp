@@ -317,9 +317,9 @@ def process_summary_csv(rootResultsdir):
 
         # Extended cell content
         extended_cell_content = (f"{row['Log Rate Ratio']:+.1f} "
-                         f"[a: {row['calc_ABW_DL_Prague_Mbps']:.0f}, b: {row['calc_ABW_DL_Cubic_Mbps']:.0f}] +\n"
+                         f"[a: {row['calc_ABW_DL_Prague_Mbps']:.0f}M, b: {row['calc_ABW_DL_Cubic_Mbps']:.0f}M] +\n"
                          f"{row['Latency Benefit']:.0f}ms "
-                         f"[a: {row['calc_P99_Latency_DL_Prague']:.0f}, b: {row['calc_P99_Latency_DL_Cubic']:.0f}]")
+                         f"[a: {row['calc_P99_Latency_DL_Prague']:.0f}ms, b: {row['calc_P99_Latency_DL_Cubic']:.0f}ms]")
         output_data_extended[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = extended_cell_content
 
     # Generate original and extended CSV files
