@@ -312,14 +312,14 @@ def process_summary_csv(rootResultsdir):
         ms_index, ls_index, row_index, col_index = row['MS'], row['LS'], row['TS'] - 1, row['TC'] - 2
 
         # Original cell content
-        cell_content = f"{row['Log Rate Ratio']:+.1f} +\n{row['Latency Benefit']:.1f}ms"
+        cell_content = f"{row['Log Rate Ratio']:+.1f} +\n{row['Latency Benefit']:.0f}ms"
         output_data_valid[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = cell_content
 
         # Extended cell content
         extended_cell_content = (f"{row['Log Rate Ratio']:+.1f} "
-                         f"[a: {row['calc_ABW_DL_Prague_Mbps']:.1f}, b: {row['calc_ABW_DL_Cubic_Mbps']:.1f}] +\n"
-                         f"{row['Latency Benefit']:.1f}ms "
-                         f"[a: {row['calc_P99_Latency_DL_Prague']:.1f}, b: {row['calc_P99_Latency_DL_Cubic']:.1f}]")
+                         f"[a: {row['calc_ABW_DL_Prague_Mbps']:.0f}, b: {row['calc_ABW_DL_Cubic_Mbps']:.0f}] +\n"
+                         f"{row['Latency Benefit']:.0f}ms "
+                         f"[a: {row['calc_P99_Latency_DL_Prague']:.0f}, b: {row['calc_P99_Latency_DL_Cubic']:.0f}]")
         output_data_extended[(ms_index, ls_index, row['channelWidth'])][row_index, col_index] = extended_cell_content
 
     # Generate original and extended CSV files
@@ -330,8 +330,8 @@ def process_summary_csv(rootResultsdir):
 
         # Construct the file name dynamically based on MS and LS
         file_name_base = f"{ms_prefix}_" if ms_prefix else ""
-        file_name = f"{file_name_base}{ls_prefix}_Channel_{channel_width}MHz.csv".replace(" ", "_")
-        extended_file_name = f"{file_name_base}{ls_prefix}_Channel_{channel_width}MHz_extended.csv".replace(" ", "_")
+        file_name = f"{file_name_base}{ls_prefix}_Channel_orig.csv".replace(" ", "_")
+        extended_file_name = f"{file_name_base}{ls_prefix}_Channel.csv".replace(" ", "_")
 
  
         full_path = os.path.join(rootResultsdir, file_name)
@@ -342,7 +342,8 @@ def process_summary_csv(rootResultsdir):
         df_output.index = [row_labels_map[i + 1] for i in range(max_ts)]
         df_output.index.name = ""
         df_output.to_csv(full_path)
-        output_files.append(Path(full_path))
+        # GWhite temporarily commenting this out
+        #output_files.append(Path(full_path))
 
         # Save extended summary CSV
         extended_matrix = output_data_extended[(ms_index, ls_index, channel_width)]
