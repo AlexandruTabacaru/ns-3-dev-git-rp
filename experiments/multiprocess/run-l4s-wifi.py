@@ -217,7 +217,7 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    #rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
+    # rootResultsdir = "multiresults-20240303-214151"
     process_results(rootResultsdir)
 
     merge_input_with_results(rootResultsdir)
