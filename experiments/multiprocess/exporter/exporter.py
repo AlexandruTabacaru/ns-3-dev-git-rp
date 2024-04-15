@@ -45,6 +45,10 @@ def export(
         with path.open() as focused_csv_file:
             focused_data_list.append({"name": name, "content": focused_csv_file.read()})
 
+    # copy the introduction markdown into the dctpath
+    introduction_markdown_dct_path = dct_path / "docs" / "template" / "intro.md"
+    shutil.copy(introduction_markdown_path, introduction_markdown_dct_path)
+
     # Initialize Jinja2
     templates_dir = dct_path / "jinja_templates"
     jinja_env = jinja2.Environment(
@@ -53,7 +57,7 @@ def export(
     export_template = jinja_env.get_template("split_tables.adoc.jinja")
 
     # Render jinja template into AsciiDoc file
-    template_input = {"raw_csv": detailed_data, "focused_csvs": focused_data_list, "introduction_markdown": introduction_markdown_path}
+    template_input = {"raw_csv": detailed_data, "focused_csvs": focused_data_list, "introduction_markdown": "intro.md"}
     document_path = dct_path / "docs" / "template" / "body.adoc"
     render_to_file(export_template, document_path, template_input)
 
