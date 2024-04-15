@@ -204,7 +204,7 @@ ax3.set_ylim(
     0,
 )
 ax3.set_ylabel("Rtt (ms)", fontsize=8)
-ax3.set_title("Cubic unsmoothed rtt", fontsize=8)
+ax3.set_title("Cubic smoothed rtt", fontsize=8)
 ax3.tick_params(axis='x', labelsize=8)
 ax3.tick_params(axis='y', labelsize=8)
 
@@ -260,7 +260,7 @@ ax6.set_ylim(
     0,
 )
 ax6.set_ylabel("Rtt (ms)", fontsize=8)
-ax6.set_title("Prague unsmoothed rtt", fontsize=8)
+ax6.set_title("Prague smoothed rtt", fontsize=8)
 ax6.tick_params(axis='x', labelsize=8)
 ax6.tick_params(axis='y', labelsize=8)
 #ax6.legend(loc="upper right", framealpha=1, prop={"size": 6})
