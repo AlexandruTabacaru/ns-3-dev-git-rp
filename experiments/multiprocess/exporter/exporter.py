@@ -11,6 +11,7 @@ import jinja2
 def export(
     detailed_csv_path: Path,
     focused_csv_paths: list[Path],
+    introduction_markdown_path: Path,
     dct_path: Path,
     output_file_path: Path,
     log_file_path: str | None = None,
@@ -21,6 +22,7 @@ def export(
     Assumptions:
     - detailed_csv_path and focused_csv_paths are all paths to valid, existing CSV files
     - detailed_csv_path is a csv containing a large comprehensive table of data to be rendered into the output
+    - introduction_markdown_path is a markdown file containing the front matter for the resulting HTML doc
     - focused_csv_paths is a list of csvs containing data that will be rendered into a focused section
     - output_file_path can be written to by this script
     - Docker is installed on the host machine, the Docker daemon is running in the background, and this process is privileged to run Docker
@@ -51,7 +53,7 @@ def export(
     export_template = jinja_env.get_template("split_tables.adoc.jinja")
 
     # Render jinja template into AsciiDoc file
-    template_input = {"raw_csv": detailed_data, "focused_csvs": focused_data_list}
+    template_input = {"raw_csv": detailed_data, "focused_csvs": focused_data_list, "introduction_markdown": introduction_markdown_path}
     document_path = dct_path / "docs" / "template" / "body.adoc"
     render_to_file(export_template, document_path, template_input)
 
@@ -143,15 +145,17 @@ def main():
         default=[],
         help="Path to a CSV with focused data. Can be specified multiple times.",
     )
+    parser.add_argument("input_md", help="Path to an input Markdown file containing the front matter for the HTML.")
     args = parser.parse_args()
 
     # Validate arguments
     input_csv_path = existing_filepath(args.input_csv)
+    md_path = existing_filepath(args.input_md)
     dct_path = dct_project(args.dct_path)
     output_file_path = not_a_directory(args.output_file)
     focused_csv_paths = [Path(path) for path in args.focused_csv]
 
-    export(input_csv_path, focused_csv_paths, dct_path, output_file_path)
+    export(input_csv_path, focused_csv_paths, md_path, dct_path, output_file_path)
 
 
 if __name__ == "__main__":

@@ -202,30 +202,30 @@ def run_simulation(test_case, arguments):
 
 if __name__ == "__main__":
     # Create root multiprocessing directory
-    formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rootResultsdir = "multiresults" + "-" + formatted_date
-    os.makedirs(rootResultsdir, exist_ok=False)
+    # formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # rootResultsdir = "multiresults" + "-" + formatted_date
+    # os.makedirs(rootResultsdir, exist_ok=False)
 
-    build_filepath = os.path.join(rootResultsdir, "build.txt")
-    runNS3Build(build_filepath)
+    # build_filepath = os.path.join(rootResultsdir, "build.txt")
+    # runNS3Build(build_filepath)
 
-    configFile = "config.csv"
-    testCases = parse_csv_to_dataframe(configFile)
+    # configFile = "config.csv"
+    # testCases = parse_csv_to_dataframe(configFile)
 
-    pool_args = [(tc, args) for tc, args in testCases.items()]
+    # pool_args = [(tc, args) for tc, args in testCases.items()]
 
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        pool.starmap(run_simulation, pool_args)
+    # with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+    #     pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "multiresults-20240303-214151"
-    process_results(rootResultsdir)
+    rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
+    # process_results(rootResultsdir)
 
-    merge_input_with_results(rootResultsdir)
+    # merge_input_with_results(rootResultsdir)
 
     hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
     detailed_csv = post_process(rootResultsdir, hidden_columns)
     summary_csvs = process_summary_csv(rootResultsdir)
 
     # Export html files
-    export(detailed_csv, summary_csvs, Path("./exporter/dct_project"), rootResultsdir)
+    export(detailed_csv, summary_csvs, Path("./intro.md"), Path("./exporter/dct_project"), rootResultsdir)
     sys.exit()
