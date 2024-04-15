@@ -45,6 +45,28 @@ for line in f:
         wifi_samples_avg.append(float(columns[1]))
 f.close()
 
+f = open("wifi-foreground-throughput.dat", "r")
+wifi_fg_time = []
+wifi_fg_samples_plot = []
+wifi_fg_samples_avg = []
+for line in f:
+    columns = line.split()
+    t = float(columns[0])
+    wifi_fg_time.append(t)
+    wifi_fg_samples_plot.append(float(columns[1]))
+f.close()
+
+f = open("wifi-background-throughput.dat", "r")
+wifi_bg_time = []
+wifi_bg_samples_plot = []
+wifi_bg_samples_avg = []
+for line in f:
+    columns = line.split()
+    t = float(columns[0])
+    wifi_bg_time.append(t)
+    wifi_bg_samples_plot.append(float(columns[1]))
+f.close()
+
 cubic_time = []
 cubic_samples_plot = []
 cubic_samples_avg = []
@@ -153,6 +175,21 @@ ax1.plot(
     wifi_samples_plot,
     marker="",
     color="black",
+    label="total"
+)
+ax1.plot(
+    wifi_fg_time,
+    wifi_fg_samples_plot,
+    marker="",
+    color="blue",
+    label="foreground"
+)
+ax1.plot(
+    wifi_bg_time,
+    wifi_bg_samples_plot,
+    marker="",
+    color="green",
+    label="background"
 )
 ax1.set_xlim(
     0,
@@ -168,6 +205,7 @@ if add_horizontal_line_for_averaging:
 ax1.set_title("Access point sending rate (all flows, measured at MAC layer)", fontsize=8)
 ax1.tick_params(axis='x', labelsize=8)
 ax1.tick_params(axis='y', labelsize=8)
+ax1.legend(loc="lower right", framealpha=1, prop={"size": 6})
 
 ax2.plot(
     cubic_time,

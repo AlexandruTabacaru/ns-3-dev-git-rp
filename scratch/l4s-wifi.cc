@@ -87,11 +87,18 @@ std::ofstream g_fileBytesInDualPi2Queue;
 void TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal);
 
 uint32_t g_wifiThroughputData = 0;
+uint32_t g_wifiFgThroughputData = 0;
+uint32_t g_wifiBgThroughputData = 0;
 Time g_lastQosDataTime;
 std::ofstream g_fileWifiPhyTxPsduBegin;
-void TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double txPower);
+void TraceWifiPhyTxPsduBegin(std::string context,
+                             WifiConstPsduMap psduMap,
+                             WifiTxVector txVector,
+                             double txPower);
 
 std::ofstream g_fileWifiThroughput;
+std::ofstream g_fileWifiFgThroughput;
+std::ofstream g_fileWifiBgThroughput;
 void TraceWifiThroughput();
 Time g_wifiThroughputInterval = MilliSeconds(100);
 
@@ -613,8 +620,17 @@ main(int argc, char* argv[])
         NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
         apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
                                                    MakeCallback(&TraceBytesInAcBeQueue));
-        apPhy->TraceConnectWithoutContext("PhyTxPsduBegin", MakeCallback(&TraceWifiPhyTxPsduBegin));
+        apPhy->TraceConnect("PhyTxPsduBegin", "foreground", MakeCallback(&TraceWifiPhyTxPsduBegin));
+        for (uint32_t i = 0; i < obssStaDevices.GetN(); i++)
+        {
+            Ptr<WifiPhy> staPhy = obssStaDevices.Get(i)->GetObject<WifiNetDevice>()->GetPhy();
+            staPhy->TraceConnect("PhyTxPsduBegin",
+                                 "background",
+                                 MakeCallback(&TraceWifiPhyTxPsduBegin));
+        }
         g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
+        g_fileWifiFgThroughput.open("wifi-foreground-throughput.dat", std::ofstream::out);
+        g_fileWifiBgThroughput.open("wifi-background-throughput.dat", std::ofstream::out);
         Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
     }
     if (enableTracesAll)
@@ -809,6 +825,8 @@ main(int argc, char* argv[])
     g_fileCSojourn.close();
     g_fileWifiPhyTxPsduBegin.close();
     g_fileWifiThroughput.close();
+    g_fileWifiFgThroughput.close();
+    g_fileWifiBgThroughput.close();
     g_filePragueThroughput.close();
     g_filePragueCwnd.close();
     g_filePragueSsthresh.close();
@@ -856,7 +874,10 @@ TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal)
 }
 
 void
-TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double txPower)
+TraceWifiPhyTxPsduBegin(std::string context,
+                        WifiConstPsduMap psduMap,
+                        WifiTxVector txVector,
+                        double txPower)
 {
     NS_ASSERT(psduMap.size() == 1);
     bool isQosData = false;
@@ -870,6 +891,18 @@ TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double 
             isQosData = true;
             totalAmpduSize += it->second->GetAmpduSubframeSize(i);
             g_wifiThroughputData += it->second->GetAmpduSubframeSize(i);
+            if (context == "foreground")
+            {
+                g_wifiFgThroughputData += it->second->GetAmpduSubframeSize(i);
+            }
+            else if (context == "background")
+            {
+                g_wifiBgThroughputData += it->second->GetAmpduSubframeSize(i);
+            }
+            else
+            {
+                NS_FATAL_ERROR("Unknown context: " << context);
+            }
         }
     }
     if (isQosData)
@@ -880,7 +913,8 @@ TraceWifiPhyTxPsduBegin(WifiConstPsduMap psduMap, WifiTxVector txVector, double 
                                                                  txVector,
                                                                  WifiPhyBand::WIFI_PHY_BAND_5GHZ)
                                         .GetMicroSeconds()
-                                 << " " << nMpdus << " " << totalAmpduSize << std::endl;
+                                 << " " << nMpdus << " " << totalAmpduSize << " " << context
+                                 << std::endl;
         g_lastQosDataTime = Now();
     }
 }
@@ -1129,8 +1163,18 @@ TraceWifiThroughput()
     g_fileWifiThroughput << Now().GetSeconds() << " " << std::fixed
                          << (g_wifiThroughputData * 8) / g_wifiThroughputInterval.GetSeconds() / 1e6
                          << std::endl;
+    g_fileWifiFgThroughput << Now().GetSeconds() << " " << std::fixed
+                           << (g_wifiFgThroughputData * 8) / g_wifiThroughputInterval.GetSeconds() /
+                                  1e6
+                           << std::endl;
+    g_fileWifiBgThroughput << Now().GetSeconds() << " " << std::fixed
+                           << (g_wifiBgThroughputData * 8) / g_wifiThroughputInterval.GetSeconds() /
+                                  1e6
+                           << std::endl;
     Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
     g_wifiThroughputData = 0;
+    g_wifiFgThroughputData = 0;
+    g_wifiBgThroughputData = 0;
 }
 
 void
