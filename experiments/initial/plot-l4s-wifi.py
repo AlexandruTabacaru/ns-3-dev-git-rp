@@ -154,10 +154,12 @@ ax1.plot(
     marker="",
     color="black",
 )
+ax1.set_xlim(
+    0,
+)
 ax1.set_ylim(
     0,
 )
-#ax1.set_xlabel("Time (s)", fontsize=8)
 ax1.set_ylabel("Throughput (Mbps)", fontsize=8)
 if add_horizontal_line_for_averaging:
     wifi_avg = round(sum(wifi_samples_avg) / len(wifi_samples_avg), 1)
@@ -166,7 +168,6 @@ if add_horizontal_line_for_averaging:
 ax1.set_title("Access point sending rate (all flows, measured at MAC layer)", fontsize=8)
 ax1.tick_params(axis='x', labelsize=8)
 ax1.tick_params(axis='y', labelsize=8)
-#ax1.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax2.plot(
     cubic_time,
@@ -174,10 +175,12 @@ ax2.plot(
     marker="",
     color="black",
 )
+ax2.set_xlim(
+    0,
+)
 ax2.set_ylim(
     0,
 )
-#ax2.set_xlabel("Time (s)", fontsize=8)
 ax2.set_ylabel("Throughput\n(Mbps)", fontsize=8)
 if add_horizontal_line_for_averaging:
     if len(cubic_samples_avg):
@@ -187,7 +190,6 @@ if add_horizontal_line_for_averaging:
 ax2.set_title("Cubic throughput at receiver", fontsize=8)
 ax2.tick_params(axis='x', labelsize=8)
 ax2.tick_params(axis='y', labelsize=8)
-#ax2.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax3.plot(
     cubic_rtt_time,
@@ -195,15 +197,16 @@ ax3.plot(
     marker="",
     color="black",
 )
+ax3.set_xlim(
+    0,
+)
 ax3.set_ylim(
     0,
 )
-#ax3.set_xlabel("Time (s)", fontsize=8)
 ax3.set_ylabel("Rtt (ms)", fontsize=8)
 ax3.set_title("Cubic unsmoothed rtt", fontsize=8)
 ax3.tick_params(axis='x', labelsize=8)
 ax3.tick_params(axis='y', labelsize=8)
-#ax3.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax4.plot(
     cubic_cwnd_time,
@@ -211,15 +214,16 @@ ax4.plot(
     marker="",
     color="black",
 )
+ax4.set_xlim(
+    0,
+)
 ax4.set_ylim(
     0,
 )
-#ax4.set_xlabel("Time (s)", fontsize=8)
 ax4.set_ylabel("cwnd (segments)", fontsize=8)
 ax4.set_title("Cubic cwnd (segments)", fontsize=8)
 ax4.tick_params(axis='x', labelsize=8)
 ax4.tick_params(axis='y', labelsize=8)
-#ax4.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax5.plot(
     prague_time,
@@ -227,11 +231,12 @@ ax5.plot(
     marker="",
     color="black",
 )
+ax5.set_xlim(
+    0,
+)
 ax5.set_ylim(
     0,
 )
-#ax5.set_ylim(0, 120)
-#ax5.set_xlabel("Time (s)", fontsize=8)
 ax5.set_ylabel("Throughput (Mbps)", fontsize=8)
 if add_horizontal_line_for_averaging:
     if len(prague_samples_avg):
@@ -241,7 +246,6 @@ if add_horizontal_line_for_averaging:
 ax5.set_title("Prague throughput at receiver", fontsize=8)
 ax5.tick_params(axis='x', labelsize=8)
 ax5.tick_params(axis='y', labelsize=8)
-#ax5.legend(loc="upper right", prop={"size": 6})
 
 ax6.plot(
     prague_rtt_time,
@@ -249,10 +253,12 @@ ax6.plot(
     marker="",
     color="black",
 )
+ax6.set_xlim(
+    0,
+)
 ax6.set_ylim(
     0,
 )
-#ax6.set_xlabel("Time (s)", fontsize=8)
 ax6.set_ylabel("Rtt (ms)", fontsize=8)
 ax6.set_title("Prague unsmoothed rtt", fontsize=8)
 ax6.tick_params(axis='x', labelsize=8)
@@ -265,10 +271,12 @@ ax7.plot(
     marker="",
     color="black",
 )
+ax7.set_xlim(
+    0,
+)
 ax7.set_ylim(
     0,
 )
-#ax7.set_xlabel("Time (s)", fontsize=8)
 ax7.set_ylabel("cwnd (segments)", fontsize=8)
 ax7.set_title("Prague cwnd (segments)", fontsize=8)
 ax7.tick_params(axis='x', labelsize=8)
@@ -276,15 +284,24 @@ ax7.tick_params(axis='y', labelsize=8)
 #ax7.legend(loc="upper right", framealpha=1, prop={"size": 6})
 
 ax8.plot(bytes_time, bytes_samples_plot, marker="", color="black")
-#ax8.set_ylim(0, 600000)
-#ax8.set_xlabel("Time (s)", fontsize=8)
+ax8.set_xlim(
+    0,
+)
+ax8.set_ylim(
+    0,
+)
 ax8.set_ylabel("Bytes in AC_BE", fontsize=8)
 ax8.tick_params(axis='x', labelsize=8)
 ax8.tick_params(axis='y', labelsize=8)
 ax8.set_title("Bytes in Wi-Fi device AC_BE queue", fontsize=8)
 
 ax9.plot(dualpi2_time, dualpi2_samples_plot, marker="", color="black")
-#ax9.set_ylim(0, 600000)
+ax9.set_xlim(
+    0,
+)
+ax9.set_ylim(
+    0,
+)
 ax9.set_xlabel("Time (s)", fontsize=8)
 ax9.tick_params(axis='x', labelsize=8)
 ax9.tick_params(axis='y', labelsize=8)
