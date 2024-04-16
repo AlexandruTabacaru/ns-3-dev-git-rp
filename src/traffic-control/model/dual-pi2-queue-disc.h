@@ -211,7 +211,10 @@ class DualPi2QueueDisc : public QueueDisc
     double m_baseProb;         //!< Variable used in calculation of drop probability
     TracedValue<double> m_pCL; //!< Coupled probability
     TracedValue<double> m_pC;  //!< Classic drop/mark probability
+    TracedValue<double> m_pCmax;  //!< Max Classic drop/mark probability
     TracedValue<double> m_pL;  //!< L4S mark probability
+    TracedValue<double> m_pLmax;  //!< Max L4S mark probability
+
     TracedCallback<Time> m_traceClassicSojourn; //!< Classic sojourn time
     TracedCallback<Time> m_traceL4sSojourn;     //!< L4S sojourn time
     Time m_prevQ;                               //!< Old value of queue delay

@@ -132,10 +132,18 @@ DualPi2QueueDisc::GetTypeId()
                             "L4S mark probability (p_L)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pL),
                             "ns3::TracedValueCallback::Double")
+           .AddTraceSource("ProbLmax",
+                            "Max L4S mark probability (p_Lmax)",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pLmax),
+                            "ns3::TracedValueCallback::Double")
             .AddTraceSource("ProbC",
                             "Classic drop/mark probability (p_C)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pC),
                             "ns3::TracedValueCallback::Double")
+            .AddTraceSource("ProbCmax",
+                            "Max Classic drop/mark probability (p_Cmax)",
+                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCmax),
+                            "ns3::TracedValueCallback::Double")                
             .AddTraceSource("ClassicSojournTime",
                             "Sojourn time of the last packet dequeued from the Classic queue",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_traceClassicSojourn),
@@ -238,6 +246,10 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
         {
             bool marked = false;
             auto qdItem = DequeueFromL4sQueue(marked);
+            if(!qdItem)
+            {
+                break; // Check for the drop!
+            }
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
                           "Error, insufficient pending bytes");
@@ -374,6 +386,8 @@ DualPi2QueueDisc::InitializeParams()
     m_pCL = 0;
     m_pC = 0;
     m_pL = 0;
+    m_pCmax = std::min<double>((1/(m_k*m_k)), 1);
+    m_pLmax = 1;
 }
 
 void
@@ -384,11 +398,18 @@ DualPi2QueueDisc::DualPi2Update()
     // Use queuing time of first-in Classic packet
     Ptr<const QueueDiscItem> item;
     Time curQ = Seconds(0);
+    Time cQ = Seconds(0);
+    Time LQ = Seconds(0);
 
     if ((item = GetInternalQueue(CLASSIC)->Peek()))
     {
-        curQ = Simulator::Now() - item->GetTimeStamp();
+        cQ = Simulator::Now() - item->GetTimeStamp();
     }
+    if ((item = GetInternalQueue(L4S)->Peek()))
+    {
+        LQ = Simulator::Now() - item->GetTimeStamp();
+    }
+    curQ = std::max<Time>(cQ,LQ);
 
     m_baseProb = m_baseProb + m_alpha * (curQ - m_target).GetSeconds() +
                  m_beta * (curQ - m_prevQ).GetSeconds();
@@ -577,32 +598,57 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
     NS_LOG_FUNCTION(this);
     auto qdItem = GetInternalQueue(L4S)->Dequeue();
     double pPrimeL{0}; // p'_L in RFC 9332
-    if (GetInternalQueue(L4S)->GetNPackets() > 1)
+    if(m_pCL < m_pLmax) //edge case
     {
-        pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
-    }
-    // else p'_L = 0 by initialization above
-    if (pPrimeL > m_pCL)
-    {
-        NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
+        if (GetInternalQueue(L4S)->GetNPackets() > m_thLen) //edge case
+        {
+            pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
+        }
+        else
+        {
+             pPrimeL = 0; // by initialization above , //edge case
+        }
+
+        if (pPrimeL > m_pCL)
+        {
+            NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
+        }
+        else
+        {
+            NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
+        }
+
+        double pL = std::max<double>(pPrimeL, m_pCL);
+        pL = std::min<double>(pL, 1); // clamp p_L at 1
+        m_pL = pL;                    // Trace the value of p_L
+        if (Recur(m_l4sCount, pL))
+        {
+            marked = Mark(qdItem, UNFORCED_L4S_MARK);
+            NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
+            NS_LOG_DEBUG("L-queue packet is marked");
+        }
     }
     else
     {
-        NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
-    }
-    double pL = std::max<double>(pPrimeL, m_pCL);
-    pL = std::min<double>(pL, 1); // clamp p_L at 1
-    m_pL = pL;                    // Trace the value of p_L
-    if (Recur(m_l4sCount, pL))
-    {
-        marked = Mark(qdItem, UNFORCED_L4S_MARK);
-        NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
-        NS_LOG_DEBUG("L-queue packet is marked");
-    }
-    else
-    {
-        NS_LOG_DEBUG("L-queue packet is not marked");
-    }
+        while (qdItem)
+        {    
+            if (Recur(m_l4sCount, m_pC)) //edge case, overload saturation
+            {
+                NS_LOG_INFO("L4s drop due to recur function; queue length "
+                    << GetInternalQueue(L4S)->GetNBytes());
+                DropAfterDequeue(qdItem, UNFORCED_CLASSIC_DROP); //Revert to classic drop due to overload
+                qdItem = GetInternalQueue(L4S)->Dequeue();
+                continue;
+            }
+            if (Recur(m_l4sCount, m_pCL)) //edge case, overload saturation
+            {
+                marked = Mark(qdItem, UNFORCED_L4S_MARK);
+                NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
+                NS_LOG_DEBUG("L-queue packet is marked");
+            }
+            NS_LOG_DEBUG("L-queue packet is not marked");
+        }
+    }    
     return qdItem;
 }
 
@@ -618,7 +664,7 @@ DualPi2QueueDisc::DequeueFromClassicQueue(bool& dropped)
     }
     while (qdItem)
     {
-        if (Recur(m_classicCount, m_pC))
+        if (Recur(m_classicCount, m_pC) || (m_pC >=m_pCmax)) //overload disables ecn
         {
             NS_LOG_INFO("Classic drop due to recur function; queue length "
                         << GetInternalQueue(CLASSIC)->GetNBytes());
@@ -669,12 +715,22 @@ DualPi2QueueDisc::DoDequeue()
         {
             bool marked [[maybe_unused]];
             qdItem = DequeueFromL4sQueue(marked);
-            Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
-            NS_LOG_INFO("Dequeue from L4S queue; timestamp "
-                        << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
-                        << sojourn.GetMicroSeconds() << " us");
-            m_traceL4sSojourn(sojourn);
-            return qdItem;
+            // After implementing Edge Cases in L4S, the queue item can drop if an overload is happened, 
+            //therefore check that an item was actually returned before tracing it
+            if (qdItem)
+            {
+                Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
+                NS_LOG_INFO("Dequeue from L4S queue; timestamp "
+                            << qdItem->GetTimeStamp().GetMicroSeconds() << " us; sojourn "
+                            << sojourn.GetMicroSeconds() << " us");
+                m_traceL4sSojourn(sojourn);
+                return qdItem;
+            }
+            else
+            {
+                NS_LOG_DEBUG("Drop occurred in CLASSIC queue");
+                // Do not return; continue with while() loop
+            }
         }
         else if (selected == CLASSIC)
         {
