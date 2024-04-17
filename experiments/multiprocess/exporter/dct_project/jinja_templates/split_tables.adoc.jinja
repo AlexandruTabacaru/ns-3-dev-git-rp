@@ -29,8 +29,9 @@ include::{{ introduction_markdown }}[]
 *** stem:[0 = 1:1] ratio
 *** stem:[+0.3 ~~ 2:1] ratio, stem:[-0.3 ~~ 1:2] ratio
 * Latency Performance
-** "*Latency Benefit*" stem:[= (text(P99PDV)_b) - (P99PDV_a)]
-*** stem:[P99PDV =] 99^th^ percentile packet latency - 1^st^ percentile packet latency
+** "*Latency Benefit*" stem:[= (text(P99PD)_b) - (text(P99PD)_a)]
+*** P99PD is the 99^th^ percentile one way Wi-Fi link delay
+*** P99PD = 99^th^ percentile downlink packet delay - fixed network delay
 *** Using all packets delivered per flow type
 
 {% if focused_csvs|length > 0 %}
@@ -51,7 +52,7 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 |====
 |Cell Data
 ^|[.darkgray]#Log Rate Ratio -># -0.2 [a: 106M, b: 117M] [.darkgray]#<- Avg. a&b Thruputs in Mbps# +
-[.darkgray]#Latency Benefit -># 12ms [a: 8ms, b: 20ms] [.darkgray]#<- P99 latency for a&b in ms#
+[.darkgray]#Latency Benefit -># 12ms [a: 8ms, b: 20ms] [.darkgray]#<- P99PD for a&b in ms#
 |====
 ====
 

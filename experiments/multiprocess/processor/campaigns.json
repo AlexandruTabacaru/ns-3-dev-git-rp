@@ -1,12 +1,36 @@
 {
   "MS": {
-    "0": "",
+    "0": "noOBSS",
     "1": "1OBSS",
     "2": "4OBSS"
   },
   "LS": {
-    "1": "20_MHz",
-    "2": "80_MHz",
-    "3": "160_MHz"
+    "1": "20_MHz_Channel",
+    "2": "80_MHz_Channel",
+    "3": "160_MHz_Channel"
+  },
+  "TS": {
+    "1": "2ms base RTT", 
+    "2": "10ms base RTT", 
+    "3": "50ms base RTT"
+  },
+  "TC": {
+    "2": "1v1", 
+    "3": "1+1", 
+    "4": "2+2", 
+    "5": "4+4"
+  },
+  "AP": {
+    "0": "noDualPI",
+    "1": "DualPI"
+  },
+  "ED": {
+    "0": "defaultEDCA",
+    "1": "newEDCA[2.5,2.5]",
+    "2": "newEDCA[1,1]",
+    "3": "newEDCA[0.25,0.25]",
+    "4": "newEDCA4",
+    "5": "newEDCA5",
+    "6": "newEDCA6"
   }
 }
