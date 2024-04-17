@@ -58,4 +58,5 @@ vcpkg/
 # CableLabs additions
 experiments/*/results*
 *.DS_Store
-
+._*
+~$*
