@@ -146,18 +146,20 @@ def process_results(root_dir):
 
     print(f"Combined results saved to {os.path.join(root_dir, 'processed_results.csv')}")
 
+
+def extract_testcase_identifiers(row):
+    identifiers = row['Test Case'].split('-')
+    identifier_dict = {}
+    for identifier in identifiers:
+        letters, num = identifier[:2], int(identifier[2:])
+        identifier_dict[letters] = num
+    return pd.Series(identifier_dict)
+
+
 def post_process(root_dir, hidden_columns):
-    
-    num_digits_lrr=1
-    num_digits_lat_ben=0
-    
+        
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
-
-    # Extract TS# values from the Test Case column
-    df['TS#'] = df['Test Case'].str.extract(r'TS(\d+)').astype(int)
-
-    # Compute the max_ts value
-    max_ts = df['TS#'].max()
+    df=df.sort_values(by='Test Case')
 
     df['Log Rate Ratio'] = np.nan
     df['Latency Benefit'] = np.nan
@@ -168,46 +170,28 @@ def post_process(root_dir, hidden_columns):
     df['calc_P99_Latency_DL_Prague'] = np.nan
     df['calc_P99_Latency_DL_Cubic'] = np.nan
 
-    for index, row in df.iterrows():
-        test_case = row['Test Case']
-        tc_num = int(test_case.split('-')[3][2:])  # Extract TC# as integer
+    # the following code assumes that TC1 is cubic only, TC2 is prague only, TC3+ are cubic+prague equal numbers of flows
 
-        if tc_num == 1:
-            continue
-
-        # For TC2 and above, compute values
-        if tc_num >= 2:
-            if tc_num == 2:
-                # For TC2, use different rows for Prague and Cubic values
-                target_index = index - max_ts
-                if target_index >= 0 and target_index < len(df):
-                    cubic_value = df.iloc[target_index]['Average Bandwidth DL Cubic (Mbps)']
-                    prague_value = row['Average Bandwidth DL Prague (Mbps)']
-                    if cubic_value > 0:  # Prevent division by zero
-                        df.at[index, 'Log Rate Ratio'] = round(np.log10(prague_value / cubic_value), 3)
-                        df.at[index, 'calc_ABW_DL_Prague_Mbps'] = prague_value
-                        df.at[index, 'calc_ABW_DL_Cubic_Mbps'] = cubic_value
-                    else:
-                        df.at[index, 'Log Rate Ratio'] = np.nan
-
-                    df.at[index, 'Latency Benefit'] = round(df.iloc[target_index]['P99 Latency DL Cubic'] - row['P99 Latency DL Prague'], 3)
-                    df.at[index, 'calc_P99_Latency_DL_Prague'] = row['P99 Latency DL Prague']
-                    df.at[index, 'calc_P99_Latency_DL_Cubic'] = df.iloc[target_index]['P99 Latency DL Cubic']
-            else:
-                # For TC3 and above, use same row values
-                cubic_value = row['Average Bandwidth DL Cubic (Mbps)']
-                prague_value = row['Average Bandwidth DL Prague (Mbps)']
-                if cubic_value > 0:  # Prevent division by zero
-                    df.at[index, 'Log Rate Ratio'] = round(np.log10(prague_value / cubic_value), 3)
-                    df.at[index, 'calc_ABW_DL_Prague_Mbps'] = prague_value
-                    df.at[index, 'calc_ABW_DL_Cubic_Mbps'] = cubic_value
-                else:
-                    df.at[index, 'Log Rate Ratio'] = np.nan
-
-                df.at[index, 'Latency Benefit'] = round(row['P99 Latency DL Cubic'] - row['P99 Latency DL Prague'], 3)
-                df.at[index, 'calc_P99_Latency_DL_Prague'] = row['P99 Latency DL Prague']
-                df.at[index, 'calc_P99_Latency_DL_Cubic'] = row['P99 Latency DL Cubic']
-
+    # Calculate Log Rate Ratios
+    cubic_rates=df[(df.TC==1)|(df.TC > 2)]['Average Bandwidth DL Cubic (Mbps)']
+    prague_rates=df[df.TC >= 2]['Average Bandwidth DL Prague (Mbps)']
+    cubic_rates.index = prague_rates.index
+    rate_ratios=prague_rates/cubic_rates
+    log_rate_ratios = round(np.log10(rate_ratios), 3)
+    df['Log Rate Ratio']=log_rate_ratios
+    df['calc_ABW_DL_Prague_Mbps'] = prague_rates
+    df['calc_ABW_DL_Cubic_Mbps'] = cubic_rates
+ 
+    # Calculate Latency Benefits
+    cubic_P99s=df[(df.TC==1)|(df.TC > 2)]['P99 Latency DL Cubic']
+    prague_P99s=df[df.TC >= 2]['P99 Latency DL Prague']
+    cubic_P99s.index = prague_P99s.index
+    latency_benefits=round(cubic_P99s - prague_P99s,3)
+    df['Latency Benefit']=latency_benefits
+    df['calc_P99_Latency_DL_Prague'] = prague_P99s
+    df['calc_P99_Latency_DL_Cubic'] = cubic_P99s
+ 
+ 
     # Temporary detailed results with calculation information used.
     # Used by process_summmary_csv
     calc_csv_path = os.path.join(root_dir, "calc_detailed_results.csv")
@@ -233,6 +217,8 @@ def post_process(root_dir, hidden_columns):
 
 def merge_input_with_results(root_dir):
     input_df = pd.read_csv("config.csv")  # Contains "Test Case"
+
+    
     results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
 
     # Match the test case label from directory names so they line up
@@ -246,33 +232,33 @@ def merge_input_with_results(root_dir):
         how="left",
     )
 
-    # Extract MS#, AP#, LS#, TC#, TS# for sorting
-    merged_df[['MS', 'AP', 'LS', 'TC', 'TS']] = merged_df['Test Case'].str.extract(r'MS(\d+)-AP(\d+)-LS(\d+)-TC(\d+)-TS(\d+)')
-    merged_df[['MS', 'AP', 'LS', 'TC', 'TS']] = merged_df[['MS', 'AP', 'LS', 'TC', 'TS']].astype(int)
+    # Add columns for the different testcase identifiers
+    merged_df = pd.concat([merged_df, merged_df.apply(extract_testcase_identifiers, axis=1)], axis=1)
+   
 
     # Generate the 'link' column
     merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]/")
     merged_df['Label'] = merged_df['link']
 
-    # Sort by MS#, AP#, LS#, TC#, TS#
-    sorted_merged_df = merged_df.sort_values(by=['MS', 'AP', 'LS', 'TC', 'TS'])
+    # Sort by Test Case id
+    merged_df=merged_df.sort_values(by='Test Case')
 
     # Reorder columns to place 'Label', 'Test Case', input_df columns, then the rest
     input_df_columns = [col for col in input_df.columns if col != 'Test Case']  # Avoid duplicating 'Test Case'
     final_columns = ['Label', 'Test Case'] + input_df_columns + \
-                    [col for col in sorted_merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['MS', 'AP', 'TC', 'TS', 'LS', 'Test Case Match']]
+                    [col for col in merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['Test Case Match']]
 
     # Add 'link' as the last column
     final_columns = [col for col in final_columns if col != 'link'] + ['link']
 
-    sorted_merged_df = sorted_merged_df[final_columns]
+    merged_df = merged_df[final_columns]
 
     # Drop temporary columns
     # columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS']
-    # sorted_merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
+    # merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
 
     final_csv_path = os.path.join(root_dir, "results.csv")
-    sorted_merged_df.to_csv(final_csv_path, index=False)
+    merged_df.to_csv(final_csv_path, index=False)
 
     print(f"Final merged results saved to {final_csv_path}")
 
