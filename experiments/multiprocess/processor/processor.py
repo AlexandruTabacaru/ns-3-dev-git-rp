@@ -157,6 +157,54 @@ def extract_testcase_identifiers(row):
     return pd.Series(identifier_dict)
 
 
+
+def merge_input_with_results(root_dir):
+    input_df = pd.read_csv("config.csv")  # Contains "Test Case"
+
+    results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
+
+    # Match the test case label from directory names so they line up
+    results_df["Test Case Match"] = results_df["Label"].apply(lambda x: x.split("_")[0])
+
+    merged_df = pd.merge(
+        results_df,
+        input_df,
+        left_on="Test Case Match",
+        right_on="Test Case",
+        how="left",
+    )
+
+    # Add columns for the different testcase identifiers
+    merged_df = pd.concat([merged_df, merged_df.apply(extract_testcase_identifiers, axis=1)], axis=1)
+   
+
+    # Generate the 'link' column
+    merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]/")
+    merged_df['Label'] = merged_df['link']
+
+    # Sort by Test Case id
+    merged_df=merged_df.sort_values(by='Test Case')
+
+    # Reorder columns to place 'Label', 'Test Case', input_df columns, then the rest
+    input_df_columns = [col for col in input_df.columns if col != 'Test Case']  # Avoid duplicating 'Test Case'
+    final_columns = ['Label', 'Test Case'] + input_df_columns + \
+                    [col for col in merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['Test Case Match']]
+
+    # Add 'link' as the last column
+    final_columns = [col for col in final_columns if col != 'link'] + ['link']
+
+    merged_df = merged_df[final_columns]
+
+    # Drop temporary columns
+    # columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS']
+    # merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
+
+    final_csv_path = os.path.join(root_dir, "results.csv")
+    merged_df.to_csv(final_csv_path, index=False)
+
+    print(f"Final merged results saved to {final_csv_path}")
+
+
 def post_process(root_dir, hidden_columns):
         
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
@@ -217,52 +265,6 @@ def post_process(root_dir, hidden_columns):
 
     return Path(detailed_csv_path)
 
-
-def merge_input_with_results(root_dir):
-    input_df = pd.read_csv("config.csv")  # Contains "Test Case"
-
-    results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
-
-    # Match the test case label from directory names so they line up
-    results_df["Test Case Match"] = results_df["Label"].apply(lambda x: x.split("_")[0])
-
-    merged_df = pd.merge(
-        results_df,
-        input_df,
-        left_on="Test Case Match",
-        right_on="Test Case",
-        how="left",
-    )
-
-    # Add columns for the different testcase identifiers
-    merged_df = pd.concat([merged_df, merged_df.apply(extract_testcase_identifiers, axis=1)], axis=1)
-   
-
-    # Generate the 'link' column
-    merged_df['link'] = merged_df['Label'].apply(lambda label: f"link:./{os.path.join(label)}[{label}]/")
-    merged_df['Label'] = merged_df['link']
-
-    # Sort by Test Case id
-    merged_df=merged_df.sort_values(by='Test Case')
-
-    # Reorder columns to place 'Label', 'Test Case', input_df columns, then the rest
-    input_df_columns = [col for col in input_df.columns if col != 'Test Case']  # Avoid duplicating 'Test Case'
-    final_columns = ['Label', 'Test Case'] + input_df_columns + \
-                    [col for col in merged_df.columns if col not in ['Label', 'Test Case'] + input_df_columns + ['Test Case Match']]
-
-    # Add 'link' as the last column
-    final_columns = [col for col in final_columns if col != 'link'] + ['link']
-
-    merged_df = merged_df[final_columns]
-
-    # Drop temporary columns
-    # columns_to_drop = ['Test Case Match', 'MS', 'AP', 'TC', 'TS', 'LS']
-    # merged_df.drop(columns_to_drop, errors='ignore', axis=1, inplace=True)
-
-    final_csv_path = os.path.join(root_dir, "results.csv")
-    merged_df.to_csv(final_csv_path, index=False)
-
-    print(f"Final merged results saved to {final_csv_path}")
 
 def process_summary_csv(rootResultsdir):
     # Load the configuration from campaigns.json
