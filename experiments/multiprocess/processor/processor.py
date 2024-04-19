@@ -229,11 +229,15 @@ def hide_columns(root_dir, hidden_columns):
 
     return Path(detailed_csv_path)
 
-
-def post_process(root_dir):
+def create_summary_csvs(root_dir)
         
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
     df=df.sort_values(by='Test Case')
+
+    # Load the configuration from campaigns.json
+    script_dir = os.path.dirname(__file__)
+    with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
+        campaigns_config = json.load(config_file)
 
     df['Log Rate Ratio'] = np.nan
     df['Latency Benefit'] = np.nan
@@ -269,19 +273,10 @@ def post_process(root_dir):
  
  
     # Temporary detailed results with calculation information used.
-    # Used by process_summmary_csv
     calc_csv_path = os.path.join(root_dir, "calc_detailed_results.csv")
     df.to_csv(calc_csv_path, index=False)
     print(f"Intermediary calculated metrics saved to {calc_csv_path}")
 
-
-def process_summary_csv(rootResultsdir):
-    # Load the configuration from campaigns.json
-    script_dir = os.path.dirname(__file__)
-    with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
-        campaigns_config = json.load(config_file)
-
-    df = pd.read_csv(os.path.join(rootResultsdir, "calc_detailed_results.csv"))
 
     # Use subset of csv
     data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit',
@@ -329,7 +324,7 @@ def process_summary_csv(rootResultsdir):
             file_name_base += name_component + "_"
         extended_file_name = file_name_base[:-1] + ".csv"
 
-        extended_full_path = os.path.join(rootResultsdir, extended_file_name)
+        extended_full_path = os.path.join(root_dir, extended_file_name)
 
         # Save extended summary CSV
         df_extended_output = pd.DataFrame(extended_matrix, columns=[column_labels_map[str(i + 2)] for i in range(extended_matrix.shape[1])])

@@ -202,31 +202,30 @@ def run_simulation(test_case, arguments):
 
 if __name__ == "__main__":
     # Create root multiprocessing directory
-    formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rootResultsdir = "multiresults" + "-" + formatted_date
-    os.makedirs(rootResultsdir, exist_ok=False)
+    # formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # rootResultsdir = "multiresults" + "-" + formatted_date
+    # os.makedirs(rootResultsdir, exist_ok=False)
 
-    build_filepath = os.path.join(rootResultsdir, "build.txt")
-    runNS3Build(build_filepath)
+    # build_filepath = os.path.join(rootResultsdir, "build.txt")
+    # runNS3Build(build_filepath)
 
-    configFile = "config.csv"
-    testCases = parse_csv_to_dataframe(configFile)
+    # configFile = "config.csv"
+    # testCases = parse_csv_to_dataframe(configFile)
 
-    pool_args = [(tc, args) for tc, args in testCases.items()]
+    # pool_args = [(tc, args) for tc, args in testCases.items()]
 
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        pool.starmap(run_simulation, pool_args)
+    # with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+    #     pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
-    process_results(rootResultsdir) # produces processed_results.csv
+    rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
+    # process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
 
     hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
     detailed_csv = hide_columns(rootResultsdir, hidden_columns) # produces detailed_results.csv
 
-    post_process(rootResultsdir) # produces calc_detailed_results.csv 
-    summary_csvs = process_summary_csv(rootResultsdir) # produces multiple csv files
+    summary_csvs = create_summary_csvs(rootResultsdir) # produces calc_detailed_results.csv and multiple csv files
 
 
     # Export html files
