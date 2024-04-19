@@ -301,14 +301,14 @@ def create_summary_csvs(root_dir):
     valid_data_subset = df[(df['Log Rate Ratio'].notna() | df['Latency Benefit'].notna())]
     
     # Figure out the dimensions of each table and set the default table to be all zeros
-    num_rows = valid_data_subset[row_identifier].unique().size
+    num_rows = valid_data_subset[row_identifier].max()
     num_columns = valid_data_subset[column_identifier].max()
     output_data_extended = defaultdict(lambda: np.zeros((num_rows, num_columns), dtype=object))
 
     for _, row in valid_data_subset.iterrows():
         table_index = tuple(row[col] for col in identifier_list)
         row_index, col_index = row[row_identifier] - 1, row[column_identifier] - 1
-
+        
         # Extended cell content
         extended_cell_content = (f"{row['Log Rate Ratio']:+.1f} "
                          f"[a: {row['calc_ABW_DL_Prague_Mbps']:.0f}M, b: {row['calc_ABW_DL_Cubic_Mbps']:.0f}M] +\n"
@@ -334,6 +334,7 @@ def create_summary_csvs(root_dir):
         df_extended_output.index.name = ""
         empty_columns = df_extended_output.columns[(df_extended_output == 0).all()]
         df_extended_output.drop(empty_columns, axis=1, inplace=True)
+        df_extended_output = df_extended_output[(df_extended_output != 0).any(axis=1)]
         df_extended_output.to_csv(extended_full_path)
         output_files.append(Path(extended_full_path))
 
