@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import multiprocessing
-from processor.processor import process_results, merge_input_with_results, process_summary_csv, post_process
+from processor.processor import process_results, merge_input_with_results, process_summary_csv, post_process, hide_columns
 from exporter.exporter import export
 from pathlib import Path
 
@@ -217,14 +217,17 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "multiresults-20240303-214151"
-    process_results(rootResultsdir)
+    # rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
+    process_results(rootResultsdir) # produces processed_results.csv
 
-    merge_input_with_results(rootResultsdir)
+    merge_input_with_results(rootResultsdir) # produces results.csv
 
     hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
-    detailed_csv = post_process(rootResultsdir, hidden_columns)
-    summary_csvs = process_summary_csv(rootResultsdir)
+    detailed_csv = hide_columns(rootResultsdir, hidden_columns) # produces detailed_results.csv
+
+    post_process(rootResultsdir) # produces calc_detailed_results.csv 
+    summary_csvs = process_summary_csv(rootResultsdir) # produces multiple csv files
+
 
     # Export html files
     export(detailed_csv, summary_csvs, Path("./intro.md"), Path("./exporter/dct_project"), rootResultsdir)

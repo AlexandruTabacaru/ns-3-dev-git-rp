@@ -204,8 +204,33 @@ def merge_input_with_results(root_dir):
 
     print(f"Final merged results saved to {final_csv_path}")
 
+    return Path(final_csv_path)
 
-def post_process(root_dir, hidden_columns):
+
+def hide_columns(root_dir, hidden_columns):
+        
+    df = pd.read_csv(os.path.join(root_dir, "results.csv"))
+    df=df.sort_values(by='Test Case')
+
+    # Specify columns intended to be dropped
+    intended_columns_to_drop = ['Test Case Match', 'xMS', 'xAP', 'xTC', 'xTS', 'xLS', 'xTS',
+                                'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
+                                'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic'] + hidden_columns
+    columns_to_drop = [col for col in intended_columns_to_drop if col in df.columns]
+
+    # Drop the specified columns from the DataFrame
+    df.drop(columns=columns_to_drop, inplace=True)
+
+    # Save the cleaned DataFrame to "detailed_results.csv"
+    # Used by exporter
+    detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
+    df.to_csv(detailed_csv_path, index=False)
+    print(f"Post Processed Final merged results saved to {detailed_csv_path}")
+
+    return Path(detailed_csv_path)
+
+
+def post_process(root_dir):
         
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
     df=df.sort_values(by='Test Case')
@@ -248,22 +273,6 @@ def post_process(root_dir, hidden_columns):
     calc_csv_path = os.path.join(root_dir, "calc_detailed_results.csv")
     df.to_csv(calc_csv_path, index=False)
     print(f"Intermediary calculated metrics saved to {calc_csv_path}")
-
-    # Specify columns intended to be dropped
-    intended_columns_to_drop = ['Test Case Match', 'MS', 'AP', 'xTC', 'xTS', 'xLS', 'xTS',
-                                'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
-                                'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic'] + hidden_columns
-    columns_to_drop = [col for col in intended_columns_to_drop if col in df.columns]
-
-    # Drop the specified columns from the DataFrame
-    df.drop(columns=columns_to_drop, inplace=True)
-
-    # Save the cleaned DataFrame to "detailed_results.csv"
-    detailed_csv_path = os.path.join(root_dir, "detailed_results.csv")
-    df.to_csv(detailed_csv_path, index=False)
-    print(f"Post Processed Final merged results saved to {detailed_csv_path}")
-
-    return Path(detailed_csv_path)
 
 
 def process_summary_csv(rootResultsdir):
