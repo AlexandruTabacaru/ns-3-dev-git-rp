@@ -110,7 +110,7 @@ def process_results(root_dir):
 
         for direction in ["UL", "DL"]:
             # Initialize default values
-            default_stats = {"Average Latency": None, "P10 Latency": None, "P90 Latency": None, "P99 Latency": None, "StdDev Latency": None}
+            default_stats = {"Average Latency": float("inf"), "P0 Latency": float("inf"), "P10 Latency": float("inf"), "P90 Latency": float("inf"), "P99 Latency": float("inf"), "StdDev Latency": float("inf")}
 
             # Compute statistics for cubic and prague if data is available
             if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
@@ -212,10 +212,12 @@ def hide_columns(root_dir, hidden_columns):
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
     df=df.sort_values(by='Test Case')
 
+    identifier_list = [col for col in df.columns if col.startswith('x')]
+
     # Specify columns intended to be dropped
-    intended_columns_to_drop = ['Test Case Match', 'xMS', 'xAP', 'xTC', 'xTS', 'xLS', 'xTS',
+    intended_columns_to_drop = ['Test Case Match',
                                 'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
-                                'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic'] + hidden_columns
+                                'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic'] + hidden_columns + identifier_list
     columns_to_drop = [col for col in intended_columns_to_drop if col in df.columns]
 
     # Drop the specified columns from the DataFrame
@@ -229,7 +231,7 @@ def hide_columns(root_dir, hidden_columns):
 
     return Path(detailed_csv_path)
 
-def create_summary_csvs(root_dir)
+def create_summary_csvs(root_dir):
         
     df = pd.read_csv(os.path.join(root_dir, "results.csv"))
     df=df.sort_values(by='Test Case')
@@ -239,73 +241,73 @@ def create_summary_csvs(root_dir)
     with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
         campaigns_config = json.load(config_file)
 
+    ## Create a TS x TC table for each case of the other testcase identifiers
+    row_labels_map = campaigns_config['TS']
+    row_identifier='xTS'
+    column_identifier='xTC'
+    # get a list of the other identifier tags
+    identifier_list = [col for col in df.columns if col.startswith('x') and col not in [row_identifier, column_identifier]]
+    column_identifier='tc'
+    column_labels_map = campaigns_config['tc']
+
+    # Initialize additional columns for calculated values
     df['Log Rate Ratio'] = np.nan
     df['Latency Benefit'] = np.nan
-
-    # Initialize additional columns for tracking used values
     df['calc_ABW_DL_Prague_Mbps'] = np.nan
     df['calc_ABW_DL_Cubic_Mbps'] = np.nan
     df['calc_P99_Latency_DL_Prague'] = np.nan
     df['calc_P99_Latency_DL_Cubic'] = np.nan
+    df[column_identifier] = 0
 
-    # the following code assumes that TC1 is cubic only, TC2 is prague only, TC3+ are cubic+prague equal numbers of flows
-    # it also assumes that sorting by Test Case (above) succeeds in lining up the appropriate TC1 and TC2 instances for the ".index" lines below.
+    # the following code assumes that sorting by Test Case (above) succeeds in lining up the appropriate instances for the ".index" lines below.
+    # in other words, if prague_TC != cubic_TC, the subsets of df returned for prague & cubic will have different indexes, this codes assumes 
+    # that we can just re-index the cubic results using the prague index.  It would be more future-proof if instead we matched up cubic values
+    # and prague values based on a match of the columns in identifier_list
+    
+    for tc_column,[column_label,prague_TC,cubic_TC] in column_labels_map.items():
+        prague_TC=int(prague_TC)
+        cubic_TC=int(cubic_TC)
+        
+        # Calculate Log Rate Ratios
+        cubic_rates = df[df.xTC==cubic_TC]['Average Bandwidth DL Cubic (Mbps)']
+        prague_rates = df[df.xTC==prague_TC]['Average Bandwidth DL Prague (Mbps)']
+        if (cubic_rates.shape[0] == prague_rates.shape[0]):
+            cubic_rates.index = prague_rates.index
+            rate_ratios=prague_rates/cubic_rates
+            log_rate_ratios = round(np.log10(rate_ratios), 3)
+            df.loc[df.xTC==prague_TC,'Log Rate Ratio']=log_rate_ratios
+            df.loc[df.xTC==prague_TC,'calc_ABW_DL_Prague_Mbps'] = prague_rates
+            df.loc[df.xTC==prague_TC,'calc_ABW_DL_Cubic_Mbps'] = cubic_rates
 
-    # Calculate Log Rate Ratios
-    cubic_rates=df[(df.xTC==1)|(df.xTC > 2)]['Average Bandwidth DL Cubic (Mbps)']
-    prague_rates=df[df.xTC >= 2]['Average Bandwidth DL Prague (Mbps)']
-    cubic_rates.index = prague_rates.index
-    rate_ratios=prague_rates/cubic_rates
-    log_rate_ratios = round(np.log10(rate_ratios), 3)
-    df['Log Rate Ratio']=log_rate_ratios
-    df['calc_ABW_DL_Prague_Mbps'] = prague_rates
-    df['calc_ABW_DL_Cubic_Mbps'] = cubic_rates
- 
-    # Calculate Latency Benefits
-    wanDelays = df[df.xTC >= 2]['wanLinkDelay'].str.extract(r'"(\d+)ms"').astype(int).squeeze() # get the wanLinkDelay as an integer in ms
-    cubic_P99s=df[(df.xTC==1)|(df.xTC > 2)]['P99 Latency DL Cubic']
-    prague_P99s=df[df.xTC >= 2]['P99 Latency DL Prague']
-    cubic_P99s.index = prague_P99s.index
-    latency_benefits=round(cubic_P99s - prague_P99s,3)
-    df['Latency Benefit']=latency_benefits
-    df['calc_P99_Latency_DL_Prague'] = prague_P99s - wanDelays
-    df['calc_P99_Latency_DL_Cubic'] = cubic_P99s - wanDelays
- 
- 
+        # Calculate Latency Benefits
+        wanDelays = df[df.xTC==prague_TC]['wanLinkDelay'].str.extract(r'"(\d+)ms"').astype(int).squeeze() # get the wanLinkDelay as an integer in ms
+        cubic_P99s = df[df.xTC==cubic_TC]['P99 Latency DL Cubic']
+        prague_P99s = df[df.xTC==prague_TC]['P99 Latency DL Prague']
+        if (cubic_P99s.shape[0] == prague_P99s.shape[0]):
+            cubic_P99s.index = prague_P99s.index
+            latency_benefits=round(cubic_P99s - prague_P99s,3)
+            df.loc[df.xTC==prague_TC,'Latency Benefit']=latency_benefits
+            df.loc[df.xTC==prague_TC,'calc_P99_Latency_DL_Prague'] = prague_P99s - wanDelays
+            df.loc[df.xTC==prague_TC,'calc_P99_Latency_DL_Cubic'] = cubic_P99s - wanDelays
+
+        df.loc[df.xTC==prague_TC,column_identifier]= int(tc_column)
+
     # Temporary detailed results with calculation information used.
     calc_csv_path = os.path.join(root_dir, "calc_detailed_results.csv")
     df.to_csv(calc_csv_path, index=False)
     print(f"Intermediary calculated metrics saved to {calc_csv_path}")
 
-
-    # Use subset of csv
-    data_subset = df[['Test Case', 'wanLinkDelay', 'channelWidth', 'Log Rate Ratio', 'Latency Benefit',
-                      'calc_ABW_DL_Prague_Mbps', 'calc_ABW_DL_Cubic_Mbps', 
-                      'calc_P99_Latency_DL_Prague', 'calc_P99_Latency_DL_Cubic']].copy()
-
-    # Re-add columns for the different testcase identifiers
-    data_subset = pd.concat([data_subset, data_subset.apply(extract_testcase_identifiers, axis=1)], axis=1)
-
-    ## Create a TS x TC table for each case of the other testcase identifiers
-    row_labels_map = campaigns_config['TS']
-    row_identifier='xTS'
-    column_labels_map = campaigns_config['TC']
-    column_identifier='xTC'
-
-    # get a list of the other identifier tags
-    identifier_list = [col for col in data_subset.columns if col.startswith('x') and col not in [row_identifier, column_identifier]]
+    # Filter out rows with no calculated data
+    valid_data_subset = df[(df['Log Rate Ratio'].notna() | df['Latency Benefit'].notna())]
     
-    # Filter out TC1 as a special case, since its data is in the corresponding TC2 row
-    valid_data_subset = data_subset[(data_subset['xTC'] > 1) & data_subset['Log Rate Ratio'].notna() & data_subset['Latency Benefit'].notna()]
-
     # Figure out the dimensions of each table and set the default table to be all zeros
     num_rows = valid_data_subset[row_identifier].unique().size
-    num_columns = valid_data_subset[column_identifier].unique().size
+    num_columns = valid_data_subset[column_identifier].max()
     output_data_extended = defaultdict(lambda: np.zeros((num_rows, num_columns), dtype=object))
 
     for _, row in valid_data_subset.iterrows():
         table_index = tuple(row[col] for col in identifier_list)
-        row_index, col_index = row[row_identifier] - 1, row[column_identifier] - 2
+        row_index, col_index = row[row_identifier] - 1, row[column_identifier] - 1
 
         # Extended cell content
         extended_cell_content = (f"{row['Log Rate Ratio']:+.1f} "
@@ -314,7 +316,7 @@ def create_summary_csvs(root_dir)
                          f"[a: {row['calc_P99_Latency_DL_Prague']:.0f}ms, b: {row['calc_P99_Latency_DL_Cubic']:.0f}ms]")
         output_data_extended[table_index][row_index, col_index] = extended_cell_content
 
-    # Generate original and extended CSV files
+    # Generate extended CSV files
     output_files = []
     for table_index, extended_matrix in output_data_extended.items():
 
@@ -327,9 +329,11 @@ def create_summary_csvs(root_dir)
         extended_full_path = os.path.join(root_dir, extended_file_name)
 
         # Save extended summary CSV
-        df_extended_output = pd.DataFrame(extended_matrix, columns=[column_labels_map[str(i + 2)] for i in range(extended_matrix.shape[1])])
+        df_extended_output = pd.DataFrame(extended_matrix, columns=[column_labels_map[str(i + 1)][0] for i in range(extended_matrix.shape[1])])
         df_extended_output.index = [row_labels_map[str(i + 1)] for i in range(num_rows)]
         df_extended_output.index.name = ""
+        empty_columns = df_extended_output.columns[(df_extended_output == 0).all()]
+        df_extended_output.drop(empty_columns, axis=1, inplace=True)
         df_extended_output.to_csv(extended_full_path)
         output_files.append(Path(extended_full_path))
 

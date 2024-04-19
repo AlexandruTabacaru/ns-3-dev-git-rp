@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 import multiprocessing
-from processor.processor import process_results, merge_input_with_results, process_summary_csv, post_process, hide_columns
+from processor.processor import process_results, merge_input_with_results, create_summary_csvs, hide_columns
 from exporter.exporter import export
 from pathlib import Path
 
@@ -202,23 +202,23 @@ def run_simulation(test_case, arguments):
 
 if __name__ == "__main__":
     # Create root multiprocessing directory
-    # formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    # rootResultsdir = "multiresults" + "-" + formatted_date
-    # os.makedirs(rootResultsdir, exist_ok=False)
+    formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    rootResultsdir = "multiresults" + "-" + formatted_date
+    os.makedirs(rootResultsdir, exist_ok=False)
 
-    # build_filepath = os.path.join(rootResultsdir, "build.txt")
-    # runNS3Build(build_filepath)
+    build_filepath = os.path.join(rootResultsdir, "build.txt")
+    runNS3Build(build_filepath)
 
-    # configFile = "config.csv"
-    # testCases = parse_csv_to_dataframe(configFile)
+    configFile = "config.csv"
+    testCases = parse_csv_to_dataframe(configFile)
 
-    # pool_args = [(tc, args) for tc, args in testCases.items()]
+    pool_args = [(tc, args) for tc, args in testCases.items()]
 
-    # with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-    #     pool.starmap(run_simulation, pool_args)
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        pool.starmap(run_simulation, pool_args)
 
-    rootResultsdir = "/mnt/wifil4s/gwhite/multiresults-20240405-091237"
-    # process_results(rootResultsdir) # produces processed_results.csv
+    # rootResultsdir = "/mnt/wifil4s/gwhite/test"
+    process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
 
