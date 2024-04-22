@@ -77,6 +77,8 @@
 #include <sstream>
 
 using namespace ns3;
+using namespace std;
+
 
 NS_LOG_COMPONENT_DEFINE("L4sWifi");
 
@@ -107,9 +109,19 @@ void TraceLSojourn(Time sojourn);
 std::ofstream g_fileCSojourn;
 void TraceCSojourn(Time sojourn);
 
+std::ofstream g_fileTraceProbChanges;
+void TraceProbcL(double oldVal, double pCL);
+void TraceProbL(double oldVal, double pL);
+void TraceProbLmax(double oldVal, double pLmax);
+void TraceProbC(double oldVal, double pC);
+void TraceProbCmax(double oldVal, double pCmax);
+
 uint32_t g_pragueData = 0;
+std::map<uint16_t, uint32_t> g_pragueDataforEachPort;
+
 Time g_lastSeenPrague = Seconds(0);
 std::ofstream g_filePragueThroughput;
+std::ofstream g_filePragueThroughputperStream;
 std::ofstream g_filePragueCwnd;
 std::ofstream g_filePragueSsthresh;
 std::ofstream g_filePragueSendInterval;
@@ -137,8 +149,11 @@ void TracePragueClientSocket(Ptr<Application>, uint32_t, bool, bool);
 void TracePragueServerSocket(Ptr<Socket>);
 
 uint32_t g_cubicData = 0;
+std::map<uint16_t, uint32_t> g_cubicDataforEachPort; //Dst Port Number , Rx packet size
+
 Time g_lastSeenCubic = Seconds(0);
 std::ofstream g_fileCubicThroughput;
+std::ofstream g_fileCubicThroughputperStream;
 std::ofstream g_fileCubicCwnd;
 std::ofstream g_fileCubicSsthresh;
 std::ofstream g_fileCubicSendInterval;
@@ -188,7 +203,7 @@ MinMaxAvgTotalCalculator<uint32_t> cubicThroughputCalculator;  // units of Mbps
 
 int
 main(int argc, char* argv[])
-{
+{   
     // Variable declaration, and constants
     std::string wifiControlMode = "OfdmRate24Mbps";
     double staDistance = 1; // meters; distance of 10 m or more will cause packet loss at MCS 11
@@ -228,6 +243,7 @@ main(int argc, char* argv[])
     uint32_t cwMax = 1023;
     uint8_t aifsn = 3;
     Time txopLimit = MicroSeconds(2528);
+    bool enableLogs = false;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -284,7 +300,16 @@ main(int argc, char* argv[])
     cmd.AddValue("enableTraces",
                  "Whether to enable time-series traces necessary for plot-l4s-wifi.py",
                  enableTraces);
+    cmd.AddValue("enableLogs",
+                 "Whether to enable logs of DualPi2QueueDisc class",
+                 enableLogs);             
     cmd.Parse(argc, argv);
+
+    if(enableLogs)
+    {
+        LogComponentEnableAll(LOG_PREFIX_ALL);
+        LogComponentEnable("DualPi2QueueDisc", LOG_LEVEL_INFO);
+    }
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
     if (processingDelay > Seconds(0))
@@ -670,6 +695,7 @@ main(int argc, char* argv[])
         if (enableTracesAll || enableTraces)
         {
             g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
+            g_filePragueThroughputperStream.open("prague-throughput-perStream.dat", std::ofstream::out);
             g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
             g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
         }
@@ -691,12 +717,10 @@ main(int argc, char* argv[])
                                               i,
                                               enableTracesAll,
                                               enableTraces));
-        if (!i)
-        {
-            pragueServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-                "Accept",
-                MakeCallback(&TracePragueServerSocket));
-        }
+
+        pragueServerApps.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+            "Accept",MakeCallback(&TracePragueServerSocket));
+
         std::ostringstream oss;
         oss << "Prague:" << i;
         NS_LOG_DEBUG("Setting up callbacks on Prague sockets " << pragueServerApps.Get(i));
@@ -715,6 +739,7 @@ main(int argc, char* argv[])
         if (enableTracesAll || enableTraces)
         {
             g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
+            g_fileCubicThroughputperStream.open("cubic-throughput-perStream.dat", std::ofstream::out);
             g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
             g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
         }
@@ -736,12 +761,10 @@ main(int argc, char* argv[])
                                               i,
                                               enableTracesAll,
                                               enableTraces));
-        if (!i)
-        {
-            cubicServerApps.Get(0)->GetObject<PacketSink>()->TraceConnectWithoutContext(
-                "Accept",
-                MakeCallback(&TraceCubicServerSocket));
-        }
+
+            cubicServerApps.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext(
+                "Accept",MakeCallback(&TraceCubicServerSocket));
+
         std::ostringstream oss;
         oss << "Cubic:" << i;
         NS_LOG_DEBUG("Setting up callbacks on Cubic sockets " << i << " "
@@ -774,6 +797,13 @@ main(int argc, char* argv[])
         dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
         g_fileCSojourn.open("wifi-dualpi2-c-sojourn.dat", std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+        // Trace Probabilities 
+        g_fileTraceProbChanges.open("wifi-dualpi2-TracedProbabilites.dat",std::ofstream::out);
+        dualPi2->TraceConnectWithoutContext("ProbCL", MakeCallback(&TraceProbcL));
+        dualPi2->TraceConnectWithoutContext("ProbL", MakeCallback(&TraceProbL));
+        dualPi2->TraceConnectWithoutContext("ProbLmax", MakeCallback(&TraceProbLmax));
+        dualPi2->TraceConnectWithoutContext("ProbC", MakeCallback(&TraceProbC));
+        dualPi2->TraceConnectWithoutContext("ProbCmax", MakeCallback(&TraceProbCmax));
     }
 
     // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
@@ -854,6 +884,7 @@ main(int argc, char* argv[])
     g_fileWifiFgThroughput.close();
     g_fileWifiBgThroughput.close();
     g_filePragueThroughput.close();
+    g_filePragueThroughputperStream.close();
     g_filePragueCwnd.close();
     g_filePragueSsthresh.close();
     g_filePragueSendInterval.close();
@@ -862,6 +893,7 @@ main(int argc, char* argv[])
     g_filePragueEcnState.close();
     g_filePragueRtt.close();
     g_fileCubicThroughput.close();
+    g_fileCubicThroughputperStream.close();
     g_fileCubicCwnd.close();
     g_fileCubicSsthresh.close();
     g_fileCubicSendInterval.close();
@@ -957,6 +989,27 @@ TraceCSojourn(Time sojourn)
     g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
+void TraceProbcL(double oldVal, double pCL)
+{
+    g_fileTraceProbChanges << Now().GetSeconds() << " pCL " << pCL << std::endl;
+}
+void TraceProbL(double oldVal, double pL)
+{
+    g_fileTraceProbChanges << Now().GetSeconds() << " pL " << pL << std::endl;
+}
+void TraceProbLmax(double oldVal, double pLmax)
+{
+    g_fileTraceProbChanges << Now().GetSeconds() << " pLmax " << pLmax << std::endl;
+}
+void TraceProbC(double oldVal, double pC)
+{
+    g_fileTraceProbChanges << Now().GetSeconds() << " pC " << pC << std::endl;
+}
+void TraceProbCmax(double oldVal, double pCmax)
+{
+    g_fileTraceProbChanges << Now().GetSeconds() << " pCmax " << pCmax << std::endl;
+}
+
 void
 TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
@@ -971,7 +1024,17 @@ TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSo
 void
 TracePragueRx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_pragueData += packet->GetSize();
+    uint16_t DstPort=header.GetDestinationPort();
+    g_pragueData += packet->GetSize(); //aggregate Prague throughput
+
+    if(g_pragueDataforEachPort.find(DstPort)!=g_pragueDataforEachPort.end())
+    {
+        g_pragueDataforEachPort[DstPort] += packet->GetSize();
+    }
+    else //not found , insert it
+    {
+        g_pragueDataforEachPort.insert({DstPort, packet->GetSize()});
+    }
 }
 
 void
@@ -980,6 +1043,15 @@ TracePragueThroughput()
     g_filePragueThroughput << Now().GetSeconds() << " " << std::fixed
                            << (g_pragueData * 8) / g_pragueThroughputInterval.GetSeconds() / 1e6
                            << std::endl;
+
+    for (auto itr = g_pragueDataforEachPort.begin();itr!=g_pragueDataforEachPort.end();itr++) //print Throuhgput per Stream
+    {
+        g_filePragueThroughputperStream << Now().GetSeconds() << " " << std::fixed
+                           << itr->first <<" "
+                           << (itr->second * 8) / g_pragueThroughputInterval.GetSeconds() / 1e6
+                           << std::endl;
+        itr->second = 0;                   
+    }
     pragueThroughputCalculator.Update((g_pragueData * 8) / g_pragueThroughputInterval.GetSeconds() /
                                       1e6);
     Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
@@ -1088,15 +1160,32 @@ TraceCubicTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSoc
 void
 TraceCubicRx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_cubicData += packet->GetSize();
-}
+    uint16_t DstPort=header.GetDestinationPort();
+    g_cubicData += packet->GetSize(); //aggregate cubic throughput
 
+    if(g_cubicDataforEachPort.find(DstPort)!=g_cubicDataforEachPort.end())
+    {
+        g_cubicDataforEachPort[DstPort] += packet->GetSize();
+    }
+    else //not found , insert it
+    {
+        g_cubicDataforEachPort.insert({DstPort, packet->GetSize()});
+    }
+}
 void
 TraceCubicThroughput()
 {
     g_fileCubicThroughput << Now().GetSeconds() << " " << std::fixed
                           << (g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() / 1e6
                           << std::endl;
+    for (auto itr = g_cubicDataforEachPort.begin();itr!=g_cubicDataforEachPort.end();itr++) //print Throuhgput per Stream
+    {
+        g_fileCubicThroughputperStream << Now().GetSeconds() << " " << std::fixed
+                           << itr->first <<" "
+                           << (itr->second * 8) / g_cubicThroughputInterval.GetSeconds() / 1e6
+                           << std::endl;
+        itr->second = 0;                   
+    }                      
     cubicThroughputCalculator.Update((g_cubicData * 8) / g_cubicThroughputInterval.GetSeconds() /
                                      1e6);
     Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
