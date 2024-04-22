@@ -35,6 +35,13 @@ scale = 1
 # Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
 rtsCtsThreshold = 0
+# Allow customization of AC_BE EDCA parameters (for all Wi-Fi devices)
+cwMin = 15
+cwMax = 1023
+aifsn = 2
+txopLimit = "2528us"
+# The below is to output some simulation progress when running from command-line
+# It is more for C++ invocation and not very useful for Python invocation
 showProgress = 0
 # enablePcapAll will generate pcap traces for all interfaces
 enablePcapAll = 0
@@ -61,6 +68,10 @@ arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
 arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
 arguments += " --maxAmsduSize=" + str(maxAmsduSize)
+arguments += " --cwMin=" + str(cwMin)
+arguments += " --cwMax=" + str(cwMax)
+arguments += " --aifsn=" + str(aifsn)
+arguments += " --txopLimit=" + txopLimit
 arguments += " --showProgress=" + str(showProgress)
 arguments += " --enablePcapAll=" + str(enablePcapAll)
 arguments += " --enablePcap=" + str(enablePcap)

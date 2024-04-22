@@ -169,6 +169,13 @@ uint32_t g_flowsToClose = 0;
 void HandlePeerClose(std::string context, Ptr<const Socket> socket);
 void HandlePeerError(std::string context, Ptr<const Socket> socket);
 
+// Helper function for EDCA overrides
+void SetAcBeEdcaParameters(const NetDeviceContainer& ndc,
+                           uint32_t cwMin,
+                           uint32_t cwMax,
+                           uint8_t aifsn,
+                           Time txopLimit);
+
 // These methods work around the lack of ability to configure different TCP socket types
 // on the same node on a per-socket (per-application) basis. Instead, these methods can
 // be scheduled (right before a socket creation) to change the default value
@@ -216,6 +223,11 @@ main(int argc, char* argv[])
     bool enablePcap = true;
     bool enableTracesAll = false;
     bool enableTraces = true;
+    // Default AC_BE EDCA configuration
+    uint32_t cwMin = 15;
+    uint32_t cwMax = 1023;
+    uint8_t aifsn = 2;
+    Time txopLimit = MicroSeconds(2528);
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -257,6 +269,10 @@ main(int argc, char* argv[])
     cmd.AddValue("rtsCtsThreshold", "RTS/CTS threshold (bytes)", rtsCtsThreshold);
     cmd.AddValue("processingDelay", "Notional packet processing delay", processingDelay);
     cmd.AddValue("maxAmsduSize", "BE Max A-MSDU size in bytes", maxAmsduSize);
+    cmd.AddValue("cwMin", "BE CWmin in slots", cwMin);
+    cmd.AddValue("cwMax", "BE CWmax in slots", cwMax);
+    cmd.AddValue("aifsn", "BE AIFSN in slots", aifsn);
+    cmd.AddValue("txopLimit", "BE TXOP Limit", txopLimit);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
     cmd.AddValue("enablePcapAll",
                  "Whether to enable PCAP trace output at all interfaces",
@@ -363,16 +379,20 @@ main(int argc, char* argv[])
     WifiMacHelper wifiMac;
     wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("l4s")));
     NetDeviceContainer apDevice = wifi.Install(wifiPhy, wifiMac, apNode);
+    SetAcBeEdcaParameters(apDevice, cwMin, cwMax, aifsn, txopLimit);
 
     wifiMac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("l4s")));
     NetDeviceContainer staDevices = wifi.Install(wifiPhy, wifiMac, staNode);
+    SetAcBeEdcaParameters(staDevices, cwMin, cwMax, aifsn, txopLimit);
 
     // OBSS configuration
     wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("obss")));
     NetDeviceContainer obssApDevice = wifi.Install(wifiPhy, wifiMac, obssApNode);
+    SetAcBeEdcaParameters(obssApDevice, cwMin, cwMax, aifsn, txopLimit);
 
     wifiMac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("obss")));
     NetDeviceContainer obssStaDevices = wifi.Install(wifiPhy, wifiMac, obssStaNodes);
+    SetAcBeEdcaParameters(obssStaDevices, cwMin, cwMax, aifsn, txopLimit);
 
     // Set positions
     MobilityHelper mobility;
@@ -1197,5 +1217,28 @@ HandlePeerError(std::string context, Ptr<const Socket> socket)
     {
         // Close 1 second after last TCP flow closes
         Simulator::Stop(Seconds(1));
+    }
+}
+
+// EDCA parameters cannot currently be set using attribute values
+// because there is some post-construction configuration in WifiMac
+// that overwrites the attributes.  This method can be used after
+// WifiHelper::Install() has been called.
+void
+SetAcBeEdcaParameters(const NetDeviceContainer& ndc,
+                      uint32_t cwMin,
+                      uint32_t cwMax,
+                      uint8_t aifsn,
+                      Time txopLimit)
+{
+    for (uint32_t i = 0; i < ndc.GetN(); i++)
+    {
+        auto wifiNetDevice = ndc.Get(i)->GetObject<WifiNetDevice>();
+        NS_ASSERT_MSG(wifiNetDevice, "Not a WifiNetDevice: " << i);
+        auto qosTxop = wifiNetDevice->GetMac()->GetQosTxop(AC_BE);
+        qosTxop->SetMinCw(cwMin);
+        qosTxop->SetMaxCw(cwMax);
+        qosTxop->SetAifsn(aifsn);
+        qosTxop->SetTxopLimit(txopLimit);
     }
 }
