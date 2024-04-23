@@ -98,7 +98,7 @@ def process_results(root_dir):
     all_results = []
 
     test_run_dirs = [
-        d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d))
+        d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d)) and d != "config"
     ]
 
     for test_dir in test_run_dirs:
@@ -107,7 +107,6 @@ def process_results(root_dir):
 
         # Initialize a template for the results dictionary for this test directory
         test_results_template = {"Label": test_dir}
-
         for direction in ["UL", "DL"]:
             # Initialize default values
             default_stats = {"Average Latency": float("inf"), "P0 Latency": float("inf"), "P10 Latency": float("inf"), "P90 Latency": float("inf"), "P99 Latency": float("inf"), "StdDev Latency": float("inf")}
@@ -140,7 +139,6 @@ def process_results(root_dir):
 
         all_results.append(test_results_template)
 
-
     df_results = pd.DataFrame(all_results)
     results_csv_path = os.path.join(root_dir, "processed_results.csv")
     df_results.to_csv(results_csv_path, index=False)
@@ -159,7 +157,7 @@ def extract_testcase_identifiers(row):
 
 
 def merge_input_with_results(root_dir):
-    input_df = pd.read_csv("config.csv")  # Contains "Test Case"
+    input_df = pd.read_csv(os.path.join(root_dir, "config", "config.csv"))  # Contains "Test Case"
 
     results_df = pd.read_csv(os.path.join(root_dir, "processed_results.csv"))
 
@@ -237,8 +235,7 @@ def create_summary_csvs(root_dir):
     df=df.sort_values(by='Test Case')
 
     # Load the configuration from campaigns.json
-    script_dir = os.path.dirname(__file__)
-    with open(os.path.join(script_dir, 'campaigns.json'), 'r') as config_file:
+    with open(os.path.join(root_dir,'config','campaigns.json'), 'r') as config_file:
         campaigns_config = json.load(config_file)
 
     ## Create a TS x TC table for each case of the other testcase identifiers

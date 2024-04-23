@@ -209,7 +209,10 @@ if __name__ == "__main__":
     build_filepath = os.path.join(rootResultsdir, "build.txt")
     runNS3Build(build_filepath)
 
-    configFile = "config.csv"
+    # Copy all of the configuration files into the results directory
+    shutil.copytree("config", os.path.join(rootResultsdir, "config"))
+
+    configFile = os.path.join(rootResultsdir, "config", "config.csv")
     testCases = parse_csv_to_dataframe(configFile)
 
     pool_args = [(tc, args) for tc, args in testCases.items()]
@@ -217,7 +220,7 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "/mnt/wifil4s/gwhite/test"
+    # rootResultsdir = "multiresults-20240419-170329"
     process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
@@ -229,5 +232,5 @@ if __name__ == "__main__":
 
 
     # Export html files
-    export(detailed_csv, summary_csvs, Path("./intro.md"), Path("./exporter/dct_project"), rootResultsdir)
+    export(detailed_csv, summary_csvs, Path(rootResultsdir + "/config/intro.md"), Path("./exporter/dct_project"), rootResultsdir)
     sys.exit()
