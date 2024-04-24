@@ -381,7 +381,7 @@ DualPi2QueueDisc::InitializeParams()
         }
     }
     NS_ABORT_MSG_IF(m_mtu < 68, "Error: MTU does not meet RFC 791 minimum");
-    m_thLen = 2 * m_mtu;
+    m_thLen = m_mtu; // 2 * m_mtu;
     m_prevQ = Time(Seconds(0));
     m_pCL = 0;
     m_pC = 0;
