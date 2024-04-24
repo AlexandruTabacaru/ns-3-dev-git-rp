@@ -226,7 +226,7 @@ main(int argc, char* argv[])
     // Default AC_BE EDCA configuration
     uint32_t cwMin = 15;
     uint32_t cwMax = 1023;
-    uint8_t aifsn = 2;
+    uint8_t aifsn = 3;
     Time txopLimit = MicroSeconds(2528);
 
     // Increase some defaults (command-line can override below)
