@@ -38,7 +38,7 @@ rtsCtsThreshold = 0
 # Allow customization of AC_BE EDCA parameters (for all Wi-Fi devices)
 cwMin = 15
 cwMax = 1023
-aifsn = 2
+aifsn = 3
 txopLimit = "2528us"
 # The below is to output some simulation progress when running from command-line
 # It is more for C++ invocation and not very useful for Python invocation
