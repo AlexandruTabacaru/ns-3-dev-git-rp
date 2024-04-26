@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-import os
+import os, glob
 import shutil
 import subprocess
 import sys
@@ -125,46 +125,15 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
     except:
         pass
 
-
     # Clean up raw data files
-    try:
-        subprocess.run(
-            [
-                "rm",
-                resultsDir + "/" + "l4s-wifi-0-0.pcap",  
-                resultsDir + "/" + "l4s-wifi-1-0.pcap",  
-                resultsDir + "/" + "l4s-wifi-1-1.pcap",  
-                resultsDir + "/" + "l4s-wifi-2-0-ip.pcap",  
-                resultsDir + "/" + "l4s-wifi-2-0.pcap",
-                resultsDir + "/" + "cubic-cong-state.dat",   
-                resultsDir + "/" + "cubic-rtt.dat",            
-                resultsDir + "/" + "cubic-throughput.dat",        
-                resultsDir + "/" + "wifi-dualpi2-l-sojourn.dat",  
-                resultsDir + "/" + "wifi-throughput.dat",
-                resultsDir + "/" + "cubic-cwnd.dat",         
-                resultsDir + "/" + "cubic-send-interval.dat",  
-                resultsDir + "/" + "wifi-dualpi2-bytes.dat",      
-                resultsDir + "/" + "wifi-phy-tx-psdu-begin.dat",
-                resultsDir + "/" + "cubic-pacing-rate.dat",  
-                resultsDir + "/" + "cubic-ssthresh.dat",       
-                resultsDir + "/" + "wifi-dualpi2-c-sojourn.dat",  
-                resultsDir + "/" + "wifi-queue-bytes.dat",
-                resultsDir + "/" + "prague-cong-state.dat",  
-                resultsDir + "/" + "prague-ecn-state.dat",    
-                resultsDir + "/" + "prague-rtt.dat",            
-                resultsDir + "/" + "prague-ssthresh.dat",
-                resultsDir + "/" + "prague-cwnd.dat",        
-                resultsDir + "/" + "prague-pacing-rate.dat",  
-                resultsDir + "/" + "prague-send-interval.dat",  
-                resultsDir + "/" + "prague-throughput.dat",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
 
-        )
-    except: 
-        pass
+    files_to_delete = glob.glob(os.path.join(resultsDir, "*.pcap"))
+    for file_path in files_to_delete:
+        os.remove(file_path)
+
+    files_to_delete = glob.glob(os.path.join(resultsDir, "*.dat"))
+    for file_path in files_to_delete:
+        os.remove(file_path)
 
 
 def parse_csv_to_dataframe(file_name):
@@ -201,6 +170,10 @@ def run_simulation(test_case, arguments):
     runNS3Simulation(os.path.join(resultsDir, "run.txt"), arguments, plotTitle)
 
 if __name__ == "__main__":
+
+    # Record the start time
+    start_time = datetime.now()
+
     # Create root multiprocessing directory
     formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
     rootResultsdir = "multiresults" + "-" + formatted_date
@@ -220,7 +193,7 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "multiresults-20240419-170329"
+    # rootResultsdir = "multiresults-20240423-164227"
     process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
@@ -230,7 +203,22 @@ if __name__ == "__main__":
 
     summary_csvs = create_summary_csvs(rootResultsdir) # produces calc_detailed_results.csv and multiple csv files
 
+    # Suppress results tables for DualPI disabled for now
+    summary_csvs = [csv for csv in summary_csvs if "noDualPI" not in str(csv)]
 
     # Export html files
     export(detailed_csv, summary_csvs, Path(rootResultsdir + "/config/intro.md"), Path("./exporter/dct_project"), rootResultsdir)
+
+    # delete intermediate data csvs
+    files_to_delete = glob.glob(os.path.join(rootResultsdir, "*", "TC*.csv"))
+    for file_path in files_to_delete:
+        os.remove(file_path)
+
+    # Calculate the elapsed time
+    end_time = datetime.now()
+    elapsed_time = end_time - start_time
+    log_filename = os.path.join(rootResultsdir, "logfile.txt")
+    with open(log_filename, 'a') as log_file:
+        log_file.write(f"Execution time: {elapsed_time.total_seconds()/60} minutes\n")
+
     sys.exit()
