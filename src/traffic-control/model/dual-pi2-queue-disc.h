@@ -89,7 +89,11 @@ class DualPi2QueueDisc : public QueueDisc
         "Forced drop"; //!< Drops due to queue limit: reactive
     static constexpr const char* UNFORCED_CLASSIC_MARK =
         "Unforced classic mark"; //!< Unforced mark in classic queue
-    static constexpr const char* UNFORCED_L4S_MARK = "Unforced mark in L4S queue";
+    static constexpr const char* UNFORCED_L4S_MARK = 
+        "Unforced mark in L4S queue";
+    static constexpr const char* UNFORCED_L4S_DROP =
+        "Unforced drop in L4S queue"; //!< Drops due to overload in l4s queue
+
 
     /**
      * Callback to be notified of pending bytes about to be dequeued.

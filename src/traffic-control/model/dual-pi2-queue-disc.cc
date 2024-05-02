@@ -246,9 +246,9 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
         {
             bool marked = false;
             auto qdItem = DequeueFromL4sQueue(marked);
-            if(!qdItem)
+            if(!qdItem) // Check for the drop!
             {
-                break; // Check for the drop!
+                continue; 
             }
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
@@ -273,6 +273,10 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
         {
             bool dropped [[maybe_unused]] = false;
             auto qdItem = DequeueFromClassicQueue(dropped);
+            if(!qdItem) // Check for the drop!
+            {
+                continue; 
+            }
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
                           "Error, insufficient pending bytes");
@@ -381,7 +385,7 @@ DualPi2QueueDisc::InitializeParams()
         }
     }
     NS_ABORT_MSG_IF(m_mtu < 68, "Error: MTU does not meet RFC 791 minimum");
-    m_thLen = m_mtu; // 2 * m_mtu;
+    m_thLen = 1; //packets
     m_prevQ = Time(Seconds(0));
     m_pCL = 0;
     m_pC = 0;
@@ -598,58 +602,59 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
     NS_LOG_FUNCTION(this);
     auto qdItem = GetInternalQueue(L4S)->Dequeue();
     double pPrimeL{0}; // p'_L in RFC 9332
-    if(m_pCL < m_pLmax) //edge case
-    {
-        if (GetInternalQueue(L4S)->GetNPackets() > m_thLen) //edge case
+    while (qdItem)
+    { 
+        if(m_pCL < m_pLmax) //Check for overload saturation
         {
-            pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp());
-        }
-        else
-        {
-             pPrimeL = 0; // by initialization above , //edge case
-        }
-
-        if (pPrimeL > m_pCL)
-        {
-            NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
-        }
-        else
-        {
-            NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
-        }
-
-        double pL = std::max<double>(pPrimeL, m_pCL);
-        pL = std::min<double>(pL, 1); // clamp p_L at 1
-        m_pL = pL;                    // Trace the value of p_L
-        if (Recur(m_l4sCount, pL))
-        {
-            marked = Mark(qdItem, UNFORCED_L4S_MARK);
-            NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
-            NS_LOG_DEBUG("L-queue packet is marked");
-        }
-    }
-    else
-    {
-        while (qdItem)
-        {    
-            if (Recur(m_l4sCount, m_pC)) //edge case, overload saturation
+            if (GetInternalQueue(L4S)->GetNPackets() > m_thLen) //> 1 packet queued
             {
-                NS_LOG_INFO("L4s drop due to recur function; queue length "
-                    << GetInternalQueue(L4S)->GetNBytes());
-                DropAfterDequeue(qdItem, UNFORCED_CLASSIC_DROP); //Revert to classic drop due to overload
-                qdItem = GetInternalQueue(L4S)->Dequeue();
-                continue;
+                pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp()); //Native LAQM, currently
             }
-            if (Recur(m_l4sCount, m_pCL)) //edge case, overload saturation
+            else
+            {
+                pPrimeL = 0; // Suppress marking 1 pkt queue
+            }
+
+            if (pPrimeL > m_pCL)
+            {
+                NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
+            }
+            else
+            {
+                NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
+            }
+
+            double pL = std::max<double>(pPrimeL, m_pCL);
+            pL = std::min<double>(pL, 1); // clamp p_L at 1
+            m_pL = pL;                    // Trace the value of p_L
+            if (Recur(m_l4sCount, pL))
             {
                 marked = Mark(qdItem, UNFORCED_L4S_MARK);
                 NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
                 NS_LOG_DEBUG("L-queue packet is marked");
             }
+        }
+        else     //overload saturation
+        {       
+            if (Recur(m_l4sCount, m_pC)) //probability p_C = p'^2
+            {
+                NS_LOG_INFO("L4s drop due to recur function; queue length "
+                    << GetInternalQueue(L4S)->GetNBytes());
+                DropAfterDequeue(qdItem, UNFORCED_L4S_DROP); //Revert to classic drop due to overload
+                qdItem = GetInternalQueue(L4S)->Dequeue();
+                continue; 
+            }
+            if (Recur(m_l4sCount, m_pCL)) //probability p_CL = k * p'
+            {
+                marked = Mark(qdItem, UNFORCED_L4S_MARK);  //linear marking of remaining packets
+                NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
+                NS_LOG_DEBUG("L-queue packet is marked");
+            }
             NS_LOG_DEBUG("L-queue packet is not marked");
         }
-    }    
-    return qdItem;
+        return qdItem;
+    }
+    return nullptr;     
 }
 
 Ptr<QueueDiscItem>
