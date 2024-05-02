@@ -112,9 +112,7 @@ void TraceCSojourn(Time sojourn);
 std::ofstream g_fileTraceProbChanges;
 void TraceProbcL(double oldVal, double pCL);
 void TraceProbL(double oldVal, double pL);
-void TraceProbLmax(double oldVal, double pLmax);
 void TraceProbC(double oldVal, double pC);
-void TraceProbCmax(double oldVal, double pCmax);
 
 uint32_t g_pragueData = 0;
 std::map<uint16_t, uint32_t> g_pragueDataforEachPort;
@@ -801,9 +799,7 @@ main(int argc, char* argv[])
         g_fileTraceProbChanges.open("wifi-dualpi2-TracedProbabilites.dat",std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("ProbCL", MakeCallback(&TraceProbcL));
         dualPi2->TraceConnectWithoutContext("ProbL", MakeCallback(&TraceProbL));
-        dualPi2->TraceConnectWithoutContext("ProbLmax", MakeCallback(&TraceProbLmax));
         dualPi2->TraceConnectWithoutContext("ProbC", MakeCallback(&TraceProbC));
-        dualPi2->TraceConnectWithoutContext("ProbCmax", MakeCallback(&TraceProbCmax));
     }
 
     // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
@@ -997,17 +993,9 @@ void TraceProbL(double oldVal, double pL)
 {
     g_fileTraceProbChanges << Now().GetSeconds() << " pL " << pL << std::endl;
 }
-void TraceProbLmax(double oldVal, double pLmax)
-{
-    g_fileTraceProbChanges << Now().GetSeconds() << " pLmax " << pLmax << std::endl;
-}
 void TraceProbC(double oldVal, double pC)
 {
     g_fileTraceProbChanges << Now().GetSeconds() << " pC " << pC << std::endl;
-}
-void TraceProbCmax(double oldVal, double pCmax)
-{
-    g_fileTraceProbChanges << Now().GetSeconds() << " pCmax " << pCmax << std::endl;
 }
 
 void

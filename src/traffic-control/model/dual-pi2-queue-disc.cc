@@ -132,18 +132,10 @@ DualPi2QueueDisc::GetTypeId()
                             "L4S mark probability (p_L)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pL),
                             "ns3::TracedValueCallback::Double")
-           .AddTraceSource("ProbLmax",
-                            "Max L4S mark probability (p_Lmax)",
-                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pLmax),
-                            "ns3::TracedValueCallback::Double")
             .AddTraceSource("ProbC",
                             "Classic drop/mark probability (p_C)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pC),
-                            "ns3::TracedValueCallback::Double")
-            .AddTraceSource("ProbCmax",
-                            "Max Classic drop/mark probability (p_Cmax)",
-                            MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCmax),
-                            "ns3::TracedValueCallback::Double")                
+                            "ns3::TracedValueCallback::Double") 
             .AddTraceSource("ClassicSojournTime",
                             "Sojourn time of the last packet dequeued from the Classic queue",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_traceClassicSojourn),
@@ -403,7 +395,7 @@ DualPi2QueueDisc::DualPi2Update()
     Ptr<const QueueDiscItem> item;
     Time curQ = Seconds(0);
     Time cQ = Seconds(0);
-    Time LQ = Seconds(0);
+    Time lQ = Seconds(0);
 
     if ((item = GetInternalQueue(CLASSIC)->Peek()))
     {
@@ -411,9 +403,9 @@ DualPi2QueueDisc::DualPi2Update()
     }
     if ((item = GetInternalQueue(L4S)->Peek()))
     {
-        LQ = Simulator::Now() - item->GetTimeStamp();
+        lQ = Simulator::Now() - item->GetTimeStamp();
     }
-    curQ = std::max<Time>(cQ,LQ);
+    curQ = std::max<Time>(cQ,lQ);
 
     m_baseProb = m_baseProb + m_alpha * (curQ - m_target).GetSeconds() +
                  m_beta * (curQ - m_prevQ).GetSeconds();
@@ -733,7 +725,7 @@ DualPi2QueueDisc::DoDequeue()
             }
             else
             {
-                NS_LOG_DEBUG("Drop occurred in CLASSIC queue");
+                NS_LOG_DEBUG("Drop occurred in L4S queue");
                 // Do not return; continue with while() loop
             }
         }
