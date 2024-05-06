@@ -272,6 +272,42 @@ TcpPrague::SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 }
 
 void
+TcpPrague::RenoCongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
+{
+    NS_LOG_FUNCTION(this << tcb << segmentsAcked);
+
+    uint32_t w = tcb->m_cWnd / tcb->m_segmentSize;
+
+    // Floor w to 1 if w == 0
+    if (w == 0)
+    {
+        w = 1;
+    }
+
+    NS_LOG_DEBUG("w in segments " << w << " m_cWndCntReno " << m_cWndCntReno << " segments acked "
+                                  << segmentsAcked);
+    if (m_cWndCntReno >= w)
+    {
+        m_cWndCntReno = 0;
+        tcb->m_cWnd += tcb->m_segmentSize;
+        NS_LOG_DEBUG("Adding 1 segment to m_cWnd");
+    }
+
+    m_cWndCntReno += segmentsAcked;
+    NS_LOG_DEBUG("Adding 1 segment to m_cWndCntReno");
+    if (m_cWndCntReno >= w)
+    {
+        uint32_t delta = m_cWndCntReno / w;
+
+        m_cWndCntReno -= delta * w;
+        tcb->m_cWnd += delta * tcb->m_segmentSize;
+        NS_LOG_DEBUG("Subtracting delta * w from m_cWndCntReno " << delta * w);
+    }
+    NS_LOG_DEBUG("At end of CongestionAvoidance(), m_cWnd: " << tcb->m_cWnd << " m_cWndCntReno: "
+                                                             << m_cWndCntReno);
+}
+
+void
 TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
@@ -293,6 +329,22 @@ TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
         uint32_t cwnd_segs = tcb->m_cWnd / tcb->m_segmentSize;
         double_t increase = 1.0 * acked * m_aiAckIncrease / cwnd_segs;
         m_cWndCnt += increase;
+    }
+    else
+    {
+        uint32_t acked = SlowStart(tcb, segmentsAcked);
+        if (!acked)
+        {
+            NS_LOG_DEBUG("Slow start increase only of " << segmentsAcked << " segs");
+            return;
+        }
+        double adder =
+            static_cast<double>(tcb->m_segmentSize * tcb->m_segmentSize) / tcb->m_cWnd.Get();
+        adder = std::max(1.0, adder);
+        tcb->m_cWnd += static_cast<uint32_t>(adder);
+        NS_LOG_DEBUG("Congestion avoidance after loss, cwnd updated to "
+                     << tcb->m_cWnd << " ssthresh " << tcb->m_ssThresh);
+        return;
     }
 
     if (m_cWndCnt <= -1)
@@ -402,6 +454,7 @@ TcpPrague::EnterLoss(Ptr<TcpSocketState> tcb)
 
     m_cWndCnt -= (1.0 * tcb->m_cWnd / tcb->m_segmentSize) / 2;
     m_inLoss = true;
+    m_cWndCntReno = 0;
     CwndChanged(tcb);
 }
 

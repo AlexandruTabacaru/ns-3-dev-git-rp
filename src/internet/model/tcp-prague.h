@@ -231,6 +231,7 @@ class TcpPrague : public TcpCongestionOps
      */
     void UpdateAckReserved(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t event);
 
+    void RenoCongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
     /* Variables also present in ns3::TcpDctcp */
     uint32_t m_ackedBytesEcn;       //!< Number of acked bytes which are marked
     uint32_t m_ackedBytesTotal;     //!< Total number of acked bytes
@@ -246,6 +247,7 @@ class TcpPrague : public TcpCongestionOps
     bool m_useEct0;            //!< Use ECT(0) for ECN codepoint
 
     double_t m_cWndCnt{0};     //!< Prague cWnd update counter in segments
+    uint32_t m_cWndCntReno{0}; //!< Reno cWnd update counter in segments
     bool m_sawCE{false};       //!< True if Prague has received ECE flag before
     bool m_inLoss{false};      //!< True if a packet loss occurs
     bool m_initialized{false}; //!< Allows different behavior in Init() for multiple calls
