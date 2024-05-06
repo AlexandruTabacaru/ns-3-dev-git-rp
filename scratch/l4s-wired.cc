@@ -191,6 +191,9 @@ main(int argc, char* argv[])
         Config::SetDefault("ns3::TcpL4Protocol::SocketType",
                            TypeIdValue(TcpLinuxReno::GetTypeId()));
     }
+    // Workaround until PRR response is debugged
+    Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
+                       TypeIdValue(TcpClassicRecovery::GetTypeId()));
 
     // Create the nodes and use containers for further configuration below
     NodeContainer serverNode;
