@@ -147,6 +147,11 @@ main(int argc, char* argv[])
     DataRate bottleneckRate = DataRate("100Mbps");
     bool useReno = false;
     bool showProgress = false;
+    bool enablePcapAll = false;
+    bool enablePcap = true;
+    std::string lossSequence = "";
+    std::string lossBurst = "";
+    std::string testName = "";
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -173,7 +178,14 @@ main(int argc, char* argv[])
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
     cmd.AddValue("bottleneckRate", "bottleneck data rate between routers", bottleneckRate);
     cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
+    cmd.AddValue("lossSequence", "Packets to drop", lossSequence);
+    cmd.AddValue("lossBurst", "Packets to drop", lossBurst);
+    cmd.AddValue("testName", "Test name", testName);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
+    cmd.AddValue("enablePcapAll",
+                 "Whether to enable PCAP trace output at all interfaces",
+                 enablePcapAll);
+    cmd.AddValue("enablePcap", "Whether to enable PCAP trace output only at endpoints", enablePcap);
     cmd.Parse(argc, argv);
 
     NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
@@ -213,6 +225,38 @@ main(int argc, char* argv[])
     pointToPoint.SetDeviceAttribute("DataRate", DataRateValue(bottleneckRate));
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
+
+    if (lossSequence != "")
+    {
+        std::list<uint32_t> lossSequenceList;
+        std::stringstream ss(lossSequence);
+        for (uint32_t i; ss >> i;)
+        {
+            lossSequenceList.push_back(i);
+            if (ss.peek() == ',')
+            {
+                ss.ignore();
+            }
+        }
+        auto em = CreateObject<ReceiveListErrorModel>();
+        em->SetList(lossSequenceList);
+        routerDevices.Get(1)->GetObject<PointToPointNetDevice>()->SetReceiveErrorModel(em);
+    }
+    else if (lossBurst != "")
+    {
+        std::string delimiter = "-";
+        std::size_t pos = lossBurst.find(delimiter);
+        uint32_t start = std::stoi(lossBurst.substr(0, pos));
+        uint32_t end = std::stoi(lossBurst.substr(pos + 1, lossBurst.size()));
+        std::list<uint32_t> lossBurstList;
+        for (uint32_t i = start; i <= end; i++)
+        {
+            lossBurstList.push_back(i);
+        }
+        auto em = CreateObject<ReceiveListErrorModel>();
+        em->SetList(lossBurstList);
+        routerDevices.Get(1)->GetObject<PointToPointNetDevice>()->SetReceiveErrorModel(em);
+    }
 
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
@@ -332,19 +376,39 @@ main(int argc, char* argv[])
     }
 
     // PCAP traces
-    pointToPoint.EnablePcapAll("l4s-wired");
+    if (enablePcapAll)
+    {
+        std::string prefixName = "l4s-wired" + ((testName != "") ? ("-" + testName) : "");
+        pointToPoint.EnablePcapAll(prefixName.c_str());
+    }
+    else if (enablePcap)
+    {
+        std::string prefixName = "l4s-wired" + ((testName != "") ? ("-" + testName) : "");
+        pointToPoint.EnablePcap(prefixName.c_str(), wanDevices.Get(0));
+        pointToPoint.EnablePcap(prefixName.c_str(), clientDevices.Get(0));
+    }
 
     // Throughput and latency for foreground flows, and set up close callbacks
     if (pragueClientApps.GetN())
     {
-        g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
-        g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
-        g_filePragueSsthresh.open("prague-ssthresh.dat", std::ofstream::out);
-        g_filePragueSendInterval.open("prague-send-interval.dat", std::ofstream::out);
-        g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
-        g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
-        g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
-        g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
+        std::string traceName =
+            "prague-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueThroughput.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueCwnd.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueSsthresh.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-send-interval." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueSendInterval.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-cong-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueCongState.open(traceName.c_str(), std::ofstream::out);
+
+        traceName = "prague-pacing-rate." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePraguePacingRate.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-ecn-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueEcnState.open(traceName.c_str(), std::ofstream::out);
+        traceName = "prague-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePragueRtt.open(traceName.c_str(), std::ofstream::out);
     }
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
@@ -366,13 +430,21 @@ main(int argc, char* argv[])
 
     if (cubicClientApps.GetN())
     {
-        g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
-        g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
-        g_fileCubicSsthresh.open("cubic-ssthresh.dat", std::ofstream::out);
-        g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
-        g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
-        g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
-        g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+        std::string traceName =
+            "cubic-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicThroughput.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicCwnd.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicSsthresh.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-send-interval." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicSendInterval.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-pacing-rate." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicPacingRate.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-cong-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicCongState.open(traceName.c_str(), std::ofstream::out);
+        traceName = "cubic-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicRtt.open(traceName.c_str(), std::ofstream::out);
     }
     for (auto i = 0U; i < cubicClientApps.GetN(); i++)
     {
@@ -396,11 +468,15 @@ main(int argc, char* argv[])
     // Trace bytes in DualPi2 queue
     Ptr<DualPi2QueueDisc> dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>();
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
-    g_fileBytesInDualPi2Queue.open("wired-dualpi2-bytes.dat", std::ofstream::out);
+    std::string traceName =
+        "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
-    g_fileLSojourn.open("wired-dualpi2-l-sojourn.dat", std::ofstream::out);
+    traceName = "wired-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
-    g_fileCSojourn.open("wired-dualpi2-c-sojourn.dat", std::ofstream::out);
+    traceName = "wired-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
     dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
 
     if (duration > Seconds(0))
@@ -508,13 +584,13 @@ TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal)
 void
 TraceLSojourn(Time sojourn)
 {
-    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+    g_fileLSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
 TraceCSojourn(Time sojourn)
 {
-    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0  << std::endl;
+    g_fileCSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
@@ -576,7 +652,7 @@ TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_
 void
 TracePragueRtt(Time oldVal, Time newVal)
 {
-    g_filePragueRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+    g_filePragueRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
@@ -653,7 +729,7 @@ TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCo
 void
 TraceCubicRtt(Time oldVal, Time newVal)
 {
-    g_fileCubicRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds () / 1000.0 << std::endl;
+    g_fileCubicRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds() / 1000.0 << std::endl;
 }
 
 void
