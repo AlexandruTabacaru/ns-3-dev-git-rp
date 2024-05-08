@@ -262,12 +262,17 @@ uint32_t
 TcpPrague::SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
 {
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
-
+    if (tcb->m_cWnd >= tcb->m_ssThresh)
+    {
+        NS_LOG_DEBUG("Return from SlowStart without action");
+        return segmentsAcked;
+    }
     uint32_t cwnd = std::min(((uint32_t)tcb->m_cWnd + (segmentsAcked * tcb->m_segmentSize)),
                              (uint32_t)tcb->m_ssThresh);
+    NS_ABORT_MSG_IF(cwnd < tcb->m_cWnd, "Subtraction overflow");
     segmentsAcked -= ((cwnd - tcb->m_cWnd) / tcb->m_segmentSize);
     tcb->m_cWnd = cwnd;
-    NS_LOG_INFO("In SlowStart, updated to cwnd " << tcb->m_cWnd << " ssthresh " << tcb->m_ssThresh);
+    NS_LOG_INFO("In SlowStart, updated to cwnd " << tcb->m_cWnd << "; returning " << segmentsAcked);
     return segmentsAcked;
 }
 
@@ -277,13 +282,11 @@ TcpPrague::RenoCongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAck
     NS_LOG_FUNCTION(this << tcb << segmentsAcked);
 
     uint32_t w = tcb->m_cWnd / tcb->m_segmentSize;
-
     // Floor w to 1 if w == 0
     if (w == 0)
     {
         w = 1;
     }
-
     NS_LOG_DEBUG("w in segments " << w << " m_cWndCntReno " << m_cWndCntReno << " segments acked "
                                   << segmentsAcked);
     if (m_cWndCntReno >= w)
@@ -292,9 +295,8 @@ TcpPrague::RenoCongestionAvoidance(Ptr<TcpSocketState> tcb, uint32_t segmentsAck
         tcb->m_cWnd += tcb->m_segmentSize;
         NS_LOG_DEBUG("Adding 1 segment to m_cWnd");
     }
-
     m_cWndCntReno += segmentsAcked;
-    NS_LOG_DEBUG("Adding 1 segment to m_cWndCntReno");
+    NS_LOG_DEBUG("Adding " << segmentsAcked << " segments to m_cWndCntReno");
     if (m_cWndCntReno >= w)
     {
         uint32_t delta = m_cWndCntReno / w;
@@ -332,16 +334,32 @@ TcpPrague::UpdateCwnd(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked)
     }
     else
     {
+        // Apply EnterLoss() cwnd reduction here
+        if (m_lossWindowReduction)
+        {
+            NS_LOG_INFO("Reducing cwnd from " << tcb->m_cWnd << " by " << m_lossWindowReduction
+                                              << " bytes");
+            if (tcb->m_cWnd > m_lossWindowReduction)
+            {
+                tcb->m_cWnd -= m_lossWindowReduction;
+                if (tcb->m_cWnd < 2 * tcb->m_segmentSize)
+                {
+                    tcb->m_cWnd = 2 * tcb->m_segmentSize;
+                }
+            }
+            else
+            {
+                tcb->m_cWnd = 2 * tcb->m_segmentSize;
+            }
+            m_lossWindowReduction = 0;
+        }
         uint32_t acked = SlowStart(tcb, segmentsAcked);
         if (!acked)
         {
             NS_LOG_DEBUG("Slow start increase only of " << segmentsAcked << " segs");
             return;
         }
-        double adder =
-            static_cast<double>(tcb->m_segmentSize * tcb->m_segmentSize) / tcb->m_cWnd.Get();
-        adder = std::max(1.0, adder);
-        tcb->m_cWnd += static_cast<uint32_t>(adder);
+        RenoCongestionAvoidance(tcb, acked);
         NS_LOG_DEBUG("Congestion avoidance after loss, cwnd updated to "
                      << tcb->m_cWnd << " ssthresh " << tcb->m_ssThresh);
         return;
@@ -452,10 +470,11 @@ TcpPrague::EnterLoss(Ptr<TcpSocketState> tcb)
     // This method is similar to prague_enter_loss() in Linux
     NS_LOG_FUNCTION(this << tcb);
 
-    m_cWndCnt -= (1.0 * tcb->m_cWnd / tcb->m_segmentSize) / 2;
+    m_cWndCnt = 0;
     m_inLoss = true;
+    m_lossWindowReduction = tcb->m_cWnd / 2; // Will be applied later to m_cWnd
+    tcb->m_ssThresh = tcb->m_cWnd / 2;
     m_cWndCntReno = 0;
-    CwndChanged(tcb);
 }
 
 void

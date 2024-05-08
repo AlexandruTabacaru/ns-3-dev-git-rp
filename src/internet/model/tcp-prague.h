@@ -171,6 +171,7 @@ class TcpPrague : public TcpCongestionOps
      *
      * \param tcb internal state
      * \param segmentsAcked count of segments acked
+     * \return remaining count after updating congestion window for slow start
      */
     virtual uint32_t SlowStart(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked);
 
@@ -248,6 +249,7 @@ class TcpPrague : public TcpCongestionOps
 
     double_t m_cWndCnt{0};     //!< Prague cWnd update counter in segments
     uint32_t m_cWndCntReno{0}; //!< Reno cWnd update counter in segments
+    uint32_t m_lossWindowReduction{0}; //!< Amount to reduce cwnd after EnterLoss()
     bool m_sawCE{false};       //!< True if Prague has received ECE flag before
     bool m_inLoss{false};      //!< True if a packet loss occurs
     bool m_initialized{false}; //!< Allows different behavior in Init() for multiple calls
