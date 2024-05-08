@@ -315,6 +315,9 @@ main(int argc, char* argv[])
     // Set AC_BE max AMSDU to four packets
     Config::SetDefault("ns3::WifiMac::BE_MaxAmsduSize", UintegerValue(maxAmsduSize));
 
+    // Set DualPi2 buffer size (both L & C)
+    Config::SetDefault("ns3::DualPi2QueueDisc::QueueLimit", UintegerValue(static_cast<uint32_t>(scale*limit*100)));
+
     if (useReno)
     {
         std::cout << "Using ns-3 LinuxReno model instead of Cubic" << std::endl;
