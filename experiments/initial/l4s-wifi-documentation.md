@@ -104,15 +104,20 @@ The program output consists of many time-series data files, and PCAP traces for 
     * **wifi-dualpi2-l-sojourn.dat**: Sojourn time of L packets in the DualPi2QueueDisc (time from DualPi2 enqueue until the packet is dequeued into the WifiNetDevice).
     * **wifi-dualpi2-C-sojourn.dat**: Sojourn time of C packets in the DualPi2QueueDisc.
 
-* Several time-series traces from the first foreground TCP Prague flow (note:  if there are N foreground flows, only the first is traced in these files):
+* One time-series trace is available that aggregates the throughput for all Prague flows:
     * **prague-throughput.dat**:  100 ms average of TCP throughput (just payload bytes, not counting headers)
+
+* One time-series trace is available that provides the per-flow throughput for all Prague flows:
+    * **prague-throughput-per-stream.dat**:  100 ms average of TCP throughput on a per-stream basis (just payload bytes, not counting headers)
+
+* Several time-series traces from the first foreground TCP Prague flow (note:  if there are N foreground flows, only the first is traced in these files):
     * **prague-cwnd.dat**:  Congestion window (maintained in units of bytes)
     * **prague-ssthresh.dat**:  Slow start threshold (maintained in units of bytes)
     * **prague-pacing-rate.dat**:  The current pacing rate (bits per second)
     * **prague-send-interval.dat**:  The time interval since the last segment was sent
     * **prague-cong-state.dat**:  The congestion state machine
     * **prague-ecn-state.dat**:  The ECN state machine
-    * **prague-rtt.dat**:  Each TCP RTT sample
+    * **prague-rtt.dat**:  Smoothed RTT samples
 
 Files prefixed with 'cubic' are similar to the above Prague files (i.e., tracing the first foreground Cubicl flow).
 
