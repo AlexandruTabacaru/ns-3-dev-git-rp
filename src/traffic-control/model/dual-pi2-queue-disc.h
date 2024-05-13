@@ -81,6 +81,12 @@ class DualPi2QueueDisc : public QueueDisc
      * \param lim The limit in bytes.
      */
     void SetQueueLimit(uint32_t lim);
+    /**
+     * \brief Notify the queue of the aggregation buffer limit
+     *
+     * \param limit The limit in bytes.
+     */
+    void SetAggregationBufferLimit(uint32_t limit);
 
     // Reasons for dropping packets
     static constexpr const char* UNFORCED_CLASSIC_DROP =
@@ -188,23 +194,27 @@ class DualPi2QueueDisc : public QueueDisc
     std::size_t Scheduler(std::pair<bool, bool> eligible);
 
     // Values supplied by user
-    Time m_target;              //!< Queue delay target for Classic traffic
-    Time m_tUpdate;             //!< Time period after which CalculateP () is called
-    Time m_tShift;              //!< Scheduler time bias
-    uint32_t m_mtu;             //!< Device MTU (bytes)
-    double m_alpha;             //!< Parameter to PI Square controller
-    double m_beta;              //!< Parameter to PI Square controller
-    Time m_minTh;               //!< L4S marking threshold MinTh
-    Time m_range;               //!< L4S marking threshold range
-    double m_k;                 //!< Coupling factor
-    uint32_t m_classicDeficit;  //!< deficit counter for DRR
-    uint32_t m_llDeficit;       //!< deficit counter for DRR
-    double m_schedulingWeight;  //!< Scheduling weight
-    std::bitset<2> m_drrQueues; //!< bitset for weighted DRR
-    uint32_t m_drrQuantum;      //!< DRR quantum
-    uint32_t m_queueLimit;      //!< Queue limit in bytes / packets
-    Time m_startTime;           //!< Start time of the update timer
-    bool m_disableLaqm;         //!< Disable laqm() method
+    Time m_target;                            //!< Queue delay target for Classic traffic
+    Time m_tUpdate;                           //!< Time period after which CalculateP () is called
+    Time m_tShift;                            //!< Scheduler time bias
+    uint32_t m_mtu;                           //!< Device MTU (bytes)
+    double m_alpha;                           //!< Parameter to PI Square controller
+    double m_beta;                            //!< Parameter to PI Square controller
+    Time m_minTh;                             //!< L4S marking threshold MinTh
+    Time m_range;                             //!< L4S marking threshold range
+    double m_k;                               //!< Coupling factor
+    uint32_t m_classicDeficit;                //!< deficit counter for DRR
+    uint32_t m_llDeficit;                     //!< deficit counter for DRR
+    double m_schedulingWeight;                //!< Scheduling weight
+    std::bitset<2> m_drrQueues;               //!< bitset for weighted DRR
+    uint32_t m_drrQuantum;                    //!< DRR quantum
+    uint32_t m_queueLimit;                    //!< Queue limit in bytes / packets
+    Time m_startTime;                         //!< Start time of the update timer
+    bool m_disableLaqm;                       //!< Disable laqm() method
+    bool m_enableWifiClassicLatencyEstimator; //!< Enable alternative estimator
+    Time m_cLatencySample;                    //!< Cache C HOL latency at last block ack
+    Time m_lLatencySample;                    //!< Cache C HOL latency at last block ack
+    uint32_t m_cBytesSample;                  //!< C queue length in bytes at last block ack
 
     // Variables maintained by DualQ Coupled PI2
     Time m_classicQueueTime;     //!< Arrival time of a packet of Classic Traffic
@@ -226,6 +236,7 @@ class DualPi2QueueDisc : public QueueDisc
     double m_classicCount{0}; //! C queue count for likelihood recur
     std::list<Ptr<QueueDiscItem>> m_classicStagingQueue; //!< staging queue for CLASSIC
     std::list<Ptr<QueueDiscItem>> m_l4sStagingQueue;     //!< staging queue for L4S
+    uint32_t m_aggBufferLimit;                           //!< Aggregation buffer limit
 };
 
 } // namespace ns3

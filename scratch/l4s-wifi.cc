@@ -487,6 +487,14 @@ main(int argc, char* argv[])
     QueueDiscContainer apQueueDiscContainer = tch.Install(apDevice);
     QueueDiscContainer staQueueDiscContainer = tch.Install(staDevices);
 
+    // Inform dualPi2 of aggregation buffer (scaled) limit
+    Ptr<DualPi2QueueDisc> dualPi2 = apQueueDiscContainer.Get(0)
+                                        ->GetQueueDiscClass(0)
+                                        ->GetQueueDisc()
+                                        ->GetObject<DualPi2QueueDisc>();
+    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
+    dualPi2->SetAggregationBufferLimit(static_cast<uint32_t>(scale * limit));
+
     // Configure IP addresses for all links
     Ipv4AddressHelper address;
     address.SetBase("10.1.1.0", "255.255.255.0");
@@ -779,11 +787,6 @@ main(int argc, char* argv[])
     }
 
     // Trace bytes in DualPi2 queue
-    Ptr<DualPi2QueueDisc> dualPi2 = apQueueDiscContainer.Get(0)
-                                        ->GetQueueDiscClass(0)
-                                        ->GetQueueDisc()
-                                        ->GetObject<DualPi2QueueDisc>();
-    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     if (enableTracesAll || enableTraces)
     {
         g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);

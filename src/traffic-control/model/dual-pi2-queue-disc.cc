@@ -124,6 +124,12 @@ DualPi2QueueDisc::GetTypeId()
                           BooleanValue(false),
                           MakeBooleanAccessor(&DualPi2QueueDisc::m_disableLaqm),
                           MakeBooleanChecker())
+            .AddAttribute(
+                "EnableWifiClassicLatencyEstimator",
+                "Whether to enable alternative latency estimator",
+                BooleanValue(false),
+                MakeBooleanAccessor(&DualPi2QueueDisc::m_enableWifiClassicLatencyEstimator),
+                MakeBooleanChecker())
             .AddTraceSource("ProbCL",
                             "Coupled probability (p_CL)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pCL),
@@ -174,6 +180,13 @@ DualPi2QueueDisc::SetQueueLimit(uint32_t lim)
     m_queueLimit = lim;
 }
 
+void
+DualPi2QueueDisc::SetAggregationBufferLimit(uint32_t limit)
+{
+    NS_LOG_FUNCTION(this << limit);
+    m_aggBufferLimit = limit;
+}
+
 uint32_t
 DualPi2QueueDisc::GetQueueSize() const
 {
@@ -185,6 +198,25 @@ void
 DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
 {
     NS_LOG_FUNCTION(this << pendingBytes);
+    // For alternative classic latency estimator
+    Ptr<const QueueDiscItem> item;
+    if ((item = GetInternalQueue(CLASSIC)->Peek()))
+    {
+        m_cLatencySample = Simulator::Now() - item->GetTimeStamp();
+    }
+    else
+    {
+        m_cLatencySample = Seconds(0);
+    }
+    if ((item = GetInternalQueue(L4S)->Peek()))
+    {
+        m_lLatencySample = Simulator::Now() - item->GetTimeStamp();
+    }
+    else
+    {
+        m_lLatencySample = Seconds(0);
+    }
+    m_cBytesSample = GetInternalQueue(CLASSIC)->GetNBytes();
     if (!GetNetDeviceQueueInterface() || !GetNetDeviceQueueInterface()->GetTxQueue(0)->IsStopped())
     {
         NS_LOG_DEBUG("Queue is not stopped so no need to process the value");
@@ -393,13 +425,31 @@ DualPi2QueueDisc::DualPi2Update()
 
     // Use queuing time of first-in Classic packet
     Ptr<const QueueDiscItem> item;
-    Time curQ = Seconds(0);
-    Time cQ = Seconds(0);
-    Time lQ = Seconds(0);
+    Time curQ;
+    Time cQ;
+    Time lQ;
 
-    if ((item = GetInternalQueue(CLASSIC)->Peek()))
+    if (m_enableWifiClassicLatencyEstimator)
     {
-        cQ = Simulator::Now() - item->GetTimeStamp();
+        // Upon blockAck, store max sojourn time of head-of-queue packet
+        // for L & C and queueBytes (C queue only) prior to re-filling
+        // aggregation buffer.  Upon PI update, use most recent samples
+        // of sojourn time and queueBytes to form this latency estimate:
+        // l1 = sojournTime
+        // l2 = queueBytes * latencyTarget / queueBytesTarget
+        // latency_estimate = min(l1,l2)
+        //
+        Time l1 = std::max<Time>(m_cLatencySample, m_lLatencySample);
+        // The following expression avoids conversion to floating point
+        Time l2 = NanoSeconds((m_cBytesSample * m_target.GetNanoSeconds()) / m_aggBufferLimit);
+        cQ = std::min<Time>(l1, l2);
+    }
+    else
+    {
+        if ((item = GetInternalQueue(CLASSIC)->Peek()))
+        {
+            cQ = Simulator::Now() - item->GetTimeStamp();
+        }
     }
     if ((item = GetInternalQueue(L4S)->Peek()))
     {

@@ -52,6 +52,8 @@ enableTracesAll = 0
 # enableTraces will generate time-series traces needed by plot-l4s-wifi.py
 enableTraces = 1
 useReno = 0
+# Maps to DualPi2QueueDisc::EnableWifiClassicLatencyEstimator 
+enableWifiClassicLatencyEstimator=0
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
@@ -78,6 +80,7 @@ arguments += " --enablePcap=" + str(enablePcap)
 arguments += " --enableTracesAll=" + str(enableTracesAll)
 arguments += " --enableTraces=" + str(enableTraces)
 arguments += " --useReno=" + str(useReno)
+arguments += " --ns3::DualPi2QueueDisc::EnableWifiClassicLatencyEstimator=" + str(enableWifiClassicLatencyEstimator)
 
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)
