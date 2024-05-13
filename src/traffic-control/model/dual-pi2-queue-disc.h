@@ -89,11 +89,9 @@ class DualPi2QueueDisc : public QueueDisc
         "Forced drop"; //!< Drops due to queue limit: reactive
     static constexpr const char* UNFORCED_CLASSIC_MARK =
         "Unforced classic mark"; //!< Unforced mark in classic queue
-    static constexpr const char* UNFORCED_L4S_MARK = 
-        "Unforced mark in L4S queue";
+    static constexpr const char* UNFORCED_L4S_MARK = "Unforced mark in L4S queue";
     static constexpr const char* UNFORCED_L4S_DROP =
         "Unforced drop in L4S queue"; //!< Drops due to overload in l4s queue
-
 
     /**
      * Callback to be notified of pending bytes about to be dequeued.
@@ -209,15 +207,15 @@ class DualPi2QueueDisc : public QueueDisc
     bool m_disableLaqm;         //!< Disable laqm() method
 
     // Variables maintained by DualQ Coupled PI2
-    Time m_classicQueueTime;   //!< Arrival time of a packet of Classic Traffic
-    Time m_lqTime;             //!< Arrival time of a packet of L4S Traffic
-    uint32_t m_thLen;          //!< Minimum threshold (in bytes) for marking L4S traffic
-    double m_baseProb;         //!< Variable used in calculation of drop probability
-    TracedValue<double> m_pCL; //!< Coupled probability
-    TracedValue<double> m_pC;  //!< Classic drop/mark probability
-    TracedValue<double> m_pCmax;  //!< Max Classic drop/mark probability
-    TracedValue<double> m_pL;  //!< L4S mark probability
-    TracedValue<double> m_pLmax;  //!< Max L4S mark probability
+    Time m_classicQueueTime;     //!< Arrival time of a packet of Classic Traffic
+    Time m_lqTime;               //!< Arrival time of a packet of L4S Traffic
+    uint32_t m_thLen;            //!< Minimum threshold (in bytes) for marking L4S traffic
+    double m_baseProb;           //!< Variable used in calculation of drop probability
+    TracedValue<double> m_pCL;   //!< Coupled probability
+    TracedValue<double> m_pC;    //!< Classic drop/mark probability
+    TracedValue<double> m_pCmax; //!< Max Classic drop/mark probability
+    TracedValue<double> m_pL;    //!< L4S mark probability
+    TracedValue<double> m_pLmax; //!< Max L4S mark probability
 
     TracedCallback<Time> m_traceClassicSojourn; //!< Classic sojourn time
     TracedCallback<Time> m_traceL4sSojourn;     //!< L4S sojourn time

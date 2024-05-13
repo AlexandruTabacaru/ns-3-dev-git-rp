@@ -135,7 +135,7 @@ DualPi2QueueDisc::GetTypeId()
             .AddTraceSource("ProbC",
                             "Classic drop/mark probability (p_C)",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_pC),
-                            "ns3::TracedValueCallback::Double") 
+                            "ns3::TracedValueCallback::Double")
             .AddTraceSource("ClassicSojournTime",
                             "Sojourn time of the last packet dequeued from the Classic queue",
                             MakeTraceSourceAccessor(&DualPi2QueueDisc::m_traceClassicSojourn),
@@ -238,9 +238,9 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
         {
             bool marked = false;
             auto qdItem = DequeueFromL4sQueue(marked);
-            if(!qdItem) // Check for the drop!
+            if (!qdItem) // Check for the drop!
             {
-                continue; 
+                continue;
             }
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
@@ -265,9 +265,9 @@ DualPi2QueueDisc::PendingDequeueCallback(uint32_t pendingBytes)
         {
             bool dropped [[maybe_unused]] = false;
             auto qdItem = DequeueFromClassicQueue(dropped);
-            if(!qdItem) // Check for the drop!
+            if (!qdItem) // Check for the drop!
             {
-                continue; 
+                continue;
             }
             NS_ASSERT_MSG(qdItem, "Error, scheduler failed");
             NS_ASSERT_MSG(qdItem->GetSize() + 38 <= pendingBytesLeft,
@@ -377,12 +377,12 @@ DualPi2QueueDisc::InitializeParams()
         }
     }
     NS_ABORT_MSG_IF(m_mtu < 68, "Error: MTU does not meet RFC 791 minimum");
-    m_thLen = 1; //packets
+    m_thLen = 1; // packets
     m_prevQ = Time(Seconds(0));
     m_pCL = 0;
     m_pC = 0;
     m_pL = 0;
-    m_pCmax = std::min<double>((1/(m_k*m_k)), 1);
+    m_pCmax = std::min<double>((1 / (m_k * m_k)), 1);
     m_pLmax = 1;
 }
 
@@ -405,7 +405,7 @@ DualPi2QueueDisc::DualPi2Update()
     {
         lQ = Simulator::Now() - item->GetTimeStamp();
     }
-    curQ = std::max<Time>(cQ,lQ);
+    curQ = std::max<Time>(cQ, lQ);
 
     m_baseProb = m_baseProb + m_alpha * (curQ - m_target).GetSeconds() +
                  m_beta * (curQ - m_prevQ).GetSeconds();
@@ -595,12 +595,12 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
     auto qdItem = GetInternalQueue(L4S)->Dequeue();
     double pPrimeL{0}; // p'_L in RFC 9332
     while (qdItem)
-    { 
-        if(m_pCL < m_pLmax) //Check for overload saturation
+    {
+        if (m_pCL < m_pLmax) // Check for overload saturation
         {
             if (GetInternalQueue(L4S)->GetNPackets() > m_thLen) //> 1 packet queued
             {
-                pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp()); //Native LAQM, currently
+                pPrimeL = Laqm(Simulator::Now() - qdItem->GetTimeStamp()); // Native LAQM, currently
             }
             else
             {
@@ -609,11 +609,13 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
 
             if (pPrimeL > m_pCL)
             {
-                NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1) << " is driving p_L");
+                NS_LOG_DEBUG("Laqm probability " << std::min<double>(pPrimeL, 1)
+                                                 << " is driving p_L");
             }
             else
             {
-                NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1) << " is driving p_L");
+                NS_LOG_DEBUG("coupled probability " << std::min<double>(m_pCL, 1)
+                                                    << " is driving p_L");
             }
 
             double pL = std::max<double>(pPrimeL, m_pCL);
@@ -626,19 +628,20 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
                 NS_LOG_DEBUG("L-queue packet is marked");
             }
         }
-        else     //overload saturation
-        {       
-            if (Recur(m_l4sCount, m_pC)) //probability p_C = p'^2
+        else // overload saturation
+        {
+            if (Recur(m_l4sCount, m_pC)) // probability p_C = p'^2
             {
                 NS_LOG_INFO("L4s drop due to recur function; queue length "
-                    << GetInternalQueue(L4S)->GetNBytes());
-                DropAfterDequeue(qdItem, UNFORCED_L4S_DROP); //Revert to classic drop due to overload
+                            << GetInternalQueue(L4S)->GetNBytes());
+                DropAfterDequeue(qdItem,
+                                 UNFORCED_L4S_DROP); // Revert to classic drop due to overload
                 qdItem = GetInternalQueue(L4S)->Dequeue();
-                continue; 
+                continue;
             }
-            if (Recur(m_l4sCount, m_pCL)) //probability p_CL = k * p'
+            if (Recur(m_l4sCount, m_pCL)) // probability p_CL = k * p'
             {
-                marked = Mark(qdItem, UNFORCED_L4S_MARK);  //linear marking of remaining packets
+                marked = Mark(qdItem, UNFORCED_L4S_MARK); // linear marking of remaining packets
                 NS_ASSERT_MSG(marked == true, "Make sure we can mark in L4S queue");
                 NS_LOG_DEBUG("L-queue packet is marked");
             }
@@ -646,7 +649,7 @@ DualPi2QueueDisc::DequeueFromL4sQueue(bool& marked)
         }
         return qdItem;
     }
-    return nullptr;     
+    return nullptr;
 }
 
 Ptr<QueueDiscItem>
@@ -661,7 +664,7 @@ DualPi2QueueDisc::DequeueFromClassicQueue(bool& dropped)
     }
     while (qdItem)
     {
-        if (Recur(m_classicCount, m_pC) || (m_pC >=m_pCmax)) //overload disables ecn
+        if (Recur(m_classicCount, m_pC) || (m_pC >= m_pCmax)) // overload disables ecn
         {
             NS_LOG_INFO("Classic drop due to recur function; queue length "
                         << GetInternalQueue(CLASSIC)->GetNBytes());
@@ -712,8 +715,9 @@ DualPi2QueueDisc::DoDequeue()
         {
             bool marked [[maybe_unused]];
             qdItem = DequeueFromL4sQueue(marked);
-            // After implementing Edge Cases in L4S, the queue item can drop if an overload is happened, 
-            //therefore check that an item was actually returned before tracing it
+            // After implementing Edge Cases in L4S, the queue item can drop if an overload is
+            // happened,
+            // therefore check that an item was actually returned before tracing it
             if (qdItem)
             {
                 Time sojourn = Simulator::Now() - qdItem->GetTimeStamp();
