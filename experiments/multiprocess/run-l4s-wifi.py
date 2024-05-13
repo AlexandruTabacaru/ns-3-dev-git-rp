@@ -193,7 +193,7 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "multiresults-20240423-164227"
+    # rootResultsdir = "multiresults-20240508-175758"
     process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     summary_csvs = create_summary_csvs(rootResultsdir) # produces calc_detailed_results.csv and multiple csv files
 
     # Suppress results tables for DualPI disabled for now
-    summary_csvs = [csv for csv in summary_csvs if "noDualPI" not in str(csv)]
+    # summary_csvs = [csv for csv in summary_csvs if "noDualPI" not in str(csv)]
 
     # Export html files
     export(detailed_csv, summary_csvs, Path(rootResultsdir + "/config/intro.md"), Path("./exporter/dct_project"), rootResultsdir)

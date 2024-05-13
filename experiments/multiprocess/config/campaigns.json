@@ -31,12 +31,12 @@
     "1": "DualPI"
   },
   "ED": {
-    "0": "defaultEDCA",
-    "1": "newEDCA[2.5,2.5]",
-    "2": "newEDCA[1,1]",
-    "3": "newEDCA[0.25,0.25]",
-    "4": "newEDCA4",
-    "5": "newEDCA5",
+    "0": "defaultEDCA_BE",
+    "1": "defaultEDCA_VI",
+    "2": "defaultEDCA_VO",
+    "3": "newEDCA[2.5,2.5]",
+    "4": "newEDCA[1,1]",
+    "5": "newEDCA[0.25,0.25]",
     "6": "newEDCA6"
   },
   "tc": {
