@@ -34,8 +34,10 @@ Campaign Definition:  All 1080 combinations of the following simulation variable
 *** upstream saturating UDP traffic for each STA (600M / 4)
 ** no hidden nodes, -45 RSSI, no spatial reuse, 5GHz channel
 * EDCA Settings (*ED*):
-** *ED0*: CWmin/CWmax = 15,1023, AIFSN=3, TxOpLimit=2.5ms, Aggregation Limit=2.5ms [*default settings*]
-** *ED1*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=2.5ms, Aggregation Limit=2.5ms
-** *ED2*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=1ms, Aggregation Limit=1ms
-** *ED3*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=0.25ms, Aggregation Limit=0.25ms
+** *ED0*: CWmin/CWmax = 15,1023, AIFSN=3, TxOpLimit=2.5ms, Aggregation Limit=2.5ms [*default settings for AC_BE*]
+** *ED1*: CWmin/CWmax = 7,15, AIFSN=2, TxOpLimit=4.1ms, Aggregation Limit=4.1ms [*default settings for AC_VI*]
+** *ED2*: CWmin/CWmax = 3,7, AIFSN=2, TxOpLimit=2.1ms, Aggregation Limit=2.1ms [*default settings for AC_VO*]
+** *ED3*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=2.5ms, Aggregation Limit=2.5ms
+** *ED4*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=1ms, Aggregation Limit=1ms
+** *ED5*: CWmin/CWmax = 63,63, AIFSN=1, TxOpLimit=0.25ms, Aggregation Limit=0.25ms
 

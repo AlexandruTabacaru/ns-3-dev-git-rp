@@ -13,13 +13,13 @@ spatialStreams="2"
 AP=(0 1)
 wifiQueueSize='"8000p"'
 LIMIT=(0 46318 188366 376734)
-scale=1
+SCALE=(1 1.62 0.823 1 0.396 0.0989)
 ED=('15,1023,3,"2528us"' '7,15,2,"4096us"' '3,7,2,"2080us"' '63,63,1,"2528us"' '63,63,1,"1000us"' '63,63,1,"250us"' )
-
 echo "Test Case,numCubic,numPrague,numBackgroundUdp,numBytes,duration,wanLinkDelay,mcs,channelWidth,spatialStreams,flowControl,wifiQueueSize,limit,scale,cwMin,cwMax,aifsn,txopLimit" > config.csv
 
 for i in 0 1 2 3 4 5; do #ED
 ed=${ED[i]}
+scale=${SCALE[i]}
 for j in 0 1 2; do #MS
 ms=${MS[j]}
 for k in 0 1; do #AP
