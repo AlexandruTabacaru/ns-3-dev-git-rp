@@ -281,8 +281,7 @@ numBytes = 0
 duration = 10
 # Base RTT is 2 * wanLinDelay
 useReno = 0
-#lossSequence = "20000"
-lossBurst = "20000-20179"
+lossBurst = "20000-20178"
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
