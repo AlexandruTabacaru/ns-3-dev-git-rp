@@ -3829,7 +3829,7 @@ TcpSocketBase::ReTxTimeout()
     // When a TCP sender detects segment loss using the retransmission timer
     // and the given segment has not yet been resent by way of the
     // retransmission timer, decrease ssThresh
-    if (m_tcb->m_congState == TcpSocketState::CA_LOSS || !m_tcb->m_txBuffer->IsHeadRetransmitted())
+    if (m_tcb->m_congState != TcpSocketState::CA_LOSS || !m_tcb->m_txBuffer->IsHeadRetransmitted())
     {
         m_tcb->m_ssThresh = m_congestionControl->GetSsThresh(m_tcb, inFlightBeforeRto);
         NS_LOG_INFO("Segment loss detected and no retransmissions yet; decrease ssThresh to "
