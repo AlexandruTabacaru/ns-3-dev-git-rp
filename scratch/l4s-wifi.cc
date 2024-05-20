@@ -197,6 +197,15 @@ void ConfigureCubicSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 MinMaxAvgTotalCalculator<uint32_t> pragueThroughputCalculator; // units of Mbps
 MinMaxAvgTotalCalculator<uint32_t> cubicThroughputCalculator;  // units of Mbps
 
+// Utility function to connect DualPi2QueueDisc to WifiMacQueue callback
+void ConnectPendingDequeueCallback(const NetDeviceContainer& devices,
+                                   const QueueDiscContainer& queueDiscs);
+
+// Utility function to inform all DualPi2 queues about a change to the limit
+void UpdateDualPi2AggBufferLimit(const QueueDiscContainer& queueDiscs,
+                                 double scale,
+                                 uint32_t limit);
+
 int
 main(int argc, char* argv[])
 {
@@ -487,13 +496,17 @@ main(int argc, char* argv[])
     QueueDiscContainer apQueueDiscContainer = tch.Install(apDevice);
     QueueDiscContainer staQueueDiscContainer = tch.Install(staDevices);
 
+    // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
+    ConnectPendingDequeueCallback(apDevice, apQueueDiscContainer);
+    ConnectPendingDequeueCallback(staDevices, staQueueDiscContainer);
+
     // Inform dualPi2 of aggregation buffer (scaled) limit
-    Ptr<DualPi2QueueDisc> dualPi2 = apQueueDiscContainer.Get(0)
-                                        ->GetQueueDiscClass(0)
-                                        ->GetQueueDisc()
-                                        ->GetObject<DualPi2QueueDisc>();
-    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
-    dualPi2->SetAggregationBufferLimit(static_cast<uint32_t>(scale * limit));
+    // Call this function any time that 'scale' or 'limit' changes, on
+    // all of the DualPi2QueueDisc in the simulation
+    // Note: if there are runtime changes to these values, the
+    // DynamicQueueLimits objects need to also be updated (not handled here)
+    UpdateDualPi2AggBufferLimit(apQueueDiscContainer, scale, limit);
+    UpdateDualPi2AggBufferLimit(staQueueDiscContainer, scale, limit);
 
     // Configure IP addresses for all links
     Ipv4AddressHelper address;
@@ -787,6 +800,11 @@ main(int argc, char* argv[])
     }
 
     // Trace bytes in DualPi2 queue
+    Ptr<DualPi2QueueDisc> dualPi2 = apQueueDiscContainer.Get(0)
+                                        ->GetQueueDiscClass(0)
+                                        ->GetQueueDisc()
+                                        ->GetObject<DualPi2QueueDisc>();
+    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     if (enableTracesAll || enableTraces)
     {
         g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
@@ -805,12 +823,6 @@ main(int argc, char* argv[])
         dualPi2->TraceConnectWithoutContext("ProbL", MakeCallback(&TraceProbL));
         dualPi2->TraceConnectWithoutContext("ProbC", MakeCallback(&TraceProbC));
     }
-
-    // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
-    bool connected = apWifiMacQueue->TraceConnectWithoutContext(
-        "PendingDequeue",
-        MakeCallback(&DualPi2QueueDisc::PendingDequeueCallback, dualPi2));
-    NS_ASSERT_MSG(connected, "Could not hook DualPi2 queue to AP WifiMacQueue trace source");
 
     if (duration > Seconds(0))
     {
@@ -1333,5 +1345,57 @@ SetAcBeEdcaParameters(const NetDeviceContainer& ndc,
         qosTxop->SetMaxCw(cwMax);
         qosTxop->SetAifsn(aifsn);
         qosTxop->SetTxopLimit(txopLimit);
+    }
+}
+
+// Note:  The below method connects the pending dequeue callback for the
+// DualPi2QueueDisc that sits above the AC_BE WifiMacQueue.  It is referenced
+// by the GetQueueDiscClass(0) statement below.  If, in the future, there
+// is interest in hooking all four access categories, the four access
+// categories (referenced by AC_BE, AC_VO, AC_VI, AC_BK) must be paired
+// with the correct QueueDiscClass index.
+void
+ConnectPendingDequeueCallback(const NetDeviceContainer& devices,
+                              const QueueDiscContainer& queueDiscs)
+{
+    NS_ASSERT_MSG(devices.GetN() == queueDiscs.GetN(),
+                  "Configuration error: container size mismatch");
+    for (uint32_t i = 0; i < devices.GetN(); i++)
+    {
+        auto wifiMacQueue =
+            devices.Get(i)->GetObject<WifiNetDevice>()->GetMac()->GetTxopQueue(AC_BE);
+        NS_ASSERT_MSG(wifiMacQueue, "Could not acquire pointer to WifiMacQueue");
+        auto phy = devices.Get(i)->GetObject<WifiNetDevice>()->GetPhy();
+        NS_ASSERT_MSG(phy, "Could not acquire pointer to WifiPhy");
+        auto dualPi2 =
+            queueDiscs.Get(i)->GetQueueDiscClass(0)->GetQueueDisc()->GetObject<DualPi2QueueDisc>();
+        NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2QueueDisc");
+        // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
+        bool connected = wifiMacQueue->TraceConnectWithoutContext(
+            "PendingDequeue",
+            MakeCallback(&DualPi2QueueDisc::PendingDequeueCallback, dualPi2));
+        NS_ASSERT_MSG(connected, "Could not hook DualPi2 queue to WifiMacQueue trace source");
+    }
+}
+
+void
+UpdateDualPi2AggBufferLimit(const QueueDiscContainer& queueDiscs, double scale, uint32_t limit)
+{
+    for (uint32_t i = 0; i < queueDiscs.GetN(); i++)
+    {
+        // There are four queue disc classes (this is an MQ queue disc)
+        // so update the limit for each DualPi2QueueDisc (even though we
+        // are only using the AC_BE one for now)
+        for (uint32_t j = 0; j < queueDiscs.Get(i)->GetNQueueDiscClasses(); j++)
+        {
+            auto dualPi2 = queueDiscs.Get(i)
+                               ->GetQueueDiscClass(j)
+                               ->GetQueueDisc()
+                               ->GetObject<DualPi2QueueDisc>();
+            if (dualPi2)
+            {
+                dualPi2->SetAggregationBufferLimit(static_cast<uint32_t>(scale * limit));
+            }
+        }
     }
 }

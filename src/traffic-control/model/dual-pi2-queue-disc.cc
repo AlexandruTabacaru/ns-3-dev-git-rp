@@ -431,6 +431,8 @@ DualPi2QueueDisc::DualPi2Update()
 
     if (m_enableWifiClassicLatencyEstimator)
     {
+        NS_ABORT_MSG_UNLESS(m_aggBufferLimit,
+                            "Configuration error: aggregation buffer limit is not set");
         // Upon blockAck, store max sojourn time of head-of-queue packet
         // for L & C and queueBytes (C queue only) prior to re-filling
         // aggregation buffer.  Upon PI update, use most recent samples
