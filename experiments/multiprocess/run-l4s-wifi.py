@@ -167,7 +167,6 @@ def run_simulation(test_case, arguments):
     path_to_ns3_script = "../../ns3"
 
     plotTitle = f"Simulation {test_case}"
-
     arguments += " --ns3::DualPi2QueueDisc::EnableWifiClassicLatencyEstimator=" + str(enableWifiClassicLatencyEstimator)
 
     print(f"Test Case: {test_case}, Arguments: {arguments}")
@@ -198,12 +197,21 @@ if __name__ == "__main__":
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
 
-    # rootResultsdir = "multiresults-20240508-175758"
+    # rootResultsdir = "multiresults-20240520-173429"
     process_results(rootResultsdir) # produces processed_results.csv
 
     merge_input_with_results(rootResultsdir) # produces results.csv
 
-    hidden_columns = ['numBytes', 'wifiQueueSize', 'limit']
+    hidden_columns = ['numBytes', 'wifiQueueSize', 'limit','Duration','spatialStreams',
+        'Mean Lat. UL Cubic','P0 Lat. UL Cubic','P10 Lat. UL Cubic',
+        'P90 Lat. UL Cubic','P99 Lat. UL Cubic',
+        'StdDev Lat. UL Cubic', 'Mean Rate UL Cubic (Mbps)', 'CE % UL Cubic',
+        'Mean Lat. UL Prague','P0 Lat. UL Prague','P10 Lat. UL Prague',
+        'P90 Lat. UL Prague','P99 Lat. UL Prague',
+        'StdDev Lat. UL Prague', 'Mean Rate UL Prague (Mbps)', 'CE % UL Prague',
+        'StdDev Lat. DL Cubic', 'StdDev Lat. DL Prague',
+        ]
+
     detailed_csv = hide_columns(rootResultsdir, hidden_columns) # produces detailed_results.csv
 
     summary_csvs = create_summary_csvs(rootResultsdir) # produces calc_detailed_results.csv and multiple csv files
