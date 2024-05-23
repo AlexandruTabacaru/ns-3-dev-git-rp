@@ -9,11 +9,11 @@ import json
 def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
         return {
-            "Average Latency": round(np.mean(dataframe["Latency"]) * 1000, digits),
-            "P0 Latency": round(np.min(dataframe["Latency"]) * 1000, digits),
-            "P10 Latency": round(np.percentile(dataframe["Latency"], 10) * 1000, digits),
-            "P90 Latency": round(np.percentile(dataframe["Latency"], 90) * 1000, digits),
-            "P99 Latency": round(np.percentile(dataframe["Latency"], 99) * 1000, digits),
+            "Mean Lat.": round(np.mean(dataframe["Latency"]) * 1000, digits),
+            "P0 Lat.": round(np.min(dataframe["Latency"]) * 1000, digits),
+            "P10 Lat.": round(np.percentile(dataframe["Latency"], 10) * 1000, digits),
+            "P90 Lat.": round(np.percentile(dataframe["Latency"], 90) * 1000, digits),
+            "P99 Lat.": round(np.percentile(dataframe["Latency"], 99) * 1000, digits),
             "StdDev": round(np.std(dataframe["Latency"], ddof=1) * 1000, digits),
         }
     return None
@@ -54,7 +54,7 @@ def process_test_directory(test_dir_path):
                 except UnicodeDecodeError:
                     print(f"Error decoding file: {file}")
 
-    # Process Bandwidth Calculation
+    # Process Rate Calculation
     for direction, summary_file in [("DL", "summary_table_downstream.csv"), ("UL", "summary_table_upstream.csv")]:
         summary_path = os.path.join(test_dir_path, summary_file)
         if os.path.exists(summary_path):
@@ -66,10 +66,10 @@ def process_test_directory(test_dir_path):
                     filtered_df = summary_df[summary_df['Flow ID'].apply(lambda x: is_cubic_or_prague(x) == category)]
                     bandwidth = filtered_df['Mean data rate (Mbps)'].sum() if not filtered_df.empty else 0
                     if not data[category][direction].empty:
-                        data[category][direction]['Bandwidth (Mbps)'] = bandwidth
+                        data[category][direction]['Rate (Mbps)'] = bandwidth
                     else:
-                        # Create an empty DataFrame with a 'Bandwidth (Mbps)' column if it doesn't exist
-                        data[category][direction] = pd.DataFrame({'Bandwidth (Mbps)': [bandwidth]})
+                        # Create an empty DataFrame with a 'Rate (Mbps)' column if it doesn't exist
+                        data[category][direction] = pd.DataFrame({'Rate (Mbps)': [bandwidth]})
             except UnicodeDecodeError as e:
                 print(f"Error reading {summary_file}: {e}")
 
@@ -109,32 +109,32 @@ def process_results(root_dir):
         test_results_template = {"Label": test_dir}
         for direction in ["UL", "DL"]:
             # Initialize default values
-            default_stats = {"Average Latency": float("inf"), "P0 Latency": float("inf"), "P10 Latency": float("inf"), "P90 Latency": float("inf"), "P99 Latency": float("inf"), "StdDev Latency": float("inf")}
+            default_stats = {"Mean Lat.": float("inf"), "P0 Lat.": float("inf"), "P10 Lat.": float("inf"), "P90 Lat.": float("inf"), "P99 Lat.": float("inf"), "StdDev Lat.": float("inf")}
 
             # Compute statistics for cubic and prague if data is available
             if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
                 stats_cubic = compute_statistics(data["cubic"][direction],digits=0)
             else:
                 stats_cubic = default_stats
-            bandwidth_cubic = round(data["cubic"][direction]["Bandwidth (Mbps)"].mean()) if "Bandwidth (Mbps)" in data["cubic"][direction].columns else 0
+            bandwidth_cubic = round(data["cubic"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["cubic"][direction].columns else 0
             ce_cubic = data["cubic"][direction]["CE %"].mean() if "CE %" in data["cubic"][direction].columns else 0
 
             if not data["prague"][direction].empty and "Latency" in data["prague"][direction].columns:
                 stats_prague = compute_statistics(data["prague"][direction],digits=0)
             else:
                 stats_prague = default_stats
-            bandwidth_prague = round(data["prague"][direction]["Bandwidth (Mbps)"].mean()) if "Bandwidth (Mbps)" in data["prague"][direction].columns else 0
+            bandwidth_prague = round(data["prague"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["prague"][direction].columns else 0
             ce_prague = data["prague"][direction]["CE %"].mean() if "CE %" in data["prague"][direction].columns else 0
 
             # Merge cubic and prague stats into the results template
             for key, value in stats_cubic.items():
                 test_results_template[f"{key} {direction} Cubic"] = value
-            test_results_template[f"Average Bandwidth {direction} Cubic (Mbps)"] = bandwidth_cubic
+            test_results_template[f"Mean Rate {direction} Cubic (Mbps)"] = bandwidth_cubic
             test_results_template[f"CE % {direction} Cubic"] = ce_cubic
 
             for key, value in stats_prague.items():
                 test_results_template[f"{key} {direction} Prague"] = value
-            test_results_template[f"Average Bandwidth {direction} Prague (Mbps)"] = bandwidth_prague
+            test_results_template[f"Mean Rate {direction} Prague (Mbps)"] = bandwidth_prague
             test_results_template[f"CE % {direction} Prague"] = ce_prague
 
         all_results.append(test_results_template)
@@ -266,8 +266,8 @@ def create_summary_csvs(root_dir):
         cubic_TC=int(cubic_TC)
         
         # Calculate Log Rate Ratios
-        cubic_rates = df[df.xTC==cubic_TC]['Average Bandwidth DL Cubic (Mbps)']
-        prague_rates = df[df.xTC==prague_TC]['Average Bandwidth DL Prague (Mbps)']
+        cubic_rates = df[df.xTC==cubic_TC]['Mean Rate DL Cubic (Mbps)']
+        prague_rates = df[df.xTC==prague_TC]['Mean Rate DL Prague (Mbps)']
         if (cubic_rates.shape[0] == prague_rates.shape[0]):
             cubic_rates.index = prague_rates.index
             rate_ratios=prague_rates/cubic_rates
@@ -278,8 +278,8 @@ def create_summary_csvs(root_dir):
 
         # Calculate Latency Benefits
         wanDelays = df[df.xTC==prague_TC]['wanLinkDelay'].str.extract(r'(\d+)ms').astype(int).squeeze() # get the wanLinkDelay as an integer in ms
-        cubic_P99s = df[df.xTC==cubic_TC]['P99 Latency DL Cubic']
-        prague_P99s = df[df.xTC==prague_TC]['P99 Latency DL Prague']
+        cubic_P99s = df[df.xTC==cubic_TC]['P99 Lat. DL Cubic']
+        prague_P99s = df[df.xTC==prague_TC]['P99 Lat. DL Prague']
         if (cubic_P99s.shape[0] == prague_P99s.shape[0]):
             cubic_P99s.index = prague_P99s.index
             latency_benefits=round(cubic_P99s - prague_P99s,3)
