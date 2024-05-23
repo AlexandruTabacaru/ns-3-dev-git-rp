@@ -277,7 +277,7 @@ def create_summary_csvs(root_dir):
             df.loc[df.xTC==prague_TC,'calc_ABW_DL_Cubic_Mbps'] = cubic_rates
 
         # Calculate Latency Benefits
-        wanDelays = df[df.xTC==prague_TC]['wanLinkDelay'].str.extract(r'"(\d+)ms"').astype(int).squeeze() # get the wanLinkDelay as an integer in ms
+        wanDelays = df[df.xTC==prague_TC]['wanLinkDelay'].str.extract(r'(\d+)ms').astype(int).squeeze() # get the wanLinkDelay as an integer in ms
         cubic_P99s = df[df.xTC==cubic_TC]['P99 Latency DL Cubic']
         prague_P99s = df[df.xTC==prague_TC]['P99 Latency DL Prague']
         if (cubic_P99s.shape[0] == prague_P99s.shape[0]):
