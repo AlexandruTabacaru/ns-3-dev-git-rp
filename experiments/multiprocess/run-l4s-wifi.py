@@ -10,6 +10,10 @@ from processor.processor import process_results, merge_input_with_results, creat
 from exporter.exporter import export
 from pathlib import Path
 
+# Maps to DualPi2QueueDisc::EnableWifiClassicLatencyEstimator 
+enableWifiClassicLatencyEstimator=1
+
+
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
     plotTitle = "Cubic=" + str(numCubic)
@@ -164,6 +168,7 @@ def run_simulation(test_case, arguments):
 
     plotTitle = f"Simulation {test_case}"
 
+    arguments += " --ns3::DualPi2QueueDisc::EnableWifiClassicLatencyEstimator=" + str(enableWifiClassicLatencyEstimator)
 
     print(f"Test Case: {test_case}, Arguments: {arguments}")
     resultsDir = stageResultsDirectory(rootResultsdir, test_case)
