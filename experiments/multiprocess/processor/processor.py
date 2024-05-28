@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 import json
+import multiprocessing
 
 def compute_statistics(dataframe, digits=3):
     if not dataframe.empty:
@@ -14,7 +15,7 @@ def compute_statistics(dataframe, digits=3):
             "P10 Lat.": round(np.percentile(dataframe["Latency"], 10) * 1000, digits),
             "P90 Lat.": round(np.percentile(dataframe["Latency"], 90) * 1000, digits),
             "P99 Lat.": round(np.percentile(dataframe["Latency"], 99) * 1000, digits),
-            "StdDev": round(np.std(dataframe["Latency"], ddof=1) * 1000, digits),
+            "StdDev Lat.": round(np.std(dataframe["Latency"], ddof=1) * 1000, digits),
         }
     return None
 
@@ -92,52 +93,51 @@ def process_test_directory(test_dir_path):
                 else:
                     data[category][direction]['CE %'] += ce_percentage
 
-    return data
+    # Initialize a template for the results dictionary for this test directory
+    test_dir = os.path.basename(test_dir_path)
+    test_results_template = {"Label": test_dir}
+    for direction in ["UL", "DL"]:
+        # Initialize default values
+        default_stats = {"Mean Lat.": float("inf"), "P0 Lat.": float("inf"), "P10 Lat.": float("inf"), "P90 Lat.": float("inf"), "P99 Lat.": float("inf"), "StdDev Lat.": float("inf")}
+
+        # Compute statistics for cubic and prague if data is available
+        if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
+            stats_cubic = compute_statistics(data["cubic"][direction],digits=0)
+        else:
+            stats_cubic = default_stats
+        bandwidth_cubic = round(data["cubic"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["cubic"][direction].columns else 0
+        ce_cubic = data["cubic"][direction]["CE %"].mean() if "CE %" in data["cubic"][direction].columns else 0
+
+        if not data["prague"][direction].empty and "Latency" in data["prague"][direction].columns:
+            stats_prague = compute_statistics(data["prague"][direction],digits=0)
+        else:
+            stats_prague = default_stats
+        bandwidth_prague = round(data["prague"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["prague"][direction].columns else 0
+        ce_prague = data["prague"][direction]["CE %"].mean() if "CE %" in data["prague"][direction].columns else 0
+
+        # Merge cubic and prague stats into the results template
+        for key, value in stats_cubic.items():
+            test_results_template[f"{key} {direction} Cubic"] = value
+        test_results_template[f"Mean Rate {direction} Cubic (Mbps)"] = bandwidth_cubic
+        test_results_template[f"CE % {direction} Cubic"] = ce_cubic
+
+        for key, value in stats_prague.items():
+            test_results_template[f"{key} {direction} Prague"] = value
+        test_results_template[f"Mean Rate {direction} Prague (Mbps)"] = bandwidth_prague
+        test_results_template[f"CE % {direction} Prague"] = ce_prague
+    
+    return test_results_template
+
 
 def process_results(root_dir):
     all_results = []
-
+    
     test_run_dirs = [
-        d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d)) and d != "config"
+        os.path.join(root_dir, d) for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir, d)) and d != "config"
     ]
 
-    for test_dir in test_run_dirs:
-        test_dir_path = os.path.join(root_dir, test_dir)
-        data = process_test_directory(test_dir_path)
-
-        # Initialize a template for the results dictionary for this test directory
-        test_results_template = {"Label": test_dir}
-        for direction in ["UL", "DL"]:
-            # Initialize default values
-            default_stats = {"Mean Lat.": float("inf"), "P0 Lat.": float("inf"), "P10 Lat.": float("inf"), "P90 Lat.": float("inf"), "P99 Lat.": float("inf"), "StdDev Lat.": float("inf")}
-
-            # Compute statistics for cubic and prague if data is available
-            if not data["cubic"][direction].empty and "Latency" in data["cubic"][direction].columns:
-                stats_cubic = compute_statistics(data["cubic"][direction],digits=0)
-            else:
-                stats_cubic = default_stats
-            bandwidth_cubic = round(data["cubic"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["cubic"][direction].columns else 0
-            ce_cubic = data["cubic"][direction]["CE %"].mean() if "CE %" in data["cubic"][direction].columns else 0
-
-            if not data["prague"][direction].empty and "Latency" in data["prague"][direction].columns:
-                stats_prague = compute_statistics(data["prague"][direction],digits=0)
-            else:
-                stats_prague = default_stats
-            bandwidth_prague = round(data["prague"][direction]["Rate (Mbps)"].mean()) if "Rate (Mbps)" in data["prague"][direction].columns else 0
-            ce_prague = data["prague"][direction]["CE %"].mean() if "CE %" in data["prague"][direction].columns else 0
-
-            # Merge cubic and prague stats into the results template
-            for key, value in stats_cubic.items():
-                test_results_template[f"{key} {direction} Cubic"] = value
-            test_results_template[f"Mean Rate {direction} Cubic (Mbps)"] = bandwidth_cubic
-            test_results_template[f"CE % {direction} Cubic"] = ce_cubic
-
-            for key, value in stats_prague.items():
-                test_results_template[f"{key} {direction} Prague"] = value
-            test_results_template[f"Mean Rate {direction} Prague (Mbps)"] = bandwidth_prague
-            test_results_template[f"CE % {direction} Prague"] = ce_prague
-
-        all_results.append(test_results_template)
+    with multiprocessing.Pool() as pool:
+        all_results = pool.map(process_test_directory,test_run_dirs)
 
     df_results = pd.DataFrame(all_results)
     results_csv_path = os.path.join(root_dir, "processed_results.csv")
