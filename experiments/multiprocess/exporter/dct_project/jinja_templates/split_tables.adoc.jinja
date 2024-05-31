@@ -13,52 +13,6 @@ include::{{ introduction_markdown }}[]
 |===
 
 
-ifdef::backend-html5[]
-++++
-<script>
-let detailedTable = new DataTable('#detailedTable', {
-    pageLength: 10,
-    layout: {
-        topStart: 'search',
-        topEnd: 'pageLength',
-        top2Start: {
-            buttons: ['searchBuilder']
-        },
-        top2End: 'buttons',
-    },
-    buttons: [{ extend: 'copy', text: 'Copy to clipboard' }, 'csv', 'excel'],
-    select: true
-});
-
-// The following code highlights LRRs below -0.5 in focused tables.
-// This necessarily makes heavy assumptions about the formatting of the tables,
-// because we don't have another way to locate the LRR unless we change the code
-// that generates the CSVs to include more metadata.
-const tableCells = document.querySelectorAll('.focusedTable td');
-tableCells.forEach(cell => {
-    // Proceed if the cell contains multiple lines
-    const cellText = cell.textContent.trim();
-    const lines = cellText.split('\n');
-    if (lines.length <= 1) {
-        return;
-    }
-//    // Proceed if the first line looks like a negative number
-//    const isNegativeNumber = /^-\d+/.test(lines[0]);
-//    if (!isNegativeNumber) {
-//        return;
-//    }
-    // If this number is below -0.5 or above 0.5, rewrite the cell to color it bold red
-    const num = parseFloat(lines[0]);
-    if ((num <= -0.5)||(num >= 0.5)) {
-        cell.innerHTML = `<span style="color:red;font-weight:bold;">${lines[0]}</span><br>${lines[1]}`;
-    }
-});
-
-</script>
-++++
-endif::backend-html5[]
-
-
 
 == Simulation KPIs
 
@@ -126,5 +80,51 @@ stem:[n] prague flow(s) and stem:[n] cubic flow(s) sharing the link
 |====
 
 {% endfor %}
+
+
+ifdef::backend-html5[]
+++++
+<script>
+let detailedTable = new DataTable('#detailedTable', {
+    pageLength: 10,
+    layout: {
+        topStart: 'search',
+        topEnd: 'pageLength',
+        top2Start: {
+            buttons: ['searchBuilder']
+        },
+        top2End: 'buttons',
+    },
+    buttons: [{ extend: 'copy', text: 'Copy to clipboard' }, 'csv', 'excel'],
+    select: true
+});
+
+// The following code highlights LRRs below -0.5 in focused tables.
+// This necessarily makes heavy assumptions about the formatting of the tables,
+// because we don't have another way to locate the LRR unless we change the code
+// that generates the CSVs to include more metadata.
+const tableCells = document.querySelectorAll('.focusedTable td');
+tableCells.forEach(cell => {
+    // Proceed if the cell contains multiple lines
+    const cellText = cell.textContent.trim();
+    const lines = cellText.split('\n');
+    if (lines.length <= 1) {
+        return;
+    }
+//    // Proceed if the first line looks like a negative number
+//    const isNegativeNumber = /^-\d+/.test(lines[0]);
+//    if (!isNegativeNumber) {
+//        return;
+//    }
+    // If this number is below -0.5 or above 0.5, rewrite the cell to color it bold red
+    const num = parseFloat(lines[0]);
+    if ((num <= -0.5)||(num >= 0.5)) {
+        cell.innerHTML = `<span style="color:red;font-weight:bold;">${lines[0]}</span><br>${lines[1]}`;
+    }
+});
+
+</script>
+++++
+endif::backend-html5[]
 
 
