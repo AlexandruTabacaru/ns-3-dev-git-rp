@@ -5,11 +5,11 @@ import subprocess
 import sys
 from datetime import datetime
 
-# If not executing this in an experiments subdirectory, need to change this
-# The assumed starting directory is 'experiments/<name>'
-path_to_ns3_dir = "../../"
-# The assumed execution directory is 'experiments/<name>/results-YYmmdd--HHMMSS'
-path_to_ns3_script = "../../../ns3"
+# Get the directory path of the current script
+script_dir = os.path.abspath(os.path.dirname(__file__))
+experiments_dir = os.path.dirname(script_dir)
+ns3_dir = os.path.dirname(experiments_dir)
+ns3_script = os.path.join(ns3_dir, "ns3")
 
 # In future, add parametric job control here (multiprocessing.Pool)
 numCubic = 1
@@ -97,7 +97,7 @@ os.makedirs(resultsdir, exist_ok=False)
 # Copy the plotting file into the results directory
 shutil.copy("plot-l4s-wifi.py", resultsdir)
 # Copy the scenario program into the results directory
-shutil.copy(path_to_ns3_dir + "scratch/l4s-wifi.cc", resultsdir)
+shutil.copy(ns3_dir + "/scratch/l4s-wifi.cc", resultsdir)
 # Copy any other files here
 
 # Cd to the results directory
@@ -113,7 +113,7 @@ with open(os.path.join(os.getcwd(), script_filename), "w") as destination_file:
 try:
     with open("build.txt", "w") as out:
         subprocess.run(
-            [path_to_ns3_script, "build"], stdout=out, stderr=out, check=True
+            [ns3_script, "build"], stdout=out, stderr=out, check=True
         )
 except subprocess.CalledProcessError as e:
     print(f"Build error: {e}:  Check build.txt file for error.")
@@ -123,7 +123,7 @@ except subprocess.CalledProcessError as e:
 with open("run.txt", "w") as out:
     result = subprocess.run(
         [
-            path_to_ns3_script,
+            ns3_script,
             "run",
             "--no-build",
             "--cwd",
@@ -167,13 +167,22 @@ if enableTracesAll or enableTraces:
     subprocess.run(
         ["python3", "plot-l4s-wifi.py", plotTitle], stdout=subprocess.PIPE, text=True
     )
+import subprocess
 
 try:
-    subprocess.run(
-        ["/var/www/html/flaskapp/multiflow_ns3.sh", "l4s-wifi-2-0-ip.pcap", "l4s-wifi-0-0.pcap"], stdout=subprocess.PIPE, text=True
+    result = subprocess.run(
+        [os.path.join(experiments_dir,"latency-monitor","multiflow_ns3.sh"), "l4s-wifi-2-0-ip.pcap", "l4s-wifi-0-0.pcap"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
     )
-except:
-    pass
+    # Check if the command resulted in an error
+    if result.returncode != 0:
+        print(f"Error: {result.stderr}")
+    else:
+        print(f"Output: {result.stdout}")
+except Exception as e:
+    print(f"An exception occurred: {e}")
 
 # Report to terminal
 with open("run.txt", "r") as runfile:

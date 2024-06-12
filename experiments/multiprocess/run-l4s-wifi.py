@@ -115,19 +115,28 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
         stdout=subprocess.PIPE,
         text=True,
     )
+
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
-                "/var/www/html/flaskapp/multiflow_ns3.sh",
+                "../latency-monitor/multiflow_ns3.sh",
                 resultsDir + "/" + "l4s-wifi-2-0-ip.pcap",
                 resultsDir + "/" + "l4s-wifi-0-0.pcap",
                 resultsDir,
             ],
             stdout=subprocess.PIPE,
-            text=True,
+            stderr=subprocess.PIPE,
+            text=True
         )
-    except:
-        pass
+        # Check if the command resulted in an error
+        if result.returncode != 0:
+            print(f"Error: {result.stderr}")
+        else:
+            with open(resultsDir + "/" + "latencymonitor-log.txt", "w") as out:
+                out.write(result.stdout)
+                out.close()
+    except Exception as e:
+        print(f"An exception occurred: {e}")
 
     # Clean up raw data files
 
