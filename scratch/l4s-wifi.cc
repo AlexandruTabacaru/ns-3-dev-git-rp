@@ -249,6 +249,7 @@ main(int argc, char* argv[])
     uint8_t aifsn = 3;
     Time txopLimit = MicroSeconds(2528);
     bool enableLogs = false;
+    uint16_t rngRun = 1;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -306,6 +307,7 @@ main(int argc, char* argv[])
                  "Whether to enable time-series traces necessary for plot-l4s-wifi.py",
                  enableTraces);
     cmd.AddValue("enableLogs", "Whether to enable logs of DualPi2QueueDisc class", enableLogs);
+    cmd.AddValue("rngRun", "Random Number Generator run number", rngRun);
     cmd.Parse(argc, argv);
 
     if (enableLogs)
@@ -353,6 +355,9 @@ main(int argc, char* argv[])
         Config::SetDefault("ns3::TcpL4Protocol::SocketType",
                            TypeIdValue(TcpLinuxReno::GetTypeId()));
     }
+
+    RngSeedManager::SetRun(rngRun);
+    
     // Workaround until PRR response is debugged
     Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
                        TypeIdValue(TcpClassicRecovery::GetTypeId()));
