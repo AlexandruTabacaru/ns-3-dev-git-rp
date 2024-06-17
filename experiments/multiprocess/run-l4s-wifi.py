@@ -10,9 +10,6 @@ from processor.processor import process_results, merge_input_with_results, creat
 from exporter.exporter import export
 from pathlib import Path
 
-# Maps to DualPi2QueueDisc::EnableWifiClassicLatencyEstimator 
-enableWifiClassicLatencyEstimator=1
-
 
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
@@ -171,29 +168,25 @@ def parse_csv_to_dataframe(file_name):
         print(f"An error occurred while reading the file: {e}")
         return None
 
-def run_simulation(test_case, arguments):
+def run_simulation(test_case, arguments, rootResultsdir, rng_run_val):
     path_to_ns3_dir = "../../"
     path_to_ns3_script = "../../ns3"
 
+    # Maps to DualPi2QueueDisc::EnableWifiClassicLatencyEstimator 
+    enableWifiClassicLatencyEstimator=1
+
     plotTitle = f"Simulation {test_case}"
     arguments += " --ns3::DualPi2QueueDisc::EnableWifiClassicLatencyEstimator=" + str(enableWifiClassicLatencyEstimator)
-
+    arguments += " --rngRun=" + str(rng_run_val)
+    
     print(f"Test Case: {test_case}, Arguments: {arguments}")
     resultsDir = stageResultsDirectory(rootResultsdir, test_case)
     runNS3Simulation(os.path.join(resultsDir, "run.txt"), arguments, plotTitle)
 
-if __name__ == "__main__":
+def run_campaign(rootResultsdir, rng_run_val):
 
     # Record the start time
     start_time = datetime.now()
-
-    # Create root multiprocessing directory
-    formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rootResultsdir = "multiresults" + "-" + formatted_date
-    os.makedirs(rootResultsdir, exist_ok=False)
-
-    build_filepath = os.path.join(rootResultsdir, "build.txt")
-    runNS3Build(build_filepath)
 
     # Copy all of the configuration files into the results directory
     shutil.copytree("config", os.path.join(rootResultsdir, "config"))
@@ -201,7 +194,7 @@ if __name__ == "__main__":
     configFile = os.path.join(rootResultsdir, "config", "config.csv")
     testCases = parse_csv_to_dataframe(configFile)
 
-    pool_args = [(tc, args) for tc, args in testCases.items()]
+    pool_args = [(tc, args, rootResultsdir, rng_run_val) for tc, args in testCases.items()]
 
     with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
         pool.starmap(run_simulation, pool_args)
@@ -243,4 +236,17 @@ if __name__ == "__main__":
     with open(log_filename, 'a') as log_file:
         log_file.write(f"Execution time: {elapsed_time.total_seconds()/60} minutes\n")
 
+    return detailed_csv
+
+if __name__ == "__main__":
+
+    # Create root multiprocessing directory
+    formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
+    rootResultsdir = "multiresults" + "-" + formatted_date
+    os.makedirs(rootResultsdir, exist_ok=False)
+
+    build_filepath = os.path.join(rootResultsdir, "build.txt")
+    runNS3Build(build_filepath)
+
+    run_campaign(rootResultsdir,1)
     sys.exit()
