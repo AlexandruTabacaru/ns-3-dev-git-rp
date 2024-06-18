@@ -1,6 +1,6 @@
 # Simulation Campaign Scripts
 
-`./run-l4s-wifi.py` will launch a full simulation campaign as specified in config/config.csv
+`./run_l4s_wifi.py` will launch a full simulation campaign as specified in config/config.csv
 
 The file config/config.csv can be built manually, according to the description below, or the script config/build_config.sh can be edited to create a new config/config.csv to cover a different set of conditions if desired.
 
@@ -10,6 +10,7 @@ The following is a list of arguments that can be configured using config.csv.
 
 Ensure that all of the following are included in the config.csv file.
 
+- Test Case = identifier for the test run (see below)
 - numCubic = 1  
 - numPrague = 1  
 - numBackground = 0  
@@ -41,3 +42,18 @@ Ensure that all of the following are included in the config.csv file.
 # Publishing results
 
 To distribute the results of a test, a standalone HTML file may be generated. This is achieved using docToolchain, which requires Docker to be installed on the host system to run correctly.
+
+
+# Test Case identifiers
+
+Each test case in config.csv needs a unique ID with the following structure:  
+EDx-MSx-APx-LSx-TCx-TSx
+
+Where "x" is replaced with an integer in each case (e.g. ED0-MS0-AP1-LS1-TC1-TS1)
+
+The file config/campaigns.json provides a dictionary that describes the test case naming convention.
+
+
+# Running Monte Carlo analysis
+
+./run_l4s_wifi.py assumes that each run has a unique Test Case ID, and thus is a unique test condition.  In order to run each test condition multiple times with different random seeds, the script monte_carlo.py can be used.  It defaults to running the full campaign 10 times and then analzying the results. 
