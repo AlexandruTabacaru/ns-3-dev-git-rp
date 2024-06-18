@@ -236,6 +236,7 @@ main(int argc, char* argv[])
     double scale = 1.0;           // default flow control scale factor
     uint32_t rtsCtsThreshold = 0; // RTS/CTS disabled by default
     Time processingDelay = MicroSeconds(10);
+    Time flowStartOffset = MicroSeconds(1); // Time between starting each TCP flow
     bool showProgress = false;
     uint32_t maxAmsduSize = 0; // zero means A-MSDU is disabled
     Time progressInterval = Seconds(5);
@@ -290,6 +291,9 @@ main(int argc, char* argv[])
     cmd.AddValue("scale", "Scaling factor for queue limit", scale);
     cmd.AddValue("rtsCtsThreshold", "RTS/CTS threshold (bytes)", rtsCtsThreshold);
     cmd.AddValue("processingDelay", "Notional packet processing delay", processingDelay);
+    cmd.AddValue("flowStartOffset",
+                 "Time between successive TCP flow start times",
+                 flowStartOffset);
     cmd.AddValue("maxAmsduSize", "BE Max A-MSDU size in bytes", maxAmsduSize);
     cmd.AddValue("cwMin", "BE CWmin in slots", cwMin);
     cmd.AddValue("cwMax", "BE CWmax in slots", cwMax);
@@ -357,7 +361,7 @@ main(int argc, char* argv[])
     }
 
     RngSeedManager::SetRun(rngRun);
-    
+
     // Workaround until PRR response is debugged
     Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
                        TypeIdValue(TcpClassicRecovery::GetTypeId()));
@@ -560,64 +564,52 @@ main(int argc, char* argv[])
     uint16_t port = 100;
     ApplicationContainer pragueClientApps;
     ApplicationContainer pragueServerApps;
-    // The following offset is used to prevent all Prague flows from starting
-    // at the same time.  However, this program has a special constraint in
-    // that the TCP socket TypeId is changed from Prague to Cubic after 50 ms
-    // (to allow for installation of both Prague and Cubic sockets on the
-    // same node).  Therefore, adjust this start offset based on the number
-    // of flows, and make sure that the last value is less than 50 ms.
-    Time pragueStartOffset = MilliSeconds(50) / (numPrague + 1);
     for (auto i = 0U; i < numPrague; i++)
     {
         BulkSendHelper bulk("ns3::TcpSocketFactory",
                             InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulk.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        bulk.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * pragueStartOffset));
+        bulk.SetAttribute("StartTime", TimeValue(Seconds(1) + i * flowStartOffset));
         pragueClientApps.Add(bulk.Install(clientNode.Get(0)));
         NS_LOG_DEBUG("Creating Prague foreground flow " << i);
         PacketSinkHelper sink =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        sink.SetAttribute("StartTime", TimeValue(Seconds(1.0) + i * pragueStartOffset));
+        sink.SetAttribute("StartTime", TimeValue(Seconds(1) + i * flowStartOffset));
         pragueServerApps.Add(sink.Install(staNode.Get(0)));
         g_flowsToClose++;
         Simulator::Schedule(
-            Seconds(1.0) - TimeStep(1),
+            Seconds(1) - TimeStep(1),
             MakeBoundCallback(&ConfigurePragueSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
+    // The TCP socket factory needs to be reconfigured to create Cubic
+    // sockets after Prague sockets were generated.
+    Time factoryReconfigurationTime = Seconds(1) + (numPrague * flowStartOffset) - TimeStep(1);
+    Simulator::Schedule(
+        factoryReconfigurationTime,
+        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
 
     // Application configuration for Cubic flows under test
     port = 200;
     ApplicationContainer cubicClientApps;
     ApplicationContainer cubicServerApps;
-    // The following offset is used to prevent all Cubic flows from starting
-    // at the same time.  However, this program has a special constraint in
-    // that the TCP socket TypeId is changed from Prague to Cubic after 50 ms
-    // (to allow for installation of both Prague and Cubic sockets on the
-    // same node).  Therefore, adjust this start offset based on the number
-    // of flows, and make sure that the last value is less than 50 ms.
-    Time cubicStartOffset = MilliSeconds(50) / (numCubic + 1);
     for (auto i = 0U; i < numCubic; i++)
     {
         BulkSendHelper bulkCubic("ns3::TcpSocketFactory",
                                  InetSocketAddress(wifiInterfaces.GetAddress(1), port + i));
         bulkCubic.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        bulkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * cubicStartOffset));
+        bulkCubic.SetAttribute("StartTime",
+                               TimeValue(Seconds(1) + (i + numPrague) * flowStartOffset));
         cubicClientApps.Add(bulkCubic.Install(clientNode.Get(0)));
         NS_LOG_DEBUG("Creating Cubic foreground flow " << i);
         PacketSinkHelper sinkCubic =
             PacketSinkHelper("ns3::TcpSocketFactory",
                              InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        sinkCubic.SetAttribute("StartTime", TimeValue(Seconds(1.05) + i * cubicStartOffset));
+        sinkCubic.SetAttribute("StartTime",
+                               TimeValue(Seconds(1) + (i + numPrague) * flowStartOffset));
         cubicServerApps.Add(sinkCubic.Install(staNode.Get(0)));
         g_flowsToClose++;
-        // This is where, at time 50 ms after the first start time (Seconds(1)),
-        // the TCP type is changed from Prague to Cubic
-        Simulator::Schedule(
-            Seconds(1.05) - TimeStep(1),
-            MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolClient, tcpL4ProtocolSta));
     }
-
     // Allow the primary network to send saturating UDP traffic if no TCP is configured
     if (!numCubic && !numPrague)
     {
@@ -733,7 +725,7 @@ main(int argc, char* argv[])
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(Seconds(1.0) + i * pragueStartOffset + TimeStep(1),
+        Simulator::Schedule(Seconds(1) + i * flowStartOffset + TimeStep(1),
                             MakeBoundCallback(&TracePragueClientSocket,
                                               pragueClientApps.Get(i),
                                               i,
@@ -779,7 +771,7 @@ main(int argc, char* argv[])
     for (auto i = 0U; i < cubicClientApps.GetN(); i++)
     {
         // The TCP sockets that we want to connect
-        Simulator::Schedule(Seconds(1.05) + i * cubicStartOffset + TimeStep(1),
+        Simulator::Schedule(Seconds(1) + (i + numPrague) * flowStartOffset + TimeStep(1),
                             MakeBoundCallback(&TraceCubicClientSocket,
                                               cubicClientApps.Get(i),
                                               i,
