@@ -180,6 +180,23 @@ uint32_t g_flowsToClose = 0;
 void HandlePeerClose(std::string context, Ptr<const Socket> socket);
 void HandlePeerError(std::string context, Ptr<const Socket> socket);
 
+// For use in dynamically changing MCS and aggregation buffer limit
+Ptr<ConstantRateWifiManager> apWifiMgr;
+Ptr<WifiNetDevice> apWifiNetDevice;
+Ptr<WifiNetDevice> staWifiNetDevice;
+QueueDiscContainer apQueueDiscContainer;
+QueueDiscContainer staQueueDiscContainer;
+uint32_t CalculateLimit(uint16_t mcs,
+                        uint32_t channelWidth,
+                        uint32_t spatialStreams,
+                        Time txopLimit);
+void ChangeMcs(uint16_t mcs,
+               uint32_t limit,
+               uint16_t nextMcs,
+               uint32_t nextLimit,
+               double scale,
+               Time mcsChangeInterval);
+
 // Helper function for EDCA overrides
 void SetAcBeEdcaParameters(const NetDeviceContainer& ndc,
                            uint32_t cwMin,
@@ -201,10 +218,12 @@ MinMaxAvgTotalCalculator<uint32_t> cubicThroughputCalculator;  // units of Mbps
 void ConnectPendingDequeueCallback(const NetDeviceContainer& devices,
                                    const QueueDiscContainer& queueDiscs);
 
-// Utility function to inform all DualPi2 queues about a change to the limit
+// Utility function to inform DualPi2 queues about a change to the limit
 void UpdateDualPi2AggBufferLimit(const QueueDiscContainer& queueDiscs,
                                  double scale,
                                  uint32_t limit);
+// Utility function to inform dynamic queue limits about a change to the limit
+void UpdateDynamicQueueLimits(Ptr<WifiNetDevice> device, double scale, uint32_t limit);
 
 int
 main(int argc, char* argv[])
@@ -226,6 +245,8 @@ main(int argc, char* argv[])
     bool useReno = false;
     uint32_t numBackgroundUdp = 0;
     uint16_t mcs = 2;
+    uint16_t secondMcs = 2;
+    Time mcsChangeInterval; // By default, zero means disabled
     uint32_t channelWidth = 80;
     uint32_t spatialStreams = 1;
     // Default WifiMacQueue depth is roughly 40 ms at 2.4 Gbps ~= 8000 packets
@@ -283,6 +304,10 @@ main(int argc, char* argv[])
     cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
     cmd.AddValue("numBackgroundUdp", "Number of background UDP flows", numBackgroundUdp);
     cmd.AddValue("mcs", "Index (0-11) of 11ax HE MCS", mcs);
+    cmd.AddValue("secondMcs", "Index (0-11) of 11ax HE MCS", secondMcs);
+    cmd.AddValue("mcsChangeInterval",
+                 "if set, will toggle between mcs and secondMcs at this interval",
+                 mcsChangeInterval);
     cmd.AddValue("channelWidth", "Width (MHz) of channel", channelWidth);
     cmd.AddValue("spatialStreams", "Number of spatial streams", spatialStreams);
     cmd.AddValue("wifiQueueSize", "WifiMacQueue size", wifiQueueSize);
@@ -314,6 +339,12 @@ main(int argc, char* argv[])
     cmd.AddValue("rngRun", "Random Number Generator run number", rngRun);
     cmd.Parse(argc, argv);
 
+    if (limit < 65535)
+    {
+        std::cout << "Warning:  'limit' command-line argument is ignored; limit is now autoset"
+                  << std::endl;
+    }
+
     if (enableLogs)
     {
         LogComponentEnableAll(LOG_PREFIX_ALL);
@@ -321,6 +352,10 @@ main(int argc, char* argv[])
     }
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
+    NS_ABORT_MSG_UNLESS(secondMcs < 12, "Only MCS 0-11 supported");
+
+    limit = CalculateLimit(mcs, channelWidth, spatialStreams, txopLimit);
+
     if (processingDelay > Seconds(0))
     {
         Config::SetDefault("ns3::WifiMacQueue::ProcessingDelay", TimeValue(processingDelay));
@@ -424,10 +459,17 @@ main(int argc, char* argv[])
     wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("l4s")));
     NetDeviceContainer apDevice = wifi.Install(wifiPhy, wifiMac, apNode);
     SetAcBeEdcaParameters(apDevice, cwMin, cwMax, aifsn, txopLimit);
+    apWifiMgr = apDevice.Get(0)
+                    ->GetObject<WifiNetDevice>()
+                    ->GetRemoteStationManager()
+                    ->GetObject<ConstantRateWifiManager>();
+    NS_ABORT_MSG_UNLESS(apWifiMgr, "Downcast failed");
+    apWifiNetDevice = apDevice.Get(0)->GetObject<WifiNetDevice>();
 
     wifiMac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("l4s")));
     NetDeviceContainer staDevices = wifi.Install(wifiPhy, wifiMac, staNode);
     SetAcBeEdcaParameters(staDevices, cwMin, cwMax, aifsn, txopLimit);
+    staWifiNetDevice = staDevices.Get(0)->GetObject<WifiNetDevice>();
 
     // OBSS configuration
     wifiMac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("obss")));
@@ -502,8 +544,8 @@ main(int argc, char* argv[])
     }
     // Install the traffic control configuration on the AP Wi-Fi device
     // and on STA devices
-    QueueDiscContainer apQueueDiscContainer = tch.Install(apDevice);
-    QueueDiscContainer staQueueDiscContainer = tch.Install(staDevices);
+    apQueueDiscContainer = tch.Install(apDevice);
+    staQueueDiscContainer = tch.Install(staDevices);
 
     // Hook DualPi2 queue to WifiMacQueue::PendingDequeue trace source
     ConnectPendingDequeueCallback(apDevice, apQueueDiscContainer);
@@ -628,6 +670,20 @@ main(int argc, char* argv[])
 
     // Control the random variable stream assignments for Wi-Fi models (the value 100 is arbitrary)
     wifi.AssignStreams(wifiDevices, 100);
+
+    // schedule MCS changes, if configured above
+    if (mcsChangeInterval > Seconds(0))
+    {
+        uint32_t secondLimit = CalculateLimit(secondMcs, channelWidth, spatialStreams, txopLimit);
+        Simulator::Schedule(Seconds(1) + mcsChangeInterval,
+                            &ChangeMcs,
+                            mcs,
+                            limit,
+                            secondMcs,
+                            secondLimit,
+                            scale,
+                            mcsChangeInterval);
+    }
 
     // OBSS traffic configuration
 
@@ -1392,7 +1448,69 @@ UpdateDualPi2AggBufferLimit(const QueueDiscContainer& queueDiscs, double scale, 
             if (dualPi2)
             {
                 dualPi2->SetAggregationBufferLimit(static_cast<uint32_t>(scale * limit));
+                dualPi2->SetAttribute("QueueLimit",
+                                      UintegerValue(static_cast<uint32_t>(scale * limit * 100)));
             }
         }
     }
+}
+
+void
+UpdateDynamicQueueLimits(Ptr<WifiNetDevice> device, double scale, uint32_t limit)
+{
+    Ptr<NetDeviceQueueInterface> interface = device->GetObject<NetDeviceQueueInterface>();
+    Ptr<NetDeviceQueue> queueInterface = interface->GetTxQueue(0);
+    Ptr<DynamicQueueLimits> queueLimits =
+        DynamicCast<DynamicQueueLimits>(queueInterface->GetQueueLimits());
+    NS_ABORT_MSG_UNLESS(queueLimits, "Downcast failed");
+    queueLimits->SetAttribute("MinLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
+    queueLimits->SetAttribute("MaxLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
+}
+
+void
+ChangeMcs(uint16_t mcs,
+          uint32_t limit,
+          uint16_t nextMcs,
+          uint32_t nextLimit,
+          double scale,
+          Time mcsChangeInterval)
+{
+    NS_LOG_DEBUG("Changing MCS from " << mcs << " limit from " << limit << " to MCS " << nextMcs
+                                      << " limit " << nextLimit);
+
+    UpdateDynamicQueueLimits(apWifiNetDevice, scale, nextLimit);
+    UpdateDynamicQueueLimits(staWifiNetDevice, scale, nextLimit);
+    UpdateDualPi2AggBufferLimit(apQueueDiscContainer, scale, nextLimit);
+    UpdateDualPi2AggBufferLimit(staQueueDiscContainer, scale, nextLimit);
+    // reschedule
+    Simulator::Schedule(mcsChangeInterval,
+                        &ChangeMcs,
+                        nextMcs,
+                        nextLimit,
+                        mcs,
+                        limit,
+                        scale,
+                        mcsChangeInterval);
+}
+
+uint32_t
+CalculateLimit(uint16_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Time txopLimit)
+{
+    NS_LOG_DEBUG("CalculateLimit for MCS " << mcs << " width " << channelWidth << " spatialStreams "
+                                           << spatialStreams << " txopLimit "
+                                           << txopLimit.As(Time::US));
+    auto dataRate = HePhy::GetDataRate(mcs, channelWidth, 800, spatialStreams); // bits/sec
+    double mtuSize = 1500;                                                      // bytes
+    double macHeaderSize = 44;                                          // bytes , MPDU size 1548
+    double mpduTxDuration = (mtuSize + macHeaderSize) * 8.0 / dataRate; // s
+    double preambleAndHeaderDuration = 192 + 52;                        // us
+    uint32_t actualTransmitNPackets =
+        static_cast<uint32_t>(ceil((txopLimit.GetMicroSeconds() - preambleAndHeaderDuration) /
+                                   (mpduTxDuration * 1000000))); // N packets
+    uint32_t constantOverhead = 2; // in packets, to guarantee limits not to exceed!!
+    uint32_t calculatedLimitNBytes = (actualTransmitNPackets - constantOverhead) * mtuSize;
+    NS_LOG_DEBUG("Data rate " << dataRate / 1000000.0 << " Mbps");
+    NS_LOG_DEBUG("Limit in bytes: " << calculatedLimitNBytes
+                                    << " packets: " << actualTransmitNPackets);
+    return calculatedLimitNBytes;
 }
