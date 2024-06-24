@@ -240,9 +240,16 @@ def run_campaign(rootResultsdir, rng_run_val):
 
 if __name__ == "__main__":
 
+    # allow a results directory to be specified on the command line, otherwise use the current directory
+    if len(sys.argv) < 2:
+        baseDir="."
+    else:
+        baseDir=sys.argv[1]    
+
+
     # Create root multiprocessing directory
     formatted_date = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rootResultsdir = "multiresults" + "-" + formatted_date
+    rootResultsdir = os.path.join(baseDir,"multiresults" + "-" + formatted_date)
     os.makedirs(rootResultsdir, exist_ok=False)
 
     build_filepath = os.path.join(rootResultsdir, "build.txt")
