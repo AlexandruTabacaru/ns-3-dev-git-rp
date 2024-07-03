@@ -1482,6 +1482,11 @@ ChangeMcs(uint16_t mcs,
     UpdateDynamicQueueLimits(staWifiNetDevice, scale, nextLimit);
     UpdateDualPi2AggBufferLimit(apQueueDiscContainer, scale, nextLimit);
     UpdateDualPi2AggBufferLimit(staQueueDiscContainer, scale, nextLimit);
+
+    std::ostringstream newDataMode;
+    newDataMode << "HeMcs" << nextMcs;
+    apWifiMgr->SetAttribute("DataMode",StringValue(newDataMode.str())); //change mcs level
+
     // reschedule
     Simulator::Schedule(mcsChangeInterval,
                         &ChangeMcs,
@@ -1502,15 +1507,39 @@ CalculateLimit(uint16_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Tim
     auto dataRate = HePhy::GetDataRate(mcs, channelWidth, 800, spatialStreams); // bits/sec
     double mtuSize = 1500;                                                      // bytes
     double macHeaderSize = 44;                                          // bytes , MPDU size 1548
-    double mpduTxDuration = (mtuSize + macHeaderSize) * 8.0 / dataRate; // s
-    double preambleAndHeaderDuration = 192 + 52;                        // us
-    uint32_t actualTransmitNPackets =
-        static_cast<uint32_t>(ceil((txopLimit.GetMicroSeconds() - preambleAndHeaderDuration) /
-                                   (mpduTxDuration * 1000000))); // N packets
-    uint32_t constantOverhead = 2; // in packets, to guarantee limits not to exceed!!
-    uint32_t calculatedLimitNBytes = (actualTransmitNPackets - constantOverhead) * mtuSize;
-    NS_LOG_DEBUG("Data rate " << dataRate / 1000000.0 << " Mbps");
-    NS_LOG_DEBUG("Limit in bytes: " << calculatedLimitNBytes
-                                    << " packets: " << actualTransmitNPackets);
+    double mpduTxDuration = ((mtuSize + macHeaderSize) * 8.0 / dataRate)*1000000; // us
+    double preambleAndHeaderDuration = 52;                        // in microseconds
+    double protectionTime=88;                                     // in microseconds, RTS-CTS, for 80MHZ, NSS2, MCS 11
+    double ackTime=56;                                            // in microseconds, BlockAck Time, for 80MHZ, NSS2, MCS 11
+    uint32_t actualTransmitNPackets = 0;
+    uint32_t n = 0;
+    double ppduDurationLimit=txopLimit.GetMicroSeconds() - (protectionTime+ackTime);
+    double actualTxopLimit=ppduDurationLimit-preambleAndHeaderDuration;
+    
+    while(true)
+    {
+        if( actualTxopLimit < n*mpduTxDuration)
+        {
+                actualTransmitNPackets=n-1;
+                break;
+        }
+        n++;    
+    }
+    /*
+        NOTES:
+        ppduDurationLimit = availableTime - protectionTime - acknowledgmentTime; //From  L:386 , QosFrameExchangeManager
+
+        availableTime=2582;
+        protectionTime=88 us
+        acknowledgmentTime=56 us
+    */
+
+    uint32_t calculatedLimitNBytes = (actualTransmitNPackets) * mtuSize;
+    
+    NS_LOG_DEBUG(Now().GetSeconds() << "   mcs:"<< mcs <<" channelWidth:"<< channelWidth
+     <<"   spatialStreams:"<< spatialStreams <<"   txopLimit:"<<txopLimit.As(Time::US) 
+    <<"  actualTxopLimit:"<<actualTxopLimit<<"  TxDuration:"<<actualTransmitNPackets*mpduTxDuration<<"  mpduTxDuration:"<<mpduTxDuration
+    <<" actualTransmitNPackets:"<< actualTransmitNPackets <<"   calculatedLimitNBytes:"<<calculatedLimitNBytes);
+
     return calculatedLimitNBytes;
 }
