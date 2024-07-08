@@ -76,6 +76,13 @@
 #include <iomanip>
 #include <sstream>
 
+#define GUARD_INTERVAL 800                  //in nanoseconds
+#define MTU_SIZE 1500                       //bytes
+#define MAC_HEADER_SIZE 44                  //bytes
+#define PREAMBLE_AND_HEADER_DURATION 52     //in microseconds
+#define PROTECTION_TIME 88                  //in microseconds
+#define ACK_TIME 56                         //in microseconds
+
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("L4sWifi");
@@ -186,7 +193,7 @@ Ptr<WifiNetDevice> apWifiNetDevice;
 Ptr<WifiNetDevice> staWifiNetDevice;
 QueueDiscContainer apQueueDiscContainer;
 QueueDiscContainer staQueueDiscContainer;
-uint32_t CalculateLimit(uint16_t mcs,
+uint32_t CalculateLimit(uint32_t mcs,
                         uint32_t channelWidth,
                         uint32_t spatialStreams,
                         Time txopLimit);
@@ -348,7 +355,9 @@ main(int argc, char* argv[])
     if (enableLogs)
     {
         LogComponentEnableAll(LOG_PREFIX_ALL);
-        LogComponentEnable("DualPi2QueueDisc", LOG_LEVEL_INFO);
+        //LogComponentEnable("DualPi2QueueDisc", LOG_LEVEL_INFO);
+        LogComponentEnable("L4sWifi", LOG_LEVEL_DEBUG);
+
     }
 
     NS_ABORT_MSG_UNLESS(mcs < 12, "Only MCS 0-11 supported");
@@ -1499,47 +1508,26 @@ ChangeMcs(uint16_t mcs,
 }
 
 uint32_t
-CalculateLimit(uint16_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Time txopLimit)
+CalculateLimit(uint32_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Time txopLimit)
 {
-    NS_LOG_DEBUG("CalculateLimit for MCS " << mcs << " width " << channelWidth << " spatialStreams "
-                                           << spatialStreams << " txopLimit "
-                                           << txopLimit.As(Time::US));
-    auto dataRate = HePhy::GetDataRate(mcs, channelWidth, 800, spatialStreams); // bits/sec
-    double mtuSize = 1500;                                                      // bytes
-    double macHeaderSize = 44;                                          // bytes , MPDU size 1548
-    double mpduTxDuration = ((mtuSize + macHeaderSize) * 8.0 / dataRate)*1000000; // us
-    double preambleAndHeaderDuration = 52;                        // in microseconds
-    double protectionTime=88;                                     // in microseconds, RTS-CTS, for 80MHZ, NSS2, MCS 11
-    double ackTime=56;                                            // in microseconds, BlockAck Time, for 80MHZ, NSS2, MCS 11
-    uint32_t actualTransmitNPackets = 0;
-    uint32_t n = 0;
-    double ppduDurationLimit=txopLimit.GetMicroSeconds() - (protectionTime+ackTime);
-    double actualTxopLimit=ppduDurationLimit-preambleAndHeaderDuration;
-    
-    while(true)
-    {
-        if( actualTxopLimit < n*mpduTxDuration)
-        {
-                actualTransmitNPackets=n-1;
-                break;
-        }
-        n++;    
-    }
-    /*
+     /*
         NOTES:
         ppduDurationLimit = availableTime - protectionTime - acknowledgmentTime; //From  L:386 , QosFrameExchangeManager
 
-        availableTime=2582;
-        protectionTime=88 us
-        acknowledgmentTime=56 us
     */
-
-    uint32_t calculatedLimitNBytes = (actualTransmitNPackets) * mtuSize;
+    auto dataRate = HePhy::GetDataRate(mcs, channelWidth, GUARD_INTERVAL, spatialStreams); // bits/sec
+    Time mpduTxDuration = NanoSeconds(((double)(MTU_SIZE + MAC_HEADER_SIZE) * 8.0 / double(dataRate))*1000000000);
+    uint32_t ppduDurationLimit=txopLimit.GetMicroSeconds() - (PROTECTION_TIME + ACK_TIME);
+    Time actualTxopLimit=MicroSeconds(ppduDurationLimit - PREAMBLE_AND_HEADER_DURATION);
     
-    NS_LOG_DEBUG(Now().GetSeconds() << "   mcs:"<< mcs <<" channelWidth:"<< channelWidth
-     <<"   spatialStreams:"<< spatialStreams <<"   txopLimit:"<<txopLimit.As(Time::US) 
-    <<"  actualTxopLimit:"<<actualTxopLimit<<"  TxDuration:"<<actualTransmitNPackets*mpduTxDuration<<"  mpduTxDuration:"<<mpduTxDuration
-    <<" actualTransmitNPackets:"<< actualTransmitNPackets <<"   calculatedLimitNBytes:"<<calculatedLimitNBytes);
+    uint32_t actualTransmitNPackets=static_cast<uint32_t> (actualTxopLimit.GetNanoSeconds() / mpduTxDuration.GetNanoSeconds());
+
+    uint32_t calculatedLimitNBytes = (actualTransmitNPackets) * MTU_SIZE;
+
+    NS_LOG_DEBUG("mcs: "<< mcs <<" channelWidth:   "<< channelWidth
+    <<"   spatialStreams: "<< spatialStreams <<"   txopLimit: "<<txopLimit.As(Time::US) 
+    <<"   actualTxopLimit: "<<actualTxopLimit.GetMicroSeconds()<<"   TxDuration: "<<actualTransmitNPackets*mpduTxDuration.GetMicroSeconds()<<"   mpduTxDuration: "<<mpduTxDuration.GetMicroSeconds()
+    <<"   actualTransmitNPackets: "<< actualTransmitNPackets <<"   calculatedLimitNBytes: "<<calculatedLimitNBytes);
 
     return calculatedLimitNBytes;
 }
