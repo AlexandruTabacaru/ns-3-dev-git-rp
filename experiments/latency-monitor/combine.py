@@ -35,6 +35,8 @@ def process_flow_id(flow_id):
 # allData.sort_values(by=['TestCase', 'Flow ID', 'Chunk'], inplace=True)
 # allData.to_csv(os.path.join(sys.argv[1],'allData.csv'), index=False)
 
+interval = sys.argv[2] if len(sys.argv) > 2 else 1 # 1 second default value
+
 # read in all of the data from the latency.csv files
 allData = pd.DataFrame()
 for dir in glob.glob(os.path.join(sys.argv[1],"ED*-MS*")):
@@ -44,8 +46,7 @@ for dir in glob.glob(os.path.join(sys.argv[1],"ED*-MS*")):
 		for DsLatencyCsvFile in glob.glob(os.path.join(subdir, "TCP*10.1.1.1*192.168.1.2*latency.csv")):
 			flowId = os.path.basename(DsLatencyCsvFile).rstrip("latency.csv")
 			rawData = pd.read_csv(DsLatencyCsvFile, encoding='ISO-8859-1')
-			# rawData['EgressTimestamp'] = rawData['Timestamp'] + rawData['Latency']
-			rawData['Chunk'] =  rawData['Timestamp'].astype(int)
+			rawData['Chunk'] =  (rawData['Timestamp']/interval).astype(int)
 			df = rawData.groupby(['Chunk']).agg({
 				'Latency': [
 		        	('P0', lambda x: 1000*np.percentile(x, 0)),
