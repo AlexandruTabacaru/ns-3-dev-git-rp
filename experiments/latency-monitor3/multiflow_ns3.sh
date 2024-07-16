@@ -29,6 +29,7 @@ nsi_1="nsi"
 
 file1=/tmp/file1$$
 file2=/tmp/file2$$
+files=/tmp/files$$_
 
 # usage: ./multiflow_ns3.sh <cmci_file>.pcap <nsi_file>.pcap <dir_to_save> <filename_ext>(optional)
 if [ ! -e $1 ]; then
@@ -52,6 +53,14 @@ wait
 paste -d "\n" $file1 $file2 | \
 python3 $scriptDir/pcap_sort.py | \
 awk '{ if (NR ==1) {stime=$1}; printf "%.17g ", $1-stime; print $2,$3,$4,$5,$6,$7,$8,$9,$10}' | \
-python3 $scriptDir/multiflow.py $filename $cmci_1 $nsi_1 ${DirExt} 
+$scriptDir/my_split.py 10 $files
 
+for file in ${files}*
+do
+	count=${file##*_}
+	subDir=${DirExt}/$count
+	mkdir $subDir
+	cat $file | python3 $scriptDir/multiflow.py $filename $cmci_1 $nsi_1 $subDir
+	rm $file
+done
 rm $file1 $file2
