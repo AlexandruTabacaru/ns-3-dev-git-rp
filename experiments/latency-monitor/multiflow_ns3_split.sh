@@ -16,7 +16,9 @@
 
 # This variant of the multiflow.sh script is designed to process old-style "libpcap" files, which don't have a frame.interface_name
 # This script expects two pcap files one corresponding to cmci and the other nsi
-# Additionally, this script handles large simulations by splitting the pcap data into smaller, fixed duration, chunks prior to post-processing
+# Additionally, this script handles large simulations by splitting the pcap data into smaller, 
+# fixed duration, chunks prior to post-processing.  One side effect of this splitting is that packets that straddle a chunk
+# boundary (i.e. the packet was transmitted during chunk n, and was received during chunk n+1) will not be included in the analysis.
 
 
 scriptDir=${0%/*}
@@ -35,6 +37,7 @@ nsi_1="nsi"
 chunk_duration=10
 
 # once multiflow.py is done with its work, combine.py will read in the results and then calculate statistics over smaller intervals
+# combine.py assumes that the analysis_interval is an integer sub-multiple of the chunk_duration.
 analysis_interval=1
 
 file1=/tmp/file1$$
