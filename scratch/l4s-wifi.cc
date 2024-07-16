@@ -1468,12 +1468,15 @@ void
 UpdateDynamicQueueLimits(Ptr<WifiNetDevice> device, double scale, uint32_t limit)
 {
     Ptr<NetDeviceQueueInterface> interface = device->GetObject<NetDeviceQueueInterface>();
-    Ptr<NetDeviceQueue> queueInterface = interface->GetTxQueue(0);
-    Ptr<DynamicQueueLimits> queueLimits =
+    for (uint32_t i = 0; i < interface->GetNTxQueues(); i++)
+    {
+        Ptr<NetDeviceQueue> queueInterface = interface->GetTxQueue(i);
+        Ptr<DynamicQueueLimits> queueLimits =
         DynamicCast<DynamicQueueLimits>(queueInterface->GetQueueLimits());
-    NS_ABORT_MSG_UNLESS(queueLimits, "Downcast failed");
-    queueLimits->SetAttribute("MinLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
-    queueLimits->SetAttribute("MaxLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
+        NS_ABORT_MSG_UNLESS(queueLimits, "Downcast failed");
+        queueLimits->SetAttribute("MinLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
+        queueLimits->SetAttribute("MaxLimit", UintegerValue(static_cast<uint32_t>(scale * limit)));
+    }
 }
 
 void
