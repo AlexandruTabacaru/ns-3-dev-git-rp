@@ -27,6 +27,14 @@ DirExt=${3:-Test}
 cmci_1="cmci"
 nsi_1="nsi"
 
+# the multiflow.py script wasn't designed for handling very large pcap files, it reads the entire file into memory for processing. 
+# for long simulation durations at high data rates, this can result in memory issues. 
+# Chunk duration (in seconds, below) breaks up the pcap data into smaller chunks for reading in to multiflow.py
+chunk_duration=10
+
+# once multiflow.py is done with its work, combine.py will read in the results and then calculate statistics over smaller intervals
+analysis_interval=1
+
 file1=/tmp/file1$$
 file2=/tmp/file2$$
 files=/tmp/files$$_
@@ -53,7 +61,7 @@ wait
 paste -d "\n" $file1 $file2 | \
 python3 $scriptDir/pcap_sort.py | \
 awk '{ if (NR ==1) {stime=$1}; printf "%.17g ", $1-stime; print $2,$3,$4,$5,$6,$7,$8,$9,$10}' | \
-$scriptDir/my_split.py 10 $files
+$scriptDir/my_split.py $chunk_duration $files
 
 for file in ${files}*
 do
@@ -64,3 +72,7 @@ do
 	rm $file
 done
 rm $file1 $file2
+
+$scriptDir/combine.py ${DirExt} $analysis_interval
+
+

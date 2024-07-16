@@ -410,7 +410,7 @@ def get_ccdf(latency_array):
 
 
 # pkt_size is a dict {'timestamp' : frame length}
-# returns tuple of (throughput array (bps), integer end time, integer start time)
+# returns tuple of (throughput array (bps), integer end time index, integer start time index)
 def get_throughput(pkt_size : dict, interval : float):
     # interval (in seconds) for averaging
     bps = {}
@@ -428,7 +428,7 @@ def get_throughput(pkt_size : dict, interval : float):
         if (int(t) > end_t): # find ending time
             end_t = int(t)
     bps_array = []
-    for t in range(0, end_t + 1):
+    for t in range(start_t, end_t + 1):
         try:
             bps_val = bps[t]
         except KeyError:
@@ -457,10 +457,9 @@ def calculate_stats(pkt_drop_times, latency, pkt_size, unmatched_packets, t_stea
 
     # Calculate steady state mean bps over 1 second intervals and P10 of bps 
     bps_array,end_t,start_t = get_throughput(pkt_size, 1.0)
-
     if (t_steadystate + start_t < end_t):
-        mean_bps=np.mean(bps_array[(t_steadystate + start_t):(end_t+1)])
-        p10_bps=np.percentile(bps_array[(t_steadystate + start_t):(end_t+1)],0.1)
+        mean_bps=np.mean(bps_array[(t_steadystate):(end_t+1-start_t)])
+        p10_bps=np.percentile(bps_array[(t_steadystate):(end_t+1-start_t)],0.1)
     else:
         mean_bps=np.mean(bps_array)
         p10_bps=0
@@ -508,6 +507,7 @@ def multiflow_plot_and_csv(parsed_data, upstream, t_steadystate, dir_ext):
         y = []
         mean  = [] # might be unnecessary
         end_t = []
+        start_t = []
         interval=0.1
 
         for flow in parsed_data:
@@ -532,6 +532,7 @@ def multiflow_plot_and_csv(parsed_data, upstream, t_steadystate, dir_ext):
             y.append(_y)
             mean.append(_mean)
             end_t.append(_end_t)
+            start_t.append(_start_t)
 
         # bail out if no plottable flows are found
         if len(end_t) < 1:
@@ -539,18 +540,15 @@ def multiflow_plot_and_csv(parsed_data, upstream, t_steadystate, dir_ext):
             quit()
 
         # init time scale data 
-        end_t = max(end_t)
-        x = np.arange(0, end_t + 1, 1)*interval
+        start_t_min = min(start_t)
+        end_t_max = max(end_t)
+        x = np.arange(start_t_min, end_t_max + 1, 1)*interval
 
         # fixing array sizing 
         y_resized = []
-        for flow in y:
-            if len(flow) <= end_t:
-                for i in range(end_t - len(flow) + 1):
-                    flow = np.append(flow, 0)
-                y_resized.append(flow)
-            else:
-                y_resized.append(flow)
+        for flow, start, end in zip(y,start_t,end_t):
+            flow = np.concatenate((np.zeros(start - start_t_min), flow, np.zeros(end_t_max - end)))
+            y_resized.append(flow)
 
         # total throughput
         y_sum = np.zeros(np.size(x), dtype=float)
@@ -586,7 +584,7 @@ def multiflow_plot_and_csv(parsed_data, upstream, t_steadystate, dir_ext):
 
         #######
         # adding dirname
-        dirname = dir_ext.split('/')[-1]
+        dirname = dir_ext.split('/')[-2:]
         fig.text(0.1,0.1,dirname)
 
 
@@ -637,7 +635,7 @@ def plot_singleflow(pkt_drop_times, latency, pkt_size, total_packets, dscp, ecn,
 
     times, latency_array = get_latency(latency)
 
-    ax0.set_xlim([0,np.max(times)])
+    ax0.set_xlim([np.min(times),np.max(times)])
 
     # dropped packets
     if (len(pkt_drop_times) != 0):
@@ -700,7 +698,7 @@ def plot_singleflow(pkt_drop_times, latency, pkt_size, total_packets, dscp, ecn,
         mean_bps = np.mean(bps_array[int(t_steadystate * (1 / interval)):])
     else:
         mean_bps=0
-    times = np.arange(0, end_t, interval)
+    times = np.arange(start_t, end_t)*interval
     mbps_array = np.array(bps_array) / 1000000
 
     if (len(bps_array)<2):
@@ -741,7 +739,7 @@ def plot_singleflow(pkt_drop_times, latency, pkt_size, total_packets, dscp, ecn,
     twin_ax2 = ax2.twinx()
     twin_ax2.plot(times, 100 * ce_arr, c='r', lw=0.75, label='% CE')
     twin_ax2.set_ylim([0,100])
-    ax2.set_xlim([0,np.max(times)])
+    ax2.set_xlim([np.min(times),np.max(times)])
     ax2.plot(times, mbps_array, c='b', lw=0.75, label='ingress') # plot ingress rate in blue
     ax2.plot(times, e_mbps_array, c='0.5', lw=0.75, label='egress') # plot egress rate in 0.5 gray
     ax2.set_ylim(ymin=0)
@@ -844,7 +842,7 @@ def plot_singleflow(pkt_drop_times, latency, pkt_size, total_packets, dscp, ecn,
 
     #######
     # adding dirname
-    dirname = dir_ext.split('/')[-1]
+    dirname = dir_ext.split('/')[-2:]
     fig.text(0.1,0.1,dirname)
 
     # save plot as pdf
