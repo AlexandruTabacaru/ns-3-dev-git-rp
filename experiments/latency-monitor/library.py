@@ -70,15 +70,24 @@ def parse_flows_file(if_name):
         # limit payload to first 120 characters
         x[9]=x[9][:120]
 
+        # packet_id=x[7] + str(hash(x[9]))                # concatenate ip.id and hash of data
+        # packet_id=str(hash(x[9]))                # just use hash of data (some network gear is mangling the ip.id )
+        if proto == "TCP":
+            packet_id=str(hash(x[9][0:32]+x[9][36:])) #ignore the TCP checksum
+        elif proto == "UDP":
+            packet_id=str(hash(x[9][0:12]+x[9][16:])) #ignore the UDP checksum
+        else:
+            packet_id=str(hash(x[9]))                # just use hash of data (some network gear is mangling the ip.id )
+
         # flow_id = proto + ' [' + ipsrc + ':' + src + '] -> [' + ipdst + ':' + dst + ']'
         flow_id = proto + ' [' + ipsrc + ' ' + src + '] to [' + ipdst + ' ' + dst + ']'
 
         try:
             pkt_count[flow_id] += 1
-            parsed_data[flow_id].append(x[0:2] + x[5:])
+            parsed_data[flow_id].append(x[0:2] + x[5:9] + [packet_id])
         except KeyError:
             pkt_count[flow_id] = 1
-            parsed_data[flow_id] = [x[0:2] + x[5:]]		
+            parsed_data[flow_id] = [x[0:2] + x[5:9] + [packet_id]]		
 
     # # remove any flows with fewer than 200 pkts
     # for flow in pkt_count:
@@ -180,7 +189,7 @@ def parse_data(parsed_data, if_name):
 
         x = parsed_data[flow]
 
-
+        # process all the packets for the flow
         for i in range(len(x)):
             data = list(x[i])
             # data[0] is the timestamp
@@ -191,17 +200,10 @@ def parse_data(parsed_data, if_name):
             # data[5] is the frame length
             # data[6] is the IP payload
 
-            if (len(x) >= 7):                            # only use packets that have all fields
-                # packet_id=data[4] + str(hash(data[6]))                # concatenate ip.id and hash of data
-                # packet_id=str(hash(data[6]))                # just use hash of data (some network gear is mangling the ip.id )
-                if getProto(flow)=="TCP":
-                    packet_id=str(hash(data[6][0:32]+data[6][36:])) #ignore the TCP checksum
-                elif getProto(flow)=="UDP":
-                    packet_id=str(hash(data[6][0:12]+data[6][16:])) #ignore the UDP checksum
-                else:
-                    packet_id=str(hash(data[6]))                # just use hash of data (some network gear is mangling the ip.id )
+            if (len(data) >= 7):                            # only use packets that have all fields
 
-
+                packet_id = data[6]
+                
                 if (data[1]==if_name):                  #if this is a NSI-side packet
                     if (packet_id in pkt_times2): #if we've already found the CMCI-side packet
                         index1 = float(data[0])                 # use NSI-side timestamp as index1
@@ -293,9 +295,18 @@ def parse_data(parsed_data, if_name):
                 # clean these arrays by finding:
                 #       the first matched pkt in latency1: the entry with the lowest value of latency1 keys (i.e. NSI_timestamp), and calculate its CMCI_timestamp
                 #       the last matched pkt in latency1: the entry with the highest value of latency1 keys (i.e. NSI_timestamp), and calculate its CMCI_timestamp
-                first_match_nsi_timestamp = min(latency1.keys())
+
+                # first_match_nsi_timestamp = min(latency1.keys())
+                # last_match_nsi_timestamp = max(latency1.keys())
+                ## faster way to find min and max with one traversal
+                first_match_nsi_timestamp = last_match_nsi_timestamp = next(iter(latency1.keys()))
+                for key in latency1.keys():
+                    if key < first_match_nsi_timestamp:
+                        first_match_nsi_timestamp = key
+                    if key > last_match_nsi_timestamp:
+                        last_match_nsi_timestamp = key
+
                 first_match_cmci_timestamp = first_match_nsi_timestamp + float(latency1[first_match_nsi_timestamp])
-                last_match_nsi_timestamp = max(latency1.keys())
                 last_match_cmci_timestamp = last_match_nsi_timestamp + float(latency1[last_match_nsi_timestamp])
 
                 # remove any pkt_times packets that have a NSI_timestamp before the first match or after the last match
