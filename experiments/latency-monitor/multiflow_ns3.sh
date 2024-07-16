@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This variant of the multiflow.sh script is designed to process old-style "libpcap" files, which don't have a frame.inerface_name
+# This variant of the multiflow.sh script is designed to process old-style "libpcap" files, which don't have a frame.interface_name
 # This script expects two pcap files one corresponding to cmci and the other nsi
 
 scriptDir=${0%/*}
