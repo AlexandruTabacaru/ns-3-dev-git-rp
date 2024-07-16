@@ -25,7 +25,7 @@ import library
 matplotlib.use('Agg')
 
 # init global variables
-t_steadystate = 3
+t_steadystate = 0
 max_flow_plots=20
 min_pkts_per_flow=100
 

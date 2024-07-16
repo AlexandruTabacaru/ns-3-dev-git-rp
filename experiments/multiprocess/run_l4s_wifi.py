@@ -121,19 +121,18 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
                 resultsDir + "/" + "l4s-wifi-0-0.pcap",
                 resultsDir,
             ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True
         )
-        # Check if the command resulted in an error
-        if result.returncode != 0:
-            print(f"Error: {result.stderr}")
-        else:
-            with open(resultsDir + "/" + "latencymonitor-log.txt", "w") as out:
-                out.write(result.stdout)
-                out.close()
+        # Log the stdout and stderr
+        with open(resultsDir + "/" + "latencymonitor-log.txt", "w") as out:
+            out.write(result.stdout)
+            out.write(result.stderr)
+            out.close()
     except Exception as e:
-        print(f"An exception occurred: {e}")
+        with open(resultsDir + "/" + "latencymonitor-log.txt", "w") as out:
+            out.write(f"An exception occurred: {e}")
+            out.close()
 
     # Clean up raw data files
 

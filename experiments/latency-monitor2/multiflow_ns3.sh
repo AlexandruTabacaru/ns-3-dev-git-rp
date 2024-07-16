@@ -51,7 +51,7 @@ awk -v ifname="${nsi_1}" '{ print $1, ifname, $2,$3,$4,$5,$6,$7,$8,$9 } ' > $fil
 wait
 paste -d "\n" $file1 $file2 | \
 python3 $scriptDir/pcap_sort.py | \
-awk '{ if (NR ==1) {stime=$1}; printf "%.17g ", $1-stime; print $2,$3,$4,$5,$6,$7,$8,$9,$10}' | \
+awk '{ if (NR ==1) {stime=$1}; print $1-stime,$2,$3,$4,$5,$6,$7,$8,$9,$10}' | \
 python3 $scriptDir/multiflow.py $filename $cmci_1 $nsi_1 ${DirExt} 
 
 rm $file1 $file2
