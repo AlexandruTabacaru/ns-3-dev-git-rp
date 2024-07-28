@@ -21,8 +21,8 @@ scriptDir=${0%/*}
 #Timestamp=`date +%Y%m%d-%H%M%S`
 cmci_file=$1
 nsi_file=$2
-Tag=${4:-MultiFlow}
 DirExt=${3:-Test}
+skipSeconds=${4:-0}
 
 cmci_1="cmci"
 nsi_1="nsi"
@@ -41,12 +41,12 @@ if [ ! -e $2 ]; then
 fi
 
 mkdir -p ${DirExt}
-filename=${Tag}_
+filename=MultiFlow_
 tshark --disable-protocol tcp --disable-protocol udp --disable-protocol icmp -r $1 -Y "ip" -T fields -e frame.time_epoch  -e ip.src -e ip.dst -e ip.proto -e ip.dsfield.dscp -e ip.dsfield.ecn -e ip.id -e frame.len -e data | \
-awk -v ifname="${cmci_1}" '{ print $1, ifname, $2,$3,$4,$5,$6,$7,$8,$9 } ' > $file1 &
+awk -v ifname="${cmci_1}" -v skip=$skipSeconds '$1 > skip { print $1, ifname, $2,$3,$4,$5,$6,$7,$8,$9 } ' > $file1 &
 
 tshark --disable-protocol tcp --disable-protocol udp --disable-protocol icmp -r $2 -Y "ip" -T fields -e frame.time_epoch  -e ip.src -e ip.dst -e ip.proto -e ip.dsfield.dscp -e ip.dsfield.ecn -e ip.id -e frame.len -e data | \
-awk -v ifname="${nsi_1}" '{ print $1, ifname, $2,$3,$4,$5,$6,$7,$8,$9 } ' > $file2 &
+awk -v ifname="${nsi_1}" -v skip=$skipSeconds '$1 > skip { print $1, ifname, $2,$3,$4,$5,$6,$7,$8,$9 } ' > $file2 &
 
 wait
 paste -d "\n" $file1 $file2 | \

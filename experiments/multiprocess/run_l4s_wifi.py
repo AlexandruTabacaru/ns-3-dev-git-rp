@@ -11,6 +11,8 @@ from exporter.exporter import export
 from pathlib import Path
 
 
+skipSeconds=0
+
 def buildPlotTitle(numCubic, numPrague, numBackground):
     # Build a plot title; customize as needed
     plotTitle = "Cubic=" + str(numCubic)
@@ -120,6 +122,7 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
                 resultsDir + "/" + "l4s-wifi-2-0-ip.pcap",
                 resultsDir + "/" + "l4s-wifi-0-0.pcap",
                 resultsDir,
+                str(skipSeconds)
             ],
             capture_output=True,
             text=True
