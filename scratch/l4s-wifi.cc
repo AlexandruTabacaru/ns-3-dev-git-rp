@@ -232,6 +232,10 @@ void UpdateDualPi2AggBufferLimit(const QueueDiscContainer& queueDiscs,
 // Utility function to inform dynamic queue limits about a change to the limit
 void UpdateDynamicQueueLimits(Ptr<WifiNetDevice> device, double scale, uint32_t limit);
 
+// Utility function to populate ARP cache after simulation start
+// Because of an interaction with LinkUp events (ns-3 issue #851)
+void AddManualArpEntries(Ptr<Channel> channel);
+
 int
 main(int argc, char* argv[])
 {
@@ -268,6 +272,7 @@ main(int argc, char* argv[])
     bool showProgress = false;
     uint32_t maxAmsduSize = 0; // zero means A-MSDU is disabled
     Time progressInterval = Seconds(5);
+    Time arpCacheInstallTime = Seconds(0.5); // manually populate ARP cache at this time
     bool enablePcapAll = false;
     bool enablePcap = true;
     bool enableTracesAll = false;
@@ -444,7 +449,8 @@ main(int argc, char* argv[])
                                    DoubleValue(1.0),
                                    "ReferenceLoss",
                                    DoubleValue(46.6777));
-    wifiPhy.SetChannel(wifiChannel.Create());
+    auto wifiChannelPtr = wifiChannel.Create();
+    wifiPhy.SetChannel(wifiChannelPtr);
     wifiPhy.SetPcapDataLinkType(WifiPhyHelper::DLT_IEEE802_11_RADIO);
     wifiPhy.Set("Antennas", UintegerValue(spatialStreams));
     wifiPhy.Set("MaxSupportedTxSpatialStreams", UintegerValue(spatialStreams));
@@ -524,6 +530,11 @@ main(int argc, char* argv[])
     internetStack.Install(wifiNodes);
     internetStack.Install(obssApNode);
     internetStack.Install(obssStaNodes);
+
+    // Schedule an event to manually set ARP cache entries so that
+    // no neighbor discovery is needed
+    Simulator::Schedule(arpCacheInstallTime,
+                        MakeBoundCallback(&AddManualArpEntries, wifiChannelPtr));
 
     // By default, Ipv4AddressHelper below will configure a MqQueueDisc
     // with FqCoDelQueueDisc as child queue discs (one per AC)
@@ -1542,4 +1553,11 @@ CalculateLimit(uint32_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Tim
     <<"   actualTransmitNPackets: "<< actualTransmitNPackets <<"   calculatedLimitNBytes: "<<calculatedLimitNBytes);
 
     return calculatedLimitNBytes;
+}
+
+void
+AddManualArpEntries(Ptr<Channel> channel)
+{
+    NeighborCacheHelper nch;
+    nch.PopulateNeighborCache(channel);
 }
