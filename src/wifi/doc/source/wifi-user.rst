@@ -804,6 +804,59 @@ There are many other |ns3| attributes that can be set on the above helpers to
 deviate from the default behavior; the example scripts show how to do some of
 this reconfiguration.
 
+WifiCoTraceHelper
+=================
+
+The ``WifiCoTraceHelper`` (channel occupancy trace helper) can be used to collect statistics of Wi-Fi channel occupancy, as observed from the perspective of the WifiPhy state of devices or links (in the case of multi-link devices).  The ``WifiPhyStateHelper`` tracks the state of the WifiPhy corresponding to whether it is in idle, transmitting, receiving, or some other state.  This helper object can be added to ns-3 Wi-Fi simulations to track the duration and percentage of time spent in each state.
+
+Wi-Fi channel access relies also on additional busy states that conceptually reside in the MAC layer, corresponding to the Network Allocation Vector (NAV).  The idle states reported herein correspond to the PHY (physical) carrier sense state and not the MAC (virtual) carrier sense state.
+
+This helper can be added to a simulation program with statements such as the following:
+
+.. sourcecode:: cpp
+
+    WifiCoTraceHelper coHelper{Seconds(1.0), Seconds(11.0)};
+
+The above statement, if placed just prior to the call to ``Simulator::Run(),``
+will declare a helper object and configure it to collect statistics between
+one and eleven seconds.  However, WifiNetDevices must still be added, such
+as the following sample code:
+
+.. sourcecode:: cpp
+
+    coHelper.Enable(nodeOrDeviceContainer);
+
+Then finally, print the results after ``Simulator::Run()`` returns:
+
+.. sourcecode:: cpp
+
+    coHelper.PrintStatistics(std::cout);
+
+This will print output such as:
+
+.. sourcecode:: text
+
+    ---- CO for STA----
+    Showing duration by states:
+    IDLE: 310 ms
+    CCA_BUSY: 79 ms
+    TX: 148 ms
+    RX: 9536 ms
+
+    ---- CO for AP----
+    Showing duration by states:
+    IDLE: 310 ms
+    CCA_BUSY: 28 ms
+    TX: 9628 ms
+    RX: 113 ms
+
+
+**TODO:**  Add methods to allow users to export the raw data and print their own formatted statements
+
+**TODO:**  Multi-link example
+
+**TODO:**  Add validation program and discuss results
+
 HT configuration
 ================
 

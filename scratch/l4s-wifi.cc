@@ -420,15 +420,22 @@ main(int argc, char* argv[])
     clientNode.Create(1);
     NodeContainer apNode;
     apNode.Create(1);
+    Names::Add("AP", apNode.Get(0));
     NodeContainer staNode;
     staNode.Create(1);
+    Names::Add("STA", staNode.Get(0));
     // NodeContainers for nodes outside of the BSS under test (OBSS)
     NodeContainer obssClientNode;
     obssClientNode.Create(1);
     NodeContainer obssApNode;
     obssApNode.Create(1);
+    Names::Add("OBSS-AP", obssApNode.Get(0));
     NodeContainer obssStaNodes;
     obssStaNodes.Create(numBackgroundUdp);
+    for (uint32_t i = 0; i < numBackgroundUdp; i++)
+    {
+        Names::Add("OBSS-STA" + std::to_string(i), obssStaNodes.Get(i));
+    }
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
@@ -897,6 +904,9 @@ main(int argc, char* argv[])
         dualPi2->TraceConnectWithoutContext("ProbC", MakeCallback(&TraceProbC));
     }
 
+    WifiCoTraceHelper coHelper;
+    coHelper.Enable(NodeContainer(apNode, staNode, obssApNode, obssStaNodes));
+
     if (duration > Seconds(0))
     {
         Simulator::Stop(duration);
@@ -959,6 +969,7 @@ main(int argc, char* argv[])
                   << " max: " << pragueThroughputCalculator.getMax()
                   << " min: " << pragueThroughputCalculator.getMin() << std::endl;
     }
+    coHelper.PrintStatistics(std::cout);
 
     g_fileBytesInAcBeQueue.close();
     g_fileBytesInDualPi2Queue.close();
