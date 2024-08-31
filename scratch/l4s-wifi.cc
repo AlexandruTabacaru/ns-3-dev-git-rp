@@ -1526,6 +1526,14 @@ CalculateLimit(uint32_t mcs, uint32_t channelWidth, uint32_t spatialStreams, Tim
     
     uint32_t actualTransmitNPackets=static_cast<uint32_t> ((actualTxopLimit / mpduTxDuration).GetHigh());
 
+    if (actualTransmitNPackets < 1) 
+    {
+        actualTransmitNPackets = 1;
+        actualTxopLimit = mpduTxDuration;
+        Time newtxopLimit = actualTxopLimit + PROTECTION_TIME + ACK_TIME + PREAMBLE_AND_HEADER_DURATION;
+        std::cout << "Warning: txopLimit set too low (" << txopLimit << ") using " << newtxopLimit << std::endl;
+    }
+
     uint32_t calculatedLimitNBytes = (actualTransmitNPackets) * MTU_SIZE;
 
     NS_LOG_DEBUG("mcs: "<< mcs <<"   channelWidth: "<< channelWidth
