@@ -130,7 +130,7 @@ summary.columns = ['TestCase', 'CC_Type',
                   # 'Total Packets','Total Dropped Packets'
                   ]
 
-summary['Test Case'] = summary['Test Case'].str.replace(r'-TC2', '-TC1', regex=True)
+summary['TestCase'] = summary['TestCase'].str.replace(r'-TC2', '-TC1', regex=True)
 summary.pivot(index='TestCase',columns='CC_Type')
 
 summary.to_csv(os.path.join(sys.argv[1],'summary.csv'), index=False)

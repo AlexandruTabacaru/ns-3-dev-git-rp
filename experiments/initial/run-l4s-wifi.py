@@ -12,14 +12,14 @@ ns3_dir = os.path.dirname(experiments_dir)
 ns3_script = os.path.join(ns3_dir, "ns3")
 
 # In future, add parametric job control here (multiprocessing.Pool)
-numCubic = 1
-numPrague = 1
+numCubic = 4
+numPrague = 4
 numBytes = 0
-numBackgroundUdp = 0
-duration = 20
+numBackgroundUdp = 1
+duration = 50
 # wanLinkDelay is 1/2 of the desired base RTT
-wanLinkDelay = "2500us"
-mcs = 11
+wanLinkDelay = "25ms"
+mcs = 6
 channelWidth=20
 spatialStreams=2
 # Default WifiMacQueue size is now 8000 packets, but can be changed below
@@ -30,16 +30,16 @@ maxAmsduSize = 0
 # The following three variables are related; if the first is disabled,
 # the second two will have no effect
 flowControl = 1
-limit = 100000
+#limit = 100000
 scale = 1
 # Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS
 # Zero disables the explicit setting of the WifiRemoteStationManager attribute
 rtsCtsThreshold = 0
 # Allow customization of AC_BE EDCA parameters (for all Wi-Fi devices)
-cwMin = 15
-cwMax = 1023
-aifsn = 3
-txopLimit = "2528us"
+cwMin = 7
+cwMax = 15
+aifsn = 2
+txopLimit = "4096us"
 # The below is to output some simulation progress when running from command-line
 # It is more for C++ invocation and not very useful for Python invocation
 showProgress = 0
@@ -53,7 +53,9 @@ enableTracesAll = 0
 enableTraces = 1
 useReno = 0
 # Maps to DualPi2QueueDisc::EnableWifiClassicLatencyEstimator 
-enableWifiClassicLatencyEstimator=0
+enableWifiClassicLatencyEstimator=1
+#rngRun
+rngRun = 2
 
 arguments = " --numCubic=" + str(numCubic)
 arguments += " --numPrague=" + str(numPrague)
@@ -66,7 +68,7 @@ arguments += " --channelWidth=" + str(channelWidth)
 arguments += " --spatialStreams=" + str(spatialStreams)
 arguments += " --wifiQueueSize=" + wifiQueueSize
 arguments += " --flowControl=" + str(flowControl)
-arguments += " --limit=" + str(limit)
+#arguments += " --limit=" + str(limit)
 arguments += " --scale=" + str(scale)
 arguments += " --rtsCtsThreshold=" + str(rtsCtsThreshold)
 arguments += " --maxAmsduSize=" + str(maxAmsduSize)
@@ -81,6 +83,7 @@ arguments += " --enableTracesAll=" + str(enableTracesAll)
 arguments += " --enableTraces=" + str(enableTraces)
 arguments += " --useReno=" + str(useReno)
 arguments += " --ns3::DualPi2QueueDisc::EnableWifiClassicLatencyEstimator=" + str(enableWifiClassicLatencyEstimator)
+arguments += " --rngRun=" + str(rngRun)
 
 # Build a plot title; customize as needed
 plotTitle = "Cubic=" + str(numCubic)

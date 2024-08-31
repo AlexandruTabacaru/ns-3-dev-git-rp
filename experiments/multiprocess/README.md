@@ -1,6 +1,12 @@
 # Simulation Campaign Scripts
 
-`./run_l4s_wifi.py` will launch a full simulation campaign as specified in config/config.csv
+
+There are two python scripts that will launch a full simulation campaign as specified in config/config.csv:
+
+Use: `./run_l4s_wifi.py` if the simulation durations are less than ~60s
+`./run_l4s_wifi_long.py` if the simulation durations are longer than ~60s
+
+The `_long` version splits the resulting pcap files into 10 second chunks for post-processing and then combines the results afterward.
 
 The file config/config.csv can be built manually, according to the description below, or the script config/build_config.sh can be edited to create a new config/config.csv to cover a different set of conditions if desired.
 
@@ -23,11 +29,10 @@ Ensure that all of the following are included in the config.csv file.
 - wifiQueueSize = "8000p" _(Default WifiMacQueue size in l4s-wifi.cc is 5000 packets, but can be changed here)_  
 - maxAmsduSize = 0 _(If maxAmsduSize is zero, it will disable A-MSDU.  If non-zero, it will try to form A-MSDUs (BE access category) up to the number of bytes specified)_
 
-> The following three variables are related; if the first is disabled,
-> the second two will have no effect
+> The following two variables are related; if the first is disabled,
+> the second will have no effect
 
 - flowControl = 1  
-- limit = 100000  
 - scale = 1  
 >
 - rtsCtsThreshold = 0  _(Set rtsCtsThreshold to a low value such as 1000 (bytes) to enable RTS/CTS. Zero disables the explicit setting of the WifiRemoteStationManager attribute)_  
@@ -56,4 +61,4 @@ The file config/campaigns.json provides a dictionary that describes the test cas
 
 # Running Monte Carlo analysis
 
-./run_l4s_wifi.py assumes that each run has a unique Test Case ID, and thus is a unique test condition.  In order to run each test condition multiple times with different random seeds, the script monte_carlo.py can be used.  It defaults to running the full campaign 10 times and then analzying the results. 
+./run_l4s_wifi.py assumes that each run has a unique Test Case ID, and thus is a unique test condition.  In order to run each test condition multiple times with different random seeds, the script monte_carlo.py can be used.  It defaults to running the full campaign 10 times and then analyzing the results. 

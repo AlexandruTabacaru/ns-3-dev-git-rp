@@ -5,7 +5,7 @@
 TC=("0,0" "1,0" "0,1" "1,1" "2,2" "4,4" "2,0" "0,2" "4,0" "0,4")
 MS=(0 1 4)
 numBytes="0"
-duration="30"
+duration="300"
 TS=('"0ms"' '"1ms"' '"5ms"' '"25ms"' '"20ms"')
 mcs="6"
 LS=(0 20 80 160)
@@ -35,7 +35,7 @@ txopLimit" > config.csv
 
 scale=${SCALE}
 
-for i in 0; do #ED
+for i in 0 1 2 3 4 5; do #ED
 ed=${ED[i]}
 for j in 0 1 2; do #MS
 ms=${MS[j]}

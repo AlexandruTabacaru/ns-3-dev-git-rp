@@ -3,12 +3,9 @@
 # build config.csv file
 
 TC=("0,0" "2,0" "0,2" "1,1")
-MS=(0 1 2 3 4 5 6 7 8)
 numBytes="0"
 duration="60"
 TS=('"0ms"' '"1ms"' '"5ms"' '"25ms"' '"20ms"')
-MCS=(0 2 6 11)
-LS=(0 80 80 80)
 spatialStreams="2"
 AP=(0 1)
 wifiQueueSize='"8000p"'
@@ -34,6 +31,11 @@ SCALE=(\
 10 \
 )
 
+lS=80
+MS=(0 1 4 8 1 1 1) 
+MCS=(9 9 9 9 2 6 11)
+
+
 ED=('15,1023,3,"2528us"' '7,15,2,"4096us"' '3,7,2,"2080us"' '63,63,1,"2528us"' '63,63,1,"1000us"' '63,63,1,"250us"' )
 
 echo "Test Case,\
@@ -58,13 +60,12 @@ scale=${SCALE}
 
 for i in 0 4; do #ED
 ed=${ED[i]}
-for j in 0 4 8; do #MS
+for j in 0 1 2 3 4 5 6; do #MS
 ms=${MS[j]}
+l=$j
+mcs=${MCS[l]}
 for k in 1; do #AP
 ap=${AP[k]}
-for l in 1 2 3; do #LS
-mcs=${MCS[l]}
-lS=${LS[l]}
 for m in 1 2 3; do #TC
 tc=${TC[m]}
 for n in 2; do #TS
@@ -82,4 +83,4 @@ done
 done
 done
 done
-done
+
