@@ -91,14 +91,14 @@ def runNS3Simulation(run_filepath, arguments, plotTitle):
     command_get_repo_time = "git rev-parse --abbrev-ref HEAD"
     command_get_repo_commit = "git rev-parse --short HEAD"
 
-    branch_output = subprocess.check_output(["git", "branch", "-vvv"])
+    branch_output = subprocess.check_output(["git", "branch", "-vv"])
     with open(resultsDir + "/" + "version.txt", "w") as out:
-        command_output = branch_output.decode("utf-8").strip()
-        command_output.split("\n")[0:1]
+        command_output = branch_output.decode("utf-8").split("\n")
+        branch_status = next((s for s in command_output if s.startswith('*')), None)
         out.write(
             "# Branch name                    commit hash                   commit message\n"
         )
-        out.write("".join(command_output.split("\n")[0:1]))
+        out.write(branch_status)
         out.close()
 
     diff_output = subprocess.check_output(["git", "diff"])
