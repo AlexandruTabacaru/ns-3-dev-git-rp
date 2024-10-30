@@ -4,9 +4,9 @@ This is a fork of ns-3 with experimental updates to enable L4S support in Wi-Fi.
 
 The "master" branch is stock ns-3, and the "l4s-wifi" branch contains the updated modules, a simulation program, and some experiment scripts.  The "l4s-wifi" branch is set as the default branch.
 
-The simulation program can be found in: https://code.cablelabs.com/low_latency_docsis/l4s-wifi-ns3/-/blob/l4s-wifi/scratch/l4s-wifi.cc
+The simulation program can be found in: [scratch/l4s-wifi.cc](./scratch/l4s-wifi.cc)
 
-The experiment scripts can be found in: https://code.cablelabs.com/low_latency_docsis/l4s-wifi-ns3/-/tree/l4s-wifi/experiments
+The experiment scripts can be found in: [experiments](./experiments)
 
 Once you've cloned this repo to your local machine, you can build ns3 by following the steps in [Building ns-3](#building-ns-3) below, and then run the initial experiment by doing:
 
