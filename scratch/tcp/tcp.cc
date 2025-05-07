@@ -1,3 +1,5 @@
+#include "tutorial-app.h"
+
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
@@ -12,6 +14,20 @@ using namespace ns3;
 
 // global
 PointToPointDumbbellHelper* dumbbell;
+
+/**
+ * Congestion window change callback
+ *
+ * @param oldCwnd Old congestion window.
+ * @param newCwnd New congestion window.
+ */
+static void
+CwndChange(Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
+{
+    NS_LOG_UNCOND(Simulator::Now().GetSeconds() << "\t" << newCwnd);
+    *stream->GetStream() << Simulator::Now().GetSeconds() << "\t" << oldCwnd << "\t" << newCwnd
+                         << std::endl;
+}
 
 void SetupDumbbellTopology() {
     // number of nodes on the left and right
@@ -50,7 +66,7 @@ void SetupDumbbellTopology() {
     Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(0.5), stream);
 }
 
-void AddTcpFlow(uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, double startTime, double stopTime) {
+void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, uint32_t packetSize, uint32_t nPackets, double startTime, double stopTime) {
     // set the TCP variant
     if (tcpType == "cubic") {
         Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpCubic::GetTypeId()));
@@ -72,15 +88,24 @@ void AddTcpFlow(uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, doubl
     ApplicationContainer sinkApp = sink.Install(dstNode);
     sinkApp.Start(Seconds(0.0));
     sinkApp.Stop(Seconds(stopTime + 1));
+    
+    // set up Application
+    Ptr<Node> srcNode = dumbbell->GetLeft(srcIndex);
 
-    // set up OnOff application
-    OnOffHelper onoff("ns3::TcpSocketFactory", sinkAddr);
-    onoff.SetAttribute("DataRate", StringValue("10Mbps"));
-    onoff.SetAttribute("PacketSize", UintegerValue(1024));
-    onoff.SetAttribute("StartTime", TimeValue(Seconds(startTime)));
-    onoff.SetAttribute("StopTime", TimeValue(Seconds(stopTime)));
+    Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(srcNode, TcpSocketFactory::GetTypeId());
 
-    onoff.Install(dumbbell->GetLeft(srcIndex));
+    Ptr<TutorialApp> app = CreateObject<TutorialApp>();
+    app->Setup(ns3TcpSocket, sinkAddr, packetSize, nPackets, DataRate("1Mbps"));
+    srcNode->AddApplication(app);
+    app->SetStartTime(Seconds(startTime));
+    app->SetStopTime(Seconds(stopTime));
+
+    // set up congestion window tracing
+    AsciiTraceHelper asciiTraceHelper;
+    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("flow-" + std::to_string(flowIndex) + ".cwnd");
+    ns3TcpSocket->TraceConnectWithoutContext("CongestionWindow",
+                                             MakeBoundCallback(&CwndChange, stream));
+
 
     // debugging purposes
     std::cout << "Destination IP: " << dstAddr << std::endl;
@@ -95,16 +120,14 @@ int main(int argc, char* argv[]) {
     CommandLine cmd(__FILE__);
     cmd.Parse(argc, argv);
 
-    // enable logging
-    // LogComponentEnable("PacketSink", LOG_LEVEL_INFO);
-    // LogComponentEnable("OnOffApplication", LOG_LEVEL_INFO); 
-    // LogComponentEnable("TcpL4Protocol", LOG_LEVEL_INFO);
-
     Time::SetResolution(Time::NS);
 
     // set up topology and simulate flows
     SetupDumbbellTopology();
-    AddTcpFlow(0, 1, "cubic", 2.0, 10.0);
+
+    uint32_t flowCnt = 0;
+    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
+    AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
 
     // set up flow monitor
     Ptr<FlowMonitor> flowMonitor;

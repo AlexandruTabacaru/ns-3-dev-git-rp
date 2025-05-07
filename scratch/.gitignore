@@ -2,6 +2,7 @@
 /*
 !.gitignore
 
+!tcp/
 !nested-subdir/
 !subdir/
 !scratch-simulator.cc
