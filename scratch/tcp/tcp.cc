@@ -32,29 +32,32 @@ CwndChange(Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
                          << std::endl;
 }
 
-// Ensure the directory exists
-void EnsureMetricsDirExists(const std::string& dir = "metrics")
+/**
+ * Logs a metric to a specified directory and file.
+ *
+ * @param directory Directory to write to (e.g., "metrics")
+ * @param filename  Name of the file (e.g., "jfi.txt", "fct.txt")
+ * @param message   The string message or data to log
+ */
+void LogMetric(const std::string& directory, const std::string& filename, const std::string& message)
 {
-    struct stat info;
-    if (stat(dir.c_str(), &info) != 0) {
-        // Directory does not exist, create it
-        mkdir(dir.c_str(), 0777);
-    }
-}
+    // Create the directory if it doesn't exist
+    std::filesystem::create_directories(directory);
 
-void AppendJFIToFile(double jfi, const std::string& filepath = "metrics/jfi.txt")
-{
-    std::ofstream file(filepath, std::ios::app);
-    if (file.is_open())
+    // Full path to the output file
+    std::string fullPath = directory + "/" + filename;
+
+    // Open in append mode
+    std::ofstream outFile(fullPath, std::ios_base::app);
+
+    if (!outFile.is_open())
     {
-        file << std::fixed << std::setprecision(6)
-             << "JFI = " << jfi << "\n";
-        file.close();
+        std::cerr << "Failed to open " + fullPath +" for appending.\n";
+        return;
     }
-    else
-    {
-        std::cerr << "Failed to open jfi.txt for appending.\n";
-    }
+
+    outFile << message << std::endl;
+    outFile.close();
 }
 void SetupDumbbellTopology() {
     // number of nodes on the left and right
@@ -175,18 +178,21 @@ int main(int argc, char* argv[]) {
         double throughput = (flow.second.rxBytes * 8.0 /
             (flow.second.timeLastRxPacket.GetSeconds() -
              flow.second.timeFirstTxPacket.GetSeconds()) / 1e6);
+        double fct = (flow.second.timeLastRxPacket - flow.second.timeFirstTxPacket).GetSeconds();
         std::cout << "Flow " << flow.first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
         std::cout << "  Tx Bytes:   " << flow.second.txBytes << "\n";
         std::cout << "  Rx Bytes:   " << flow.second.rxBytes << "\n";
         std::cout << "  Lost Packets: " << flow.second.lostPackets << "\n";
-        std::cout << "  Throughput: " << throughput << " Mbps\n\n";
+        std::cout << "  Throughput: " << throughput << " Mbps\n";
+        std::cout << "Flow Completion Time: " << fct << "\n\n";
+        LogMetric("metrics", "fct.txt", "FCT for Flow " + std::to_string(flow.first) + " = " + std::to_string(fct));
         sumThroughput += throughput;
         sumSquaredThroughput += throughput * throughput;
         flowCount++;
     }
     double jfi = (sumThroughput * sumThroughput) / (flowCount * sumSquaredThroughput);
     std::cout << "Jain's Fairness Index: " << jfi << std::endl;
-    AppendJFIToFile(jfi);
+    LogMetric("metrics", "jfi.txt", "JFI = " + std::to_string(jfi));
     Simulator::Destroy();
     delete dumbbell;  // cleanup
     return 0;
