@@ -1,14 +1,17 @@
+#include <fstream>
 #include "tutorial-app.h"
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
+#include "ns3/log.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/point-to-point-dumbbell.h"
 #include "ns3/applications-module.h"
 #include "ns3/traffic-control-module.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/ipv4-flow-classifier.h"
+#include <sys/stat.h>
 
 using namespace ns3;
 
@@ -29,6 +32,30 @@ CwndChange(Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
                          << std::endl;
 }
 
+// Ensure the directory exists
+void EnsureMetricsDirExists(const std::string& dir = "metrics")
+{
+    struct stat info;
+    if (stat(dir.c_str(), &info) != 0) {
+        // Directory does not exist, create it
+        mkdir(dir.c_str(), 0777);
+    }
+}
+
+void AppendJFIToFile(double jfi, const std::string& filepath = "metrics/jfi.txt")
+{
+    std::ofstream file(filepath, std::ios::app);
+    if (file.is_open())
+    {
+        file << std::fixed << std::setprecision(6)
+             << "JFI = " << jfi << "\n";
+        file.close();
+    }
+    else
+    {
+        std::cerr << "Failed to open jfi.txt for appending.\n";
+    }
+}
 void SetupDumbbellTopology() {
     // number of nodes on the left and right
     uint32_t nLeaf = 2;
@@ -136,22 +163,30 @@ int main(int argc, char* argv[]) {
 
     Simulator::Stop(Seconds(20.0));
     Simulator::Run();
-
+    double sumThroughput = 0.0;
+    double sumSquaredThroughput = 0.0;
+    uint32_t flowCount = 0;
     flowMonitor->CheckForLostPackets();
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowHelper.GetClassifier());
     auto stats = flowMonitor->GetFlowStats();
     // print for debugging
     for (auto& flow : stats) {
         auto t = classifier->FindFlow(flow.first);
+        double throughput = (flow.second.rxBytes * 8.0 /
+            (flow.second.timeLastRxPacket.GetSeconds() -
+             flow.second.timeFirstTxPacket.GetSeconds()) / 1e6);
         std::cout << "Flow " << flow.first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
         std::cout << "  Tx Bytes:   " << flow.second.txBytes << "\n";
         std::cout << "  Rx Bytes:   " << flow.second.rxBytes << "\n";
         std::cout << "  Lost Packets: " << flow.second.lostPackets << "\n";
-        std::cout << "  Throughput: " << (flow.second.rxBytes * 8.0 /
-            (flow.second.timeLastRxPacket.GetSeconds() -
-             flow.second.timeFirstTxPacket.GetSeconds()) / 1e6) << " Mbps\n\n";
+        std::cout << "  Throughput: " << throughput << " Mbps\n\n";
+        sumThroughput += throughput;
+        sumSquaredThroughput += throughput * throughput;
+        flowCount++;
     }
-
+    double jfi = (sumThroughput * sumThroughput) / (flowCount * sumSquaredThroughput);
+    std::cout << "Jain's Fairness Index: " << jfi << std::endl;
+    AppendJFIToFile(jfi);
     Simulator::Destroy();
     delete dumbbell;  // cleanup
     return 0;
