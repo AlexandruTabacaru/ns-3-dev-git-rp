@@ -25,6 +25,7 @@ if(applications
         ns3tcp/ns3tcp-cubic-test-suite.cc
         ns3tcp/ns3tcp-loss-test-suite.cc
         ns3tcp/ns3tcp-no-delay-test-suite.cc
+        ns3tcp/ns3tcp-prague-test-suite.cc
         ns3tcp/ns3tcp-socket-test-suite.cc
         ns3tcp/ns3tcp-state-test-suite.cc
     )

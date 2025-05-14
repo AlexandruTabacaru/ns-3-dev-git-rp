@@ -104,6 +104,7 @@ set(source_files
     model/tcp-option-ts.cc
     model/tcp-option-winscale.cc
     model/tcp-option.cc
+    model/tcp-prague.cc
     model/tcp-prr-recovery.cc
     model/tcp-rate-ops.cc
     model/tcp-recovery-ops.cc
@@ -229,6 +230,7 @@ set(header_files
     model/tcp-option-ts.h
     model/tcp-option-winscale.h
     model/tcp-option.h
+    model/tcp-prague.h
     model/tcp-prr-recovery.h
     model/tcp-rate-ops.h
     model/tcp-recovery-ops.h
@@ -315,6 +317,7 @@ set(test_sources
     test/tcp-option-test.cc
     test/tcp-pacing-test.cc
     test/tcp-pkts-acked-test.cc
+    test/tcp-prague-test.cc
     test/tcp-prr-recovery-test.cc
     test/tcp-rate-ops-test.cc
     test/tcp-rto-test.cc
