@@ -29,6 +29,7 @@ cpp_examples = [
     ("codel-vs-pfifo-asymmetric --routerWanQueueDiscType=CoDel --simDuration=10", "True", "False"),
     ("codel-vs-pfifo-basic-test --queueDiscType=PfifoFast --simDuration=10", "True", "False"),
     ("codel-vs-pfifo-basic-test --queueDiscType=CoDel --simDuration=10", "True", "False"),
+    ("dualq-coupled-pi2-example", "True", "True"),
     ("pfifo-vs-red --queueDiscType=PfifoFast", "True", "True"),
     ("pfifo-vs-red --queueDiscType=PfifoFast --modeBytes=1", "True", "False"),
     ("pfifo-vs-red --queueDiscType=RED", "True", "True"),

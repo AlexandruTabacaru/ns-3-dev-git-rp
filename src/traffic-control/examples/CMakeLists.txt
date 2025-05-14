@@ -87,3 +87,14 @@ build_lib_example(
     ${libflow-monitor}
     ${libtraffic-control}
 )
+
+build_lib_example(
+  NAME dualq-coupled-pi2-example
+  SOURCE_FILES dualq-coupled-pi2-example.cc
+  LIBRARIES_TO_LINK
+    ${libpoint-to-point}
+    ${libinternet}
+    ${libapplications}
+    ${libflow-monitor}
+    ${libtraffic-control}
+)
