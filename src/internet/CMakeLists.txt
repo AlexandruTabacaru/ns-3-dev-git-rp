@@ -87,6 +87,7 @@ set(source_files
     model/tcp-bbr.cc
     model/tcp-bic.cc
     model/tcp-congestion-ops.cc
+    model/tcp-cubic-jumpstart.cc
     model/tcp-cubic.cc
     model/tcp-dctcp.cc
     model/tcp-header.cc
@@ -212,6 +213,7 @@ set(header_files
     model/tcp-bbr.h
     model/tcp-bic.h
     model/tcp-congestion-ops.h
+    model/tcp-cubic-jumpstart.h
     model/tcp-cubic.h
     model/tcp-dctcp.h
     model/tcp-header.h

@@ -40,11 +40,11 @@ class TutorialApp : public Application
     void Setup(Ptr<Socket> socket,
                Address address,
                uint32_t packetSize,
-               uint32_t nPackets,
-               DataRate dataRate);
+               uint32_t nPackets);
 
   private:
     void StartApplication() override;
+    void HandleSend(Ptr<Socket> socket, uint32_t availableBuffer);
     void StopApplication() override;
 
     /// Schedule a new transmission.
@@ -56,8 +56,8 @@ class TutorialApp : public Application
     Address m_peer;         //!< The destination address.
     uint32_t m_packetSize;  //!< The packet size.
     uint32_t m_nPackets;    //!< The number of packets to send.
-    DataRate m_dataRate;    //!< The data rate to use.
-    EventId m_sendEvent;    //!< Send event.
+    // DataRate m_dataRate;    //!< The data rate to use.
+    // EventId m_sendEvent;    //!< Send event.
     bool m_running;         //!< True if the application is running.
     uint32_t m_packetsSent; //!< The number of packets sent.
 };

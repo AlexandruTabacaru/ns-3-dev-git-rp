@@ -26,6 +26,8 @@ bindings/python/pybindgen/
 
 venv/
 
+metrics/
+
 ms_print.*
 massif.*
 coverity

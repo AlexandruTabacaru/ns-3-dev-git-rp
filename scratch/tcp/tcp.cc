@@ -89,11 +89,6 @@ void SetupDumbbellTopology() {
     dumbbell->AssignIpv4Addresses (leftIp, rightIp, routerIp);
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
-
-    // print routing tables to a file
-    AsciiTraceHelper ascii;
-    Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream("routing-table.txt");
-    Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(0.5), stream);
 }
 
 void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, uint32_t packetSize, uint32_t nPackets, double startTime, double stopTime) {
@@ -103,7 +98,9 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     } else if (tcpType == "bbr") {
         // BBRv1
         Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpBbr::GetTypeId()));
-    }
+    } else if (tcpType == "jumpstart") {
+        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpCubicJumpstart::GetTypeId()));
+    } 
 
     // get the destination node's address
     Ptr<Node> dstNode = dumbbell->GetRight(dstIndex);
@@ -125,14 +122,14 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(srcNode, TcpSocketFactory::GetTypeId());
 
     Ptr<TutorialApp> app = CreateObject<TutorialApp>();
-    app->Setup(ns3TcpSocket, sinkAddr, packetSize, nPackets, DataRate("1Mbps"));
+    app->Setup(ns3TcpSocket, sinkAddr, packetSize, nPackets);
     srcNode->AddApplication(app);
     app->SetStartTime(Seconds(startTime));
     app->SetStopTime(Seconds(stopTime));
 
     // set up congestion window tracing
     AsciiTraceHelper asciiTraceHelper;
-    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("flow-" + std::to_string(flowIndex) + ".cwnd");
+    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("metrics/flow-" + std::to_string(flowIndex) + ".cwnd");
     ns3TcpSocket->TraceConnectWithoutContext("CongestionWindow",
                                              MakeBoundCallback(&CwndChange, stream));
 
@@ -156,15 +153,15 @@ int main(int argc, char* argv[]) {
     SetupDumbbellTopology();
 
     uint32_t flowCnt = 0;
-    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
-    AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
+    AddTcpFlow(flowCnt++, 0, 1, "jumpstart", 1024, 1000, 2.0, 50.0);
+    // AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
 
     // set up flow monitor
     Ptr<FlowMonitor> flowMonitor;
     FlowMonitorHelper flowHelper;
     flowMonitor = flowHelper.InstallAll();
 
-    Simulator::Stop(Seconds(20.0));
+    Simulator::Stop(Seconds(60.0));
     Simulator::Run();
     double sumThroughput = 0.0;
     double sumSquaredThroughput = 0.0;
