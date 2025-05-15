@@ -100,7 +100,7 @@ class TcpHeader : public Header
      * @brief Set flags of the header
      * @param flags the flags for this TcpHeader
      */
-    void SetFlags(uint8_t flags);
+    void SetFlags(uint16_t flags);
 
     /**
      * @brief Set the window size
@@ -154,7 +154,7 @@ class TcpHeader : public Header
      * @brief Get the flags
      * @return the flags for this TcpHeader
      */
-    uint8_t GetFlags() const;
+    uint16_t GetFlags() const;
 
     /**
      * @brief Get the window size
@@ -260,19 +260,33 @@ class TcpHeader : public Header
     void InitializeChecksum(const Address& source, const Address& destination, uint8_t protocol);
 
     /**
+     * @brief Check if the header has the option (kind=EXPERIMENTAL) with specified magicNumber
+     * @param magicNumber the magic number experimental option to check for
+     * @return true if the header has the experimental option with specified magicNumber, false otherwise
+     */
+    bool HasExperimentalOption(uint16_t magicNumber) const;
+
+    /**
+     * @brief Get the option (kind=EXPERIMENTAL) with specified magicNumber
+     * @param magicNumber the magic number in experimental option to retrieve
+     * @return Whether the header contains a specific experimental option with specified magicNumber, or 0
+     */
+    Ptr<const TcpOption> GetExperimentalOption(uint16_t magicNumber) const;
+
+    /**
      * @brief TCP flag field values
      */
     enum Flags_t
     {
-        NONE = 0, //!< No flags
-        FIN = 1,  //!< FIN
-        SYN = 2,  //!< SYN
-        RST = 4,  //!< Reset
-        PSH = 8,  //!< Push
-        ACK = 16, //!< Ack
-        URG = 32, //!< Urgent
-        ECE = 64, //!< ECE
-        CWR = 128 //!< CWR
+        NONE = 0,   //!< No flags
+        FIN  = 1,   //!< FIN
+        SYN  = 2,   //!< SYN
+        RST  = 4,   //!< RST
+        PSH  = 8,   //!< PSH
+        ACK  = 16,  //!< ACK
+        URG  = 32,  //!< URG
+        ECE  = 64,  //!< ECE
+        CWR  = 128  //!< CWR
     };
 
     /**
@@ -323,7 +337,7 @@ class TcpHeader : public Header
     SequenceNumber32 m_sequenceNumber{0}; //!< Sequence number
     SequenceNumber32 m_ackNumber{0};      //!< ACK number
     uint8_t m_length{5};                  //!< Length (really a uint4_t) in words.
-    uint8_t m_flags{0};                   //!< Flags (really a uint6_t)
+    uint16_t m_flags{0};                   //!< Flags (really a uint9_t)
     uint16_t m_windowSize{0xffff};        //!< Window size
     uint16_t m_urgentPointer{0};          //!< Urgent pointer
 

@@ -282,12 +282,9 @@ class TcpTxBuffer : public Object
     /**
      * @brief Update the scoreboard
      * @param list list of SACKed blocks
-     * @param sackedCb Callback invoked, if it is not null, when a segment has been
-     * SACKed by the receiver.
      * @returns the number of bytes newly sacked by the list of blocks
      */
-    uint32_t Update(const TcpOptionSack::SackList& list,
-                    const Callback<void, TcpTxItem*>& sackedCb = m_nullCb);
+    uint32_t Update(const TcpOptionSack::SackList& list);
 
     /**
      * @brief Check if a segment is lost

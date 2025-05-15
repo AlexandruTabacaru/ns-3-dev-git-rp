@@ -139,7 +139,7 @@ TcpOptionNOP::Deserialize(Buffer::Iterator start)
 uint8_t
 TcpOptionNOP::GetKind() const
 {
-    return TcpOption::NOP;
+    return TcpOption::NOOP;
 }
 
 // Tcp Option MSS

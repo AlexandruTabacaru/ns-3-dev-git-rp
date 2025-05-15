@@ -118,8 +118,8 @@ TcpSocketState::TcpSocketState(const TcpSocketState& other)
       m_ecnMode(other.m_ecnMode),
       m_useEcn(other.m_useEcn),
       m_ectCodePoint(other.m_ectCodePoint),
-      m_lastAckedSackedBytes(other.m_lastAckedSackedBytes)
-
+      m_lastAckedSackedBytes(other.m_lastAckedSackedBytes),
+      m_isEcnBitFlipped(other.m_isEcnBitFlipped)
 {
 }
 
@@ -131,13 +131,15 @@ const char* const TcpSocketState::TcpCongStateName[TcpSocketState::CA_LAST_STATE
     "CA_LOSS",
 };
 
-const char* const TcpSocketState::EcnStateName[TcpSocketState::ECN_CWR_SENT + 1] = {
+const char* const TcpSocketState::EcnStateName[TcpSocketState::ECN_ECT1_RCVD + 1] = {
     "ECN_DISABLED",
     "ECN_IDLE",
     "ECN_CE_RCVD",
     "ECN_SENDING_ECE",
     "ECN_ECE_RCVD",
     "ECN_CWR_SENT",
+    "ECN_ECT0_RCVD",
+    "ECN_ECT1_RCVD",
 };
 
 } // namespace ns3

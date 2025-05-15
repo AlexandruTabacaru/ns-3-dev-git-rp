@@ -41,6 +41,7 @@ class TcpOption;
 class Ipv4Interface;
 class Ipv6Interface;
 class TcpRateOps;
+class TcpAccEcnData;
 
 /**
  * @ingroup tcp
@@ -1318,9 +1319,9 @@ class TcpSocketBase : public TcpSocket
     /**
      * @brief Add Tags for the Socket
      * @param p Packet
-     * @param isEct Whether the packet is allowed to be ECT capable
+     * @param withEct mark ECT forcefully, by default is false
      */
-    void AddSocketTags(const Ptr<Packet>& p, bool isEct) const;
+    void AddSocketTags(const Ptr<Packet>& p, bool withEct = false) const;
 
     /**
      * Get the current value of the receiver's offered window (RCV.WND)
@@ -1348,6 +1349,7 @@ class TcpSocketBase : public TcpSocket
     uint32_t m_dupAckCount{0};    //!< Dupack counter
     uint32_t m_delAckCount{0};    //!< Delayed ACK counter
     uint32_t m_delAckMaxCount{0}; //!< Number of packet to fire an ACK before delay timeout
+    SequenceNumber32 m_lastSndAck{0}; //!< Last sent ACK
 
     // Nagle algorithm
     bool m_noDelay{false}; //!< Set to true to disable Nagle's algorithm
@@ -1460,6 +1462,222 @@ class TcpSocketBase : public TcpSocket
     TracedValue<SequenceNumber32> m_ecnCESeq{
         0}; //!< Sequence number of the last received Congestion Experienced
     TracedValue<SequenceNumber32> m_ecnCWRSeq{0}; //!< Sequence number of the last sent CWR
+
+    typedef enum
+    {
+        NoEcn = 0,   //!< ECN is not enabled.
+        ClassicEcn,  //!< ECN functionality as described in RFC 3168.
+        EcnPp,       //!< ECN++ to reinforce ClassicEcn, marking ECT in control packets
+        AccEcn,      //!< More Accurate ECN, by default the function of ECN++ is enabled in AccEcn
+    } EcnMode_t;
+
+    /**
+     * \brief Literal names of ECN Mode for use in log messages
+     */
+    static const char* const EcnModeName[TcpSocketBase::AccEcn + 1];
+
+    /**
+     * \brief Set Ace field for tcp flags
+     *
+     * \return tcp flags with ace field setting
+     */
+    inline uint16_t SetAceFlags (uint8_t ace) const
+    {
+        uint16_t aceFlags = static_cast<uint16_t> (ace & 0x7);
+        return (aceFlags << 6);
+    }
+
+    /**
+     * \brief Get Ace field from tcp flags
+     *
+     * \return Ace field in tcp flags
+     */
+    inline uint8_t GetAceFlags (uint16_t flags) const
+    {
+        uint8_t ace = (flags >> 6) & 0x7;
+        return ace;
+    }
+
+    /**
+     * \brief Encode Ace field from r.cep
+     *
+     * \return 3 bit ace to set into tcp flags
+     */
+    uint8_t EncodeAceFlags (uint32_t cepR) const;
+
+    /**
+     * \brief decode s.cep from ace field
+     *
+     * \return s.cep
+     */
+    uint32_t DecodeAceFlags (uint8_t ace, uint32_t newlyAckedB, bool newlyAckedT) const;
+
+    /**
+     * \brief Process AccEcn option, update sender side accecn counters
+     *
+     * \param option AccEcn option read from the header
+     * \param newlyAckedB the newly acked byte number
+     */
+    void ProcessOptionAccEcn (const Ptr<const TcpOption> option, uint32_t newlyAckedB);
+
+    /**
+     * \brief Add AccEcn option in Tcp header
+     *
+     * \param header TcpHeader
+     */
+    void AddOptionAccEcn (TcpHeader& header);
+
+    /**
+     * \brief Set ECN mode to use on the socket
+     *
+     * \param ecnMode Mode of ECN. Currently NoEcn, ClassicEcn, EcnPp and AccEcn is supported.
+     */
+    void SetEcn (EcnMode_t ecnMode);
+
+    /**
+     * \brief Check ECN state in IP header for ipv4
+     * \param header Ipv4 Header
+     * \param tcpHeader TCP Header
+     * \param tcpPayloadSize TCP payload size
+     */
+    void CheckEcnInIpv4 (const Ipv4Header& header, const TcpHeader& tcpHeader, uint32_t tcpPayloadSize);
+
+    /**
+     * \brief Check ECN state in IP header for ipv6
+     * \param header Ipv6 Header
+     * \param tcpHeader TCP Header
+     * \param tcpPayloadSize TCP payload size
+     */
+    void CheckEcnInIpv6 (const Ipv6Header& header, const TcpHeader& tcpHeader, uint32_t tcpPayloadSize);
+
+    void DecodeAccEcnData (const TcpHeader& tcpHeader);
+
+    /**
+     * \brief Check ECN flag in TCP header when received SYN packet
+     * \param tcpHeader TCP Header
+     */
+    void CheckEcnRvdSyn (const TcpHeader& tcpHeader);
+
+    /**
+     * \brief Check ECN flag in TCP header when received SYN/ACK packet
+     * \param tcpHeader TCP Header
+     */
+    void CheckEcnRvdSynAck (const TcpHeader& tcpHeader);
+
+    /**
+     * \brief Check ECN flag in TCP header when received last Ack in 3-way handshake
+     * \param tcpHeader TCP Header
+     */
+    void CheckEcnRvdLastAck (const TcpHeader& tcpHeader);
+
+    /**
+     * Check ECN state whether ECE is set in TCP header
+     * \param tcpHeader TCP Header
+     * \return true means ECE is set, false means no ECE set
+     */
+    bool IsEcnRvdEce (const TcpHeader& tcpHeader);
+
+    // ... existing code ...
+
+    Ptr<TcpAccEcnData>            m_accEcnData;
+
+    // ... existing code ...
+
+    /**
+     * \brief Callback pointers for AccEcn s.e0b trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnE0bSTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn s.e1b trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnE1bSTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn s.ceb trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnCebSTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn s.cep trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnCepSTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn r.e0b trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnE0bRTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn r.e1b trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnE1bRTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn r.ceb trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnCebRTrace;
+
+    /**
+     * \brief Callback pointers for AccEcn r.cep trace chaining
+     */
+    TracedCallback<uint32_t, uint32_t> m_accEcnCepRTrace;
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData e0bR
+     * \param oldValue old r.e0b of AccEcn data value
+     * \param newValue new r.e0b of AccEcn data value
+     */
+    void UpdateAccEcnE0bR (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData e1bR
+     * \param oldValue old r.e1b of AccEcn data value
+     * \param newValue new r.e1b of AccEcn data value
+     */
+    void UpdateAccEcnE1bR (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData cebR
+     * \param oldValue old r.ceb of AccEcn data value
+     * \param newValue new r.ceb of AccEcn data value
+     */
+    void UpdateAccEcnCebR (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData cepR
+     * \param oldValue old r.cep of AccEcn data value
+     * \param newValue new r.cep of AccEcn data value
+     */
+    void UpdateAccEcnCepR (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData e0bS
+     * \param oldValue old s.e0b of AccEcn data value
+     * \param newValue new s.e0b of AccEcn data value
+     */
+    void UpdateAccEcnE0bS (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData e1bS
+     * \param oldValue old s.e1b of AccEcn data value
+     * \param newValue new s.e1b of AccEcn data value
+     */
+    void UpdateAccEcnE1bS (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData cebS
+     * \param oldValue old s.ceb of AccEcn data value
+     * \param newValue new s.ceb of AccEcn data value
+     */
+    void UpdateAccEcnCebS (uint32_t oldValue, uint32_t newValue);
+
+    /**
+     * \brief Callback function to hook to TcpAccEcnData cepS
+     * \param oldValue old s.cep of AccEcn data value
+     * \param newValue new s.cep of AccEcn data value
+     */
+    void UpdateAccEcnCepS (uint32_t oldValue, uint32_t newValue);
 };
 
 /**

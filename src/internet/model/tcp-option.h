@@ -43,12 +43,13 @@ class TcpOption : public Object
         // Remember to extend IsKindKnown() with new value, when adding values here
         //
         END = 0,           //!< END
-        NOP = 1,           //!< NOP
+        NOOP = 1,          //!< NOOP
         MSS = 2,           //!< MSS
         WINSCALE = 3,      //!< WINSCALE
         SACKPERMITTED = 4, //!< SACKPERMITTED
         SACK = 5,          //!< SACK
         TS = 8,            //!< TS
+        EXPERIMENTAL = 254,//!< EXPERIMENTAL
         UNKNOWN = 255      //!< not a standardized value; for unknown recv'd options
     };
 
@@ -130,6 +131,42 @@ class TcpOptionUnknown : public TcpOption
     uint8_t m_kind;        //!< The unknown option kind
     uint32_t m_size;       //!< The unknown option size
     uint8_t m_content[40]; //!< The option data
+};
+
+/**
+ * \ingroup tcp
+ *
+ * \brief Base class for all kinds of TCP experimental options
+ *
+ * Before an TCP option has its own kind,
+ * it can use kind = EXPERIMENTAL (as in \RFC{6994})
+ * with magic number in its first two content bytes to define a new experimental option
+ */
+class TcpOptionExperimental : public TcpOption
+{
+public:
+    TcpOptionExperimental ();
+    virtual ~TcpOptionExperimental ();
+
+    enum ExID
+    { // the magic number for Experimental option
+      // the magic number forms the first two bytes in option content field to differentiate experimental options
+      ACCECN = 0xACCE,  //!< AccEcn Option
+    };
+
+    /**
+     * \brief Get the type ID.
+     * \return the object TypeId
+     */
+    static TypeId GetTypeId (void);
+    virtual uint8_t GetKind (void) const;
+    /**
+     * \brief Get the `magic number' (as in \RFC{6994}) of this option
+     * \return the magic number in Experimental Option
+     */
+    virtual uint16_t GetExID (void) const = 0;
+    static bool IsExIDKnown (uint16_t magicNumber);
+    static Ptr<TcpOption> CreateOptionExperimental (uint16_t exid);
 };
 
 } // namespace ns3

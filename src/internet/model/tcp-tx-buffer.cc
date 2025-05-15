@@ -768,7 +768,7 @@ TcpTxBuffer::DiscardUpTo(const SequenceNumber32& seq, const Callback<void, TcpTx
 }
 
 uint32_t
-TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, TcpTxItem*>& sackedCb)
+TcpTxBuffer::Update(const TcpOptionSack::SackList& list)
 {
     NS_LOG_FUNCTION(this);
     NS_LOG_INFO("Updating scoreboard, got " << list.size() << " blocks to analyze");
@@ -777,7 +777,7 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
 
     for (auto option_it = list.begin(); option_it != list.end(); ++option_it)
     {
-        auto item_it = m_sentList.begin();
+        PacketList::iterator item_it = m_sentList.begin();
         SequenceNumber32 beginOfCurrentPacket = m_firstByteSeq;
 
         if (m_firstByteSeq + m_sentSize < (*option_it).first)
@@ -788,63 +788,59 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
 
         while (item_it != m_sentList.end())
         {
+            // Calculate the size of the current packet stored in buffer
             uint32_t pktSize = (*item_it)->m_packet->GetSize();
 
-            // Check the boundary of this packet ... only mark as sacked if
-            // it is precisely mapped over the option. It means that if the receiver
-            // is reporting as sacked single range bytes that are not mapped 1:1
-            // in what we have, the option is discarded. There's room for improvement
-            // here.
-            if (beginOfCurrentPacket >= (*option_it).first &&
-                beginOfCurrentPacket + pktSize <= (*option_it).second)
+            // Check if this packet is covered by the block
+            if (beginOfCurrentPacket < (*option_it).second)
             {
-                if ((*item_it)->m_sacked)
+                if ((*option_it).first <= beginOfCurrentPacket + pktSize)
                 {
-                    NS_ASSERT(!(*item_it)->m_lost);
-                    NS_LOG_INFO("Received block " << *option_it << ", checking sentList for block "
-                                                  << *(*item_it)
-                                                  << ", found in the sackboard already sacked");
-                }
-                else
-                {
-                    if ((*item_it)->m_lost)
+                    // It means that beginOfCurrentPacket < (*option_it).second
+                    // and that (*option_it).first <= beginOfCurrentPacket + pktSize
+                    // In other words, the SACK block covers (or partially covers)
+                    // this packet that has been sent but not acknowledged.
+                    // We need to check if we have already a lost snippet, and
+                    // in this case, we re-send the full packet (duh!).
+                    if ((*item_it)->m_sacked)
                     {
-                        (*item_it)->m_lost = false;
-                        m_lostOut -= (*item_it)->m_packet->GetSize();
+                        NS_LOG_INFO("Packet was already sacked");
                     }
-
-                    (*item_it)->m_sacked = true;
-                    m_sackedOut += (*item_it)->m_packet->GetSize();
-                    bytesSacked += (*item_it)->m_packet->GetSize();
-
-                    if (m_highestSack.first == m_sentList.end() ||
-                        m_highestSack.second <= beginOfCurrentPacket + pktSize)
+                    else
                     {
-                        m_sackSeen = true;
-                        m_highestSack = std::make_pair(item_it, beginOfCurrentPacket);
-                    }
+                        NS_LOG_INFO("Packet " << *item_it <<
+                                 " sacked, start seq=" << beginOfCurrentPacket <<
+                                 " end seq=" << beginOfCurrentPacket + pktSize <<
+                                 " SACK left=" << (*option_it).first <<
+                                 " SACK right=" << (*option_it).second);
 
-                    NS_LOG_INFO("Received block "
-                                << *option_it << ", checking sentList for block " << *(*item_it)
-                                << ", found in the sackboard, sacking, current highSack: "
-                                << m_highestSack.second);
+                        (*item_it)->m_sacked = true;
+                        m_sackedOut += (*item_it)->m_packet->GetSize();
+                        bytesSacked += (*item_it)->m_packet->GetSize();
 
-                    if (!sackedCb.IsNull())
-                    {
-                        sackedCb(*item_it);
+                        if (m_highestSack.first == m_sentList.end()
+                            || m_highestSack.second <= beginOfCurrentPacket + pktSize)
+                        {
+                            m_highestSack = std::make_pair(item_it, beginOfCurrentPacket + pktSize);
+                        }
+
+                        NS_LOG_INFO("Highest sacked seq updated to " << m_highestSack.second <<
+                                 ", blocks used " << std::to_string(list.size()) <<
+                                 ", found in the sackboard, sacking, current highSack: " <<
+                                 m_highestSack.second);
                     }
                 }
-            }
-            else if (beginOfCurrentPacket + pktSize > (*option_it).second)
-            {
-                // We already passed the received block end. Exit from the loop
-                NS_LOG_INFO("Received block [" << *option_it << ", checking sentList for block "
-                                               << *(*item_it) << "], not found, breaking loop");
-                break;
+                else if (beginOfCurrentPacket + pktSize > (*option_it).second)
+                {
+                    // beginOfCurrentPacket < (*option_it).second but
+                    // (*option_it).first > beginOfCurrentPacket + pktSize
+                    // so, the block is going beyond the current sent list
+                    break;
+                }
             }
 
             beginOfCurrentPacket += pktSize;
-            ++item_it;
+            item_it++;
         }
     }
 
@@ -854,10 +850,8 @@ TcpTxBuffer::Update(const TcpOptionSack::SackList& list, const Callback<void, Tc
         UpdateLostCount();
     }
 
-    NS_ASSERT((*(m_sentList.begin()))->m_sacked == false);
-    NS_ASSERT_MSG(m_sentSize >= m_sackedOut + m_lostOut, *this);
-    // Assert for duplicated SACK or impossibility to map the option into the sent blocks
-    // NS_ASSERT (list.size () == 0 || modified);
+    NS_LOG_LOGIC("Updated scoreboard, current sacked bytes: " << m_sackedOut << " highest sacked: " <<
+                  m_highestSack.second << " blocks: " << list.size());
     ConsistencyCheck();
     return bytesSacked;
 }

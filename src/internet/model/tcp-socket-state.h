@@ -137,13 +137,14 @@ class TcpSocketState : public Object
     enum EcnState_t
     {
         ECN_DISABLED = 0, //!< ECN disabled traffic
-        ECN_IDLE, //!< ECN is enabled  but currently there is no action pertaining to ECE or CWR to
-                  //!< be taken
-        ECN_CE_RCVD,     //!< Last packet received had CE bit set in IP header
-        ECN_SENDING_ECE, //!< Receiver sends an ACK with ECE bit set in TCP header
-        ECN_ECE_RCVD,    //!< Last ACK received had ECE bit set in TCP header
-        ECN_CWR_SENT //!< Sender has reduced the congestion window, and sent a packet with CWR bit
-                     //!< set in TCP header. This state is used for tracing.
+        ECN_IDLE,         //!< ECN is enabled but currently Sender is not sending CE marked packets
+        ECN_CE_RCVD,      //!< Last packet received had CE bit set in IP header
+        ECN_SENDING_ECE,  //!< Receiver sends an ACK with ECE bit set in TCP header
+        ECN_ECE_RCVD,     //!< Last ACK received had ECE bit set in TCP header
+        ECN_CWR_SENT,     //!< Sender has reduced the congestion window, and sent a packet with CWR bit
+                         //!< set in TCP header. This state is used for tracing.
+        ECN_ECT0_RCVD,    //!< Last packet received had ECT0 bit set in IP header, only used in AccECN
+        ECN_ECT1_RCVD     //!< Last packet received had ECT1 bit set in IP header, only used in AccECN
     };
 
     /**
@@ -154,7 +155,7 @@ class TcpSocketState : public Object
     /**
      * @brief Literal names of ECN states for use in log messages
      */
-    INTERNET_EXPORT static const char* const EcnStateName[TcpSocketState::ECN_CWR_SENT + 1];
+    INTERNET_EXPORT static const char* const EcnStateName[TcpSocketState::ECN_ECT1_RCVD + 1];
 
     // Congestion control
     TracedValue<uint32_t> m_cWnd{0}; //!< Congestion window
@@ -211,6 +212,8 @@ class TcpSocketState : public Object
     uint32_t m_lastAckedSackedBytes{
         0}; //!< The number of bytes acked and sacked as indicated by the current ACK received. This
             //!< is similar to acked_sacked variable in Linux
+
+    bool m_isEcnBitFlipped{false}; //!< record whether ECN bit flipped in IP header, only used in AccEcn
 
     /**
      * @brief Get cwnd in segments rather than bytes

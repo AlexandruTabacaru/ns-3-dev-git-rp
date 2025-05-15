@@ -27,13 +27,23 @@ NS_OBJECT_ENSURE_REGISTERED(TcpHeader);
 std::string
 TcpHeader::FlagsToString(uint8_t flags, const std::string& delimiter)
 {
-    static const char* flagNames[8] = {"FIN", "SYN", "RST", "PSH", "ACK", "URG", "ECE", "CWR"};
+    const int flagBits = 8;
+    static const char* flagNames[flagBits] = {
+        "FIN",
+        "SYN",
+        "RST",
+        "PSH",
+        "ACK",
+        "URG",
+        "ECE",
+        "CWR"
+    };
     std::string flagsDescription = "";
-    for (uint8_t i = 0; i < 8; ++i)
+    for (uint8_t i = 0; i < flagBits; ++i)
     {
         if (flags & (1 << i))
         {
-            if (!flagsDescription.empty())
+            if (flagsDescription.length() > 0)
             {
                 flagsDescription += delimiter;
             }
@@ -74,7 +84,7 @@ TcpHeader::SetAckNumber(SequenceNumber32 ackNumber)
 }
 
 void
-TcpHeader::SetFlags(uint8_t flags)
+TcpHeader::SetFlags(uint16_t flags)
 {
     m_flags = flags;
 }
@@ -133,7 +143,7 @@ TcpHeader::GetMaxOptionLength() const
     return m_maxOptionsLen;
 }
 
-uint8_t
+uint16_t
 TcpHeader::GetFlags() const
 {
     return m_flags;
@@ -325,7 +335,7 @@ TcpHeader::Deserialize(Buffer::Iterator start)
     m_sequenceNumber = i.ReadNtohU32();
     m_ackNumber = i.ReadNtohU32();
     uint16_t field = i.ReadNtohU16();
-    m_flags = field & 0xFF;
+    m_flags = field & 0x1FF;
     m_length = field >> 12;
     m_windowSize = i.ReadNtohU16();
     i.Next(2);
@@ -339,19 +349,61 @@ TcpHeader::Deserialize(Buffer::Iterator start)
         NS_LOG_ERROR("Illegal TCP option length " << optionLen << "; options discarded");
         return 20;
     }
-    while (optionLen)
+    while (optionLen > 0)
     {
-        uint8_t kind = i.PeekU8();
+        uint8_t kind = i.ReadU8();
+        uint8_t size = 1;
+        optionLen--;
+        if (kind == 0)
+        {
+            break;
+        }
+        else if (kind == 1)
+        {
+            continue;
+        }
+        else
+        {
+            if (optionLen > 0)
+            {
+                size = i.ReadU8();
+                optionLen--;
+            }
+            else
+            {
+                break;
+            }
+        }
+        if (size <= 1 || optionLen + 1 < size)
+        {
+            break;
+        }
+        if (size > optionLen + 1)
+        {
+            break;
+        }
         Ptr<TcpOption> op;
         uint32_t optionSize;
         if (TcpOption::IsKindKnown(kind))
         {
-            op = TcpOption::CreateOption(kind);
+            if (kind == TcpOption::EXPERIMENTAL)
+            {
+                uint16_t magicNumber = TcpOptionExperimental::ACCECN;
+                if (TcpOptionExperimental::IsExIDKnown(magicNumber))
+                {
+                    op = TcpOptionExperimental::CreateOptionExperimental(magicNumber);
+                }
+            }
+            else
+            {
+                op = TcpOption::CreateOption(kind);
+            }
         }
         else
         {
-            op = TcpOption::CreateOption(TcpOption::UNKNOWN);
-            NS_LOG_WARN("Option kind " << static_cast<int>(kind) << " unknown, skipping.");
+            // Create an unknown option with the right kind value
+            op = CreateObject<TcpOptionUnknown>();
+            // TcpOption doesn't have SetKind, but TcpOptionUnknown will handle the kind in Deserialize
         }
         optionSize = op->Deserialize(i);
         if (optionSize != op->GetSerializedSize())
@@ -492,6 +544,42 @@ operator<<(std::ostream& os, const TcpHeader& tc)
 {
     tc.Print(os);
     return os;
+}
+
+bool
+TcpHeader::HasExperimentalOption(uint16_t magicNumber) const
+{
+    TcpOptionList::const_iterator i;
+
+    for (i = m_options.begin(); i != m_options.end(); ++i)
+    {
+        if ((*i)->GetKind() == TcpOption::EXPERIMENTAL)
+        {
+            Ptr<const TcpOptionExperimental> option = DynamicCast<const TcpOptionExperimental>(*i);
+            if (option->GetExID() == magicNumber)
+                return true;
+        }
+    }
+    return false;
+}
+
+Ptr<const TcpOption>
+TcpHeader::GetExperimentalOption(uint16_t magicNumber) const
+{
+    TcpOptionList::const_iterator i;
+
+    for (i = m_options.begin(); i != m_options.end(); ++i)
+    {
+        if ((*i)->GetKind() == TcpOption::EXPERIMENTAL)
+        {
+            Ptr<const TcpOptionExperimental> option = DynamicCast<const TcpOptionExperimental>(*i);
+            if (option->GetExID() == magicNumber)
+            {
+                return (*i);
+            }
+        }
+    }
+    return 0;
 }
 
 } // namespace ns3

@@ -16,40 +16,37 @@
 #include "tcp-socket-base.h"
 
 #include "ipv4-end-point.h"
-#include "ipv4-route.h"
-#include "ipv4-routing-protocol.h"
+#include "ipv4-interface-address.h"
+#include "ipv4-l3-protocol.h"
 #include "ipv4.h"
 #include "ipv6-end-point.h"
+#include "ipv6-interface-address.h"
 #include "ipv6-l3-protocol.h"
-#include "ipv6-route.h"
-#include "ipv6-routing-protocol.h"
+#include "ipv6.h"
 #include "rtt-estimator.h"
 #include "tcp-congestion-ops.h"
 #include "tcp-header.h"
 #include "tcp-l4-protocol.h"
+#include "tcp-option-rfc793.h"
 #include "tcp-option-sack-permitted.h"
 #include "tcp-option-sack.h"
 #include "tcp-option-ts.h"
 #include "tcp-option-winscale.h"
-#include "tcp-rate-ops.h"
 #include "tcp-recovery-ops.h"
-#include "tcp-rx-buffer.h"
+#include "tcp-accecn-data.h"
+#include "tcp-option-accecn.h"
 #include "tcp-tx-buffer.h"
+#include "tcp-rx-buffer.h"
+#include "ipv6-route.h"
 
 #include "ns3/abort.h"
-#include "ns3/data-rate.h"
-#include "ns3/double.h"
-#include "ns3/inet-socket-address.h"
-#include "ns3/inet6-socket-address.h"
+#include "ns3/boolean.h"
+#include "ns3/global-value.h"
 #include "ns3/log.h"
-#include "ns3/node.h"
-#include "ns3/object.h"
+#include "ns3/output-stream-wrapper.h"
 #include "ns3/packet.h"
-#include "ns3/pointer.h"
-#include "ns3/simulation-singleton.h"
 #include "ns3/simulator.h"
-#include "ns3/trace-source-accessor.h"
-#include "ns3/uinteger.h"
+#include "ns3/pointer.h"
 
 #include <algorithm>
 #include <math.h>
@@ -155,21 +152,25 @@ TcpSocketBase::GetTypeId()
                 MakeTimeChecker())
             .AddAttribute("TxBuffer",
                           "TCP Tx buffer",
+                          TypeId::ATTR_GET,
                           PointerValue(),
                           MakePointerAccessor(&TcpSocketBase::GetTxBuffer),
                           MakePointerChecker<TcpTxBuffer>())
             .AddAttribute("RxBuffer",
                           "TCP Rx buffer",
+                          TypeId::ATTR_GET,
                           PointerValue(),
                           MakePointerAccessor(&TcpSocketBase::GetRxBuffer),
                           MakePointerChecker<TcpRxBuffer>())
             .AddAttribute("CongestionOps",
                           "Pointer to TcpCongestionOps object",
+                          TypeId::ATTR_GET,
                           PointerValue(),
                           MakePointerAccessor(&TcpSocketBase::m_congestionControl),
                           MakePointerChecker<TcpCongestionOps>())
             .AddAttribute("RecoveryOps",
                           "Pointer to TcpRecoveryOps object",
+                          TypeId::ATTR_GET,
                           PointerValue(),
                           MakePointerAccessor(&TcpSocketBase::m_recoveryOps),
                           MakePointerChecker<TcpRecoveryOps>())
@@ -4394,10 +4395,57 @@ TcpSocketBase::AddOptionWScale(TcpHeader& header)
 uint32_t
 TcpSocketBase::ProcessOptionSack(const Ptr<const TcpOption> option)
 {
-    NS_LOG_FUNCTION(this << option);
+  Ptr<const TcpOptionSack> s = DynamicCast<const TcpOptionSack> (option);
 
-    Ptr<const TcpOptionSack> s = DynamicCast<const TcpOptionSack>(option);
-    return m_txBuffer->Update(s->GetSackList(), MakeCallback(&TcpRateOps::SkbDelivered, m_rateOps));
+  NS_ASSERT (m_sackEnabled);
+  NS_ASSERT (s != nullptr);
+
+  m_lastSndAck = std::max (m_lastSndAck, m_txBuffer->HeadSequence ());
+  uint32_t bytesSacked = 0;
+  uint32_t dupAckCount = m_dupAckCount;
+  if (s->GetSackList ().size () > 0)
+    {
+      bytesSacked = m_txBuffer->Update(s->GetSackList());
+    }
+
+  // RFC 6675, Section 5, 2nd paragraph:
+  // If the incoming selective acknowledgment scoreboard (SACK) information
+  // (including that carried by the incoming ACK) indicates that some data
+  // in the retransmission queue has been acknowledged (i.e., data that was
+  // considered to be missing at the receiver has now arrived), then this
+  // new SACK information MUST be taken into account when calculating TCB.snd.pipe.
+  if (bytesSacked > 0)
+    {
+      // New SACK information that advanced SND.NXT
+      NewAck (m_lastSndAck, true);
+    }
+  else if (dupAckCount >= m_retxThresh)
+    {
+      // Sack didn't acknowledge any new data <-> it's a duplicate ack
+      DupAck (m_txBuffer->BytesInFlight ());
+    }
+  else
+    {
+      if (m_txBuffer->Size () > 0)
+        {
+          NS_LOG_DEBUG ("Sack acknowledgment didn't advance snd.nxt, but we don't have dupThresh yet");
+          return bytesSacked;
+        }
+    }
+
+  // RFC 6675 Section 5: 3rd paragraph
+  // If the incoming ACK is a duplicate acknowledgment per the definition
+  // in Section 2 (regardless of its status as a cumulative
+  // acknowledgment), and the TCP is not currently in loss recovery
+  // [...] the TCP MUST increase dupACKCount by one and take the
+  // following steps[...]
+  if (dupAckCount < m_retxThresh && m_tcb->m_congState == TcpSocketState::CA_OPEN)
+    {
+      ++m_dupAckCount;
+      NS_LOG_DEBUG ("Dupack count: " << m_dupAckCount);
+    }
+
+  return bytesSacked;
 }
 
 void
