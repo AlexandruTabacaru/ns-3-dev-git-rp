@@ -166,65 +166,14 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
         std::cout << "Sink received: " << sink1->GetTotalRx() << " bytes\n";
     });
 }
-void AddP2PTcpFlow(Ptr<Node> srcNode, Ptr<Node> dstNode, Ipv4Address dstAddr,
-                   std::string tcpType, uint32_t packetSize, uint32_t nPackets,
-                   double startTime, double stopTime, uint32_t flowIndex) {
-    // TCP Variant
-    if (tcpType == "cubic") {
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpCubic::GetTypeId()));
-    } else if (tcpType == "bbr") {
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpBbr::GetTypeId()));
-    }
-
-    // Set up sink
-    uint16_t port = 50000;
-    Address sinkAddr(InetSocketAddress(dstAddr, port));
-
-    PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
-    ApplicationContainer sinkApp = sink.Install(dstNode);
-    sinkApp.Start(Seconds(0.0));
-    sinkApp.Stop(Seconds(stopTime + 1));
-
-    // Application on sender
-    Ptr<Socket> socket = Socket::CreateSocket(srcNode, TcpSocketFactory::GetTypeId());
-
-    Ptr<TutorialApp> app = CreateObject<TutorialApp>();
-    app->Setup(socket, sinkAddr, packetSize, nPackets, DataRate("1Mbps"));
-    srcNode->AddApplication(app);
-    app->SetStartTime(Seconds(startTime));
-    app->SetStopTime(Seconds(stopTime));
-
-    // cwnd tracing
-    AsciiTraceHelper ascii;
-    Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream("flow-" + std::to_string(flowIndex) + ".cwnd");
-    socket->TraceConnectWithoutContext("CongestionWindow", MakeBoundCallback(&CwndChange, stream));
-}
 std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupSingleFlow()
 {
-    NodeContainer nodes;
-    nodes.Create(2);
+    // set up topology and simulate flows
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology();
 
-    PointToPointHelper p2p;
-    p2p.SetDeviceAttribute("DataRate", StringValue("10Mbps"));
-    p2p.SetChannelAttribute("Delay", StringValue("5ms"));
-
-    NetDeviceContainer devices = p2p.Install(nodes);
-
-    InternetStackHelper stack;
-    stack.Install(nodes);
-
-    Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer interfaces = address.Assign(devices);
-    Ipv4Address senderAddress = interfaces.GetAddress(0);
-    Ipv4Address receiverAddress = interfaces.GetAddress(1);
-    AddP2PTcpFlow(nodes.Get(0), nodes.Get(1), interfaces.GetAddress(1),
-          "cubic", 1024, 1000, 2.0, 10.0, 0);
-    std::vector<Ipv4Address> senderAddresses;
-    std::vector<Ipv4Address> receiverAddresses;
-    senderAddresses.push_back(senderAddress);
-    receiverAddresses.push_back(receiverAddress);
-    return std::make_tuple(senderAddresses, receiverAddresses);
+    uint32_t flowCnt = 0;
+    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
+    return result;
 }
 std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupMultipleFlows()
 {
@@ -243,8 +192,8 @@ int main(int argc, char* argv[]) {
 
     Time::SetResolution(Time::NS);
 
-    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupMultipleFlows();
-    // std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupSingleFlow();
+   // std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupMultipleFlows();
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupSingleFlow();
     std::vector<Ipv4Address> senderAddresses = std::get<0>(addresses);
     std::vector<Ipv4Address> receiverAddresses =  std::get<1>(addresses);
 
