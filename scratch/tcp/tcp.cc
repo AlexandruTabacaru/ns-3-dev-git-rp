@@ -1,17 +1,22 @@
-#include <fstream>
+#include "../../src/internet/helper/ipv4-interface-container.h"
+#include "../../src/internet/model/ipv4.h"
 #include "tutorial-app.h"
 
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/internet-module.h"
-#include "ns3/log.h"
-#include "ns3/point-to-point-module.h"
-#include "ns3/point-to-point-dumbbell.h"
 #include "ns3/applications-module.h"
-#include "ns3/traffic-control-module.h"
+#include "ns3/core-module.h"
 #include "ns3/flow-monitor-helper.h"
+#include "ns3/internet-module.h"
 #include "ns3/ipv4-flow-classifier.h"
+#include "ns3/log.h"
+#include "ns3/network-module.h"
+#include "ns3/point-to-point-dumbbell.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/traffic-control-module.h"
+
+#include <fstream>
 #include <sys/stat.h>
+#include <tuple>
+#include <vector>
 
 using namespace ns3;
 
@@ -59,7 +64,7 @@ void LogMetric(const std::string& directory, const std::string& filename, const 
     outFile << message << std::endl;
     outFile.close();
 }
-void SetupDumbbellTopology() {
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupDumbbellTopology() {
     // number of nodes on the left and right
     uint32_t nLeaf = 2;
 
@@ -89,6 +94,27 @@ void SetupDumbbellTopology() {
     dumbbell->AssignIpv4Addresses (leftIp, rightIp, routerIp);
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    // print routing tables to a file
+    AsciiTraceHelper ascii;
+    Ptr<OutputStreamWrapper> stream = ascii.CreateFileStream("routing-table.txt");
+    Ipv4GlobalRoutingHelper::PrintRoutingTableAllAt(Seconds(0.5), stream);
+    std::vector<Ipv4Address> senderAddresses;
+    std::vector<Ipv4Address> receiverAddresses;
+
+    for (uint32_t i = 0; i<dumbbell->LeftCount();i++)
+    {
+        Ptr<Node> node = dumbbell->GetLeft(i);
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        senderAddresses.push_back(ipv4->GetAddress(1,0).GetLocal());
+    }
+    for (uint32_t i = 0; i<dumbbell->RightCount();i++)
+    {
+        Ptr<Node> node = dumbbell->GetRight(i);
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        receiverAddresses.push_back(ipv4->GetAddress(1,0).GetLocal());
+    }
+    return std::make_tuple(senderAddresses, receiverAddresses);
 }
 
 void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, uint32_t packetSize, uint32_t nPackets, double startTime, double stopTime) {
@@ -142,6 +168,25 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
         std::cout << "Sink received: " << sink1->GetTotalRx() << " bytes\n";
     });
 }
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupSingleFlow()
+{
+    // set up topology and simulate flows
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology();
+
+    uint32_t flowCnt = 0;
+    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
+    return result;
+}
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupMultipleFlows()
+{
+    // set up topology and simulate flows
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology();
+
+    uint32_t flowCnt = 0;
+    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
+    AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
+    return result;
+}
 
 int main(int argc, char* argv[]) {
     CommandLine cmd(__FILE__);
@@ -155,6 +200,10 @@ int main(int argc, char* argv[]) {
     uint32_t flowCnt = 0;
     AddTcpFlow(flowCnt++, 0, 1, "jumpstart", 1024, 1000, 2.0, 50.0);
     // AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
+   // std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupMultipleFlows();
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupSingleFlow();
+    std::vector<Ipv4Address> senderAddresses = std::get<0>(addresses);
+    std::vector<Ipv4Address> receiverAddresses =  std::get<1>(addresses);
 
     // set up flow monitor
     Ptr<FlowMonitor> flowMonitor;
@@ -172,20 +221,23 @@ int main(int argc, char* argv[]) {
     // print for debugging
     for (auto& flow : stats) {
         auto t = classifier->FindFlow(flow.first);
-        double throughput = (flow.second.rxBytes * 8.0 /
-            (flow.second.timeLastRxPacket.GetSeconds() -
-             flow.second.timeFirstTxPacket.GetSeconds()) / 1e6);
-        double fct = (flow.second.timeLastRxPacket - flow.second.timeFirstTxPacket).GetSeconds();
-        std::cout << "Flow " << flow.first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
-        std::cout << "  Tx Bytes:   " << flow.second.txBytes << "\n";
-        std::cout << "  Rx Bytes:   " << flow.second.rxBytes << "\n";
-        std::cout << "  Lost Packets: " << flow.second.lostPackets << "\n";
-        std::cout << "  Throughput: " << throughput << " Mbps\n";
-        std::cout << "Flow Completion Time: " << fct << "\n\n";
-        LogMetric("metrics", "fct.txt", "FCT for Flow " + std::to_string(flow.first) + " = " + std::to_string(fct));
-        sumThroughput += throughput;
-        sumSquaredThroughput += throughput * throughput;
-        flowCount++;
+        if (std::find(senderAddresses.begin(), senderAddresses.end(), t.sourceAddress) != senderAddresses.end())
+        {
+            double throughput = (flow.second.rxBytes * 8.0 /
+                (flow.second.timeLastRxPacket.GetSeconds() -
+                 flow.second.timeFirstTxPacket.GetSeconds()) / 1e6);
+            double fct = (flow.second.timeLastRxPacket - flow.second.timeFirstTxPacket).GetSeconds();
+            std::cout << "Flow " << std::to_string(flowCount + 1)<< " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+            std::cout << "  Tx Bytes:   " << flow.second.txBytes << "\n";
+            std::cout << "  Rx Bytes:   " << flow.second.rxBytes << "\n";
+            std::cout << "  Lost Packets: " << flow.second.lostPackets << "\n";
+            std::cout << "  Throughput: " << throughput << " Mbps\n";
+            std::cout << "Flow Completion Time: " << fct << "\n\n";
+            LogMetric("metrics", "fct.txt", "FCT for Flow " + std::to_string(flowCount + 1) + " = " + std::to_string(fct));
+            sumThroughput += throughput;
+            sumSquaredThroughput += throughput * throughput;
+            flowCount++;
+        }
     }
     double jfi = (sumThroughput * sumThroughput) / (flowCount * sumSquaredThroughput);
     std::cout << "Jain's Fairness Index: " << jfi << std::endl;
