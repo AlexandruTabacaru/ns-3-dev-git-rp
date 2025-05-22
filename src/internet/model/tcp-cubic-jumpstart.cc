@@ -171,6 +171,8 @@ void TcpCubicJumpstart::JumpStart(Ptr<TcpSocketState> tcb)
         tcb->m_cWnd = newCwnd;
     }
 
+    tcb->m_pacing = true;
+    tcb->m_paceInitialWindow = true;
     tcb->m_pacingRate = DataRate(tcb->m_cWnd * 8 / m_initialRtt.GetSeconds());
 
     tcb->m_ssThresh = tcb->m_cWnd;
