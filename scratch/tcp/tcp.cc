@@ -78,19 +78,22 @@ struct ThroughputMonitorState
     Ptr<PacketSink> m_sink;
     bool m_active; 
     uint32_t m_flowId;
+    uint32_t m_expectedRxBytes;
 
     ThroughputMonitorState(Ptr<PacketSink> sink,
                            Ptr<OutputStreamWrapper> stream,
                            double interval,
                            double startTime,
-                           uint32_t flowId)
-        : m_stream(stream),
-          m_intervalSeconds(interval),
-          m_lastTimeSeconds(startTime),
-          m_lastRxBytes(0),
-          m_sink(sink),
-          m_active(true),
-          m_flowId(flowId)
+                           uint32_t flowId,
+                           uint32_t expectedRxBytes)
+        :   m_stream(stream),
+            m_intervalSeconds(interval),
+            m_lastTimeSeconds(startTime),
+            m_lastRxBytes(0),
+            m_sink(sink),
+            m_active(true),
+            m_flowId(flowId),
+            m_expectedRxBytes(expectedRxBytes)
     {
 
     }
@@ -138,6 +141,13 @@ PeriodicThroughputLogger(ThroughputMonitorState* state) // Takes a raw pointer
     state->m_lastTimeSeconds = currentTimeSeconds;
     state->m_lastRxBytes = currentRxBytes;
 
+    if (currentRxBytes >= state->m_expectedRxBytes)
+    {
+        state->m_active = false; // stop future logging
+        delete state;
+        return;
+    }
+
     // Reschedule ONLY if still active AND simulation is not finished
     if (state->m_active && !Simulator::IsFinished()) // Check m_active again before rescheduling
     {
@@ -162,6 +172,7 @@ std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupDumbbellTopol
     PointToPointHelper bottleneckLink;
     bottleneckLink.SetDeviceAttribute("DataRate", StringValue("10Mbps"));
     bottleneckLink.SetChannelAttribute("Delay", StringValue("20ms"));
+    bottleneckLink.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("1000p"));
 
     dumbbell = new PointToPointDumbbellHelper(
         nLeaf, accessLink,
@@ -256,7 +267,7 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     double monitoringInterval = 0.01;
     
     ThroughputMonitorState* monitorStateRaw = 
-        new ThroughputMonitorState(packetSink, throughputStream, monitoringInterval, startTime, flowIndex);
+        new ThroughputMonitorState(packetSink, throughputStream, monitoringInterval, startTime, flowIndex, packetSize * nPackets);
 
     if (stopTime > startTime) 
     {
