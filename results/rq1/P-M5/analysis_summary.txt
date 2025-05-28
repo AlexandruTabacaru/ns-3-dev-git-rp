@@ -1,0 +1,26 @@
+Experiment Analysis Summary - P-M5
+=========================
+
+Interface Rate Statistics (Mbps):
+  Mean: 75.74
+  Std:  14.26
+  Min:  39.96
+  Max:  97.19
+  P95:  96.15
+  P99:  97.07
+
+Goodput Statistics (Mbps):
+  Mean: 75.70
+  Std:  14.22
+  Min:  39.50
+  Max:  96.49
+  P95:  95.92
+  P99:  96.38
+
+Queueing Delay Statistics (ms):
+  Mean: 0.098
+  Std:  0.368
+  Min:  0.000
+  Max:  4.000
+  P95:  0.748
+  P99:  1.841

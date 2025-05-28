@@ -1,0 +1,26 @@
+Experiment Analysis Summary - C-M0
+=========================
+
+Interface Rate Statistics (Mbps):
+  Mean: 96.40
+  Std:  1.74
+  Min:  81.44
+  Max:  101.24
+  P95:  96.84
+  P99:  96.97
+
+Goodput Statistics (Mbps):
+  Mean: 96.40
+  Std:  0.05
+  Min:  96.38
+  Max:  96.49
+  P95:  96.49
+  P99:  96.49
+
+Queueing Delay Statistics (ms):
+  Mean: 1.725
+  Std:  1.894
+  Min:  0.000
+  Max:  5.157
+  P95:  4.896
+  P99:  5.037

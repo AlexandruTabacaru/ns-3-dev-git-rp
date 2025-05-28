@@ -49,7 +49,7 @@ run_experiment() {
 
 # Run all experiments from the matrix
 # Prague experiments
-run_experiment "P-M0" "Prague" 10 0
+#run_experiment "P-M0" "Prague" 10 0
 run_experiment "P-M1" "Prague" 10 1
 run_experiment "P-M5" "Prague" 10 5
 run_experiment "P-H0" "Prague" 40 0

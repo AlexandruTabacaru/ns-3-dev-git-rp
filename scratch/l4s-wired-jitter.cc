@@ -34,7 +34,7 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/stats.h"
 #include "ns3/traffic-control-module.h"
-
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 
@@ -54,7 +54,12 @@ void TraceCSojourn(Time sojourn);
 
 // Add jitter-related variables
 double g_jitterUs = 0.0;  // Jitter in microseconds
+static double                 g_currentOffsetUs = 0.0;          // running jitter offset (µs)
+static double                 g_maxStepUs       = 0.0;          // max |step| per update (µs)
+static Time                   g_jitterPeriod    = MilliSeconds(10); // update every 10 ms
+static Ptr<UniformRandomVariable> g_stepRng;                    // generates ±step
 Ptr<UniformRandomVariable> g_jitterRng;
+Time g_wanBaseDelay = MilliSeconds(0);  // Base delay for the server->R1 link
 
 // Add throughput tracking variables
 uint32_t g_pragueData = 0;
@@ -162,24 +167,34 @@ void TraceCubicSinkRxPeriodic();
 void TraceBbrSinkRxPeriodic();
 
 // Function to update channel delay with jitter
-void UpdateChannelDelay(Ptr<PointToPointChannel> channel)
+void
+UpdateChannelDelay (Ptr<PointToPointChannel> ch)
 {
-    if (g_jitterUs > 0)
-    {
-        // Get nominal delay (50us for bottleneck)
-        static const Time nominal = MicroSeconds(50);
-        
-        // Add jitter to nominal delay
-        double jitter = g_jitterRng->GetValue(-g_jitterUs, g_jitterUs);
-        Time newDelay = nominal + MicroSeconds(jitter);
+    // No jitter requested → keep static delay and bail out
+    if (g_jitterUs <= 0.0)
+        return;
 
-        if (newDelay < Time(0))      // avoid negative delays
-            newDelay = Time(0);
+    /* ---- bounded random-walk update of g_currentOffsetUs ---------------- */
+    double step = g_stepRng->GetValue ();                   // ± step  (µs)
+    double newOffset = g_currentOffsetUs + step;
 
-        channel->SetAttribute("Delay", TimeValue(newDelay));
-    }
-    // Schedule next update less frequently (every 1ms instead of 100μs)
-    Simulator::Schedule(MilliSeconds(1), &UpdateChannelDelay, channel);
+    // Reflect at the ± jitter amplitude boundaries
+    if (newOffset >  g_jitterUs)  newOffset =  g_jitterUs;
+    if (newOffset < -g_jitterUs)  newOffset = -g_jitterUs;
+
+    g_currentOffsetUs = newOffset;
+
+    /* ---- apply the new one-way propagation delay ------------------------ */
+    Time newDelay = g_wanBaseDelay + MicroSeconds (g_currentOffsetUs);
+
+    // Never go below 1 µs for safety
+    if (newDelay < MicroSeconds (1))
+        newDelay = MicroSeconds (1);
+
+    ch->SetAttribute ("Delay", TimeValue (newDelay));
+
+    /* ---- reschedule next update ---------------------------------------- */
+    Simulator::Schedule (g_jitterPeriod, &UpdateChannelDelay, ch);
 }
 
 int
@@ -199,22 +214,24 @@ main(int argc, char* argv[])
     bool useReno = false;
     bool showProgress = false;
     bool enablePcapAll = false;
-    bool enablePcap = true;
-    bool enableDualPI2 = true;         // Enable DualPI2 by default
+    bool enablePcap = false;            // Disabled by default
+    bool enableDualPI2 = true;          // Enable DualPI2 by default
     std::string lossSequence = "";
     std::string lossBurst = "";
     std::string testName = "";
-    uint32_t rngRun = 1;               // Random number generator run number
-    uint32_t numBbr = 1;  // Add BBR flow count
-    uint32_t sndBufSize = 0;           // 0 means auto-calculate based on BDP
-    uint32_t rcvBufSize = 0;           // 0 means auto-calculate based on BDP
+    uint32_t rngRun = 1;                // Random number generator run number
+    uint32_t numBbr = 0;                // No BBR flows by default
+    uint32_t sndBufSize = 0;            // 0 means auto-calculate based on BDP
+    uint32_t rcvBufSize = 0;            // 0 means auto-calculate based on BDP
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1448));
-    // Enable pacing for Cubic
+    // Enable pacing for all TCP variants
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
+    // Enable ECN globally
+    Config::SetDefault("ns3::TcpSocketBase::UseEcn", StringValue("On"));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
     Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
@@ -244,6 +261,9 @@ main(int argc, char* argv[])
     cmd.AddValue("sndBufSize", "TCP send buffer size in bytes (0 for auto-calculate)", sndBufSize);
     cmd.AddValue("rcvBufSize", "TCP receive buffer size in bytes (0 for auto-calculate)", rcvBufSize);
     cmd.Parse(argc, argv);
+
+    // Store the configured one-way base delay for the jitter callback
+    g_wanBaseDelay = wanLinkDelay;
 
     // Calculate buffer sizes based on BDP if not specified
     if (sndBufSize == 0 || rcvBufSize == 0) {
@@ -282,6 +302,17 @@ main(int argc, char* argv[])
     g_jitterRng->SetAttribute("Max", DoubleValue(g_jitterUs));
     g_jitterRng->SetStream(rngRun);
 
+    if (g_jitterUs > 0.0)
+{
+    // step size = 10 % of total amplitude   (≥ 1 µs)
+    g_maxStepUs = std::max (1.0, 0.10 * g_jitterUs);
+
+    g_stepRng = CreateObject<UniformRandomVariable> ();
+    g_stepRng->SetAttribute ("Min", DoubleValue (-g_maxStepUs));
+    g_stepRng->SetAttribute ("Max", DoubleValue (  g_maxStepUs));
+    g_stepRng->SetStream (rngRun + 99);          // different stream from g_jitterRng
+}
+    
     // Create the nodes and use containers for further configuration below
     NodeContainer serverNode;
     serverNode.Create(1);
@@ -292,7 +323,7 @@ main(int argc, char* argv[])
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
-    pointToPoint.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("2p"));
+    pointToPoint.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("100p"));
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), routerNodes.Get(0));
@@ -337,11 +368,11 @@ main(int argc, char* argv[])
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer clientDevices = pointToPoint.Install(routerNodes.Get(1), clientNodes.Get(0));
 
-    // Set up jitter updates only for the bottleneck link
-    Ptr<PointToPointChannel> bottleneckCh = 
-        routerDevices.Get(0)->GetChannel()->GetObject<PointToPointChannel>();
-    if (bottleneckCh) {
-        Simulator::ScheduleNow(&UpdateChannelDelay, bottleneckCh);
+    // Set up jitter updates for the server->R1 link instead of bottleneck
+    Ptr<PointToPointChannel> serverLink = 
+        wanDevices.Get(0)->GetChannel()->GetObject<PointToPointChannel>();
+    if (serverLink) {
+        Simulator::ScheduleNow (&UpdateChannelDelay, serverLink);
     }
 
     // Internet and Linux stack installation

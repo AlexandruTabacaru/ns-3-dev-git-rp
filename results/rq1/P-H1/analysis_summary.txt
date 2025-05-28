@@ -1,0 +1,26 @@
+Experiment Analysis Summary - P-H1
+=========================
+
+Interface Rate Statistics (Mbps):
+  Mean: 90.50
+  Std:  8.78
+  Min:  64.29
+  Max:  97.31
+  P95:  96.73
+  P99:  96.96
+
+Goodput Statistics (Mbps):
+  Mean: 90.53
+  Std:  8.73
+  Min:  64.52
+  Max:  96.49
+  P95:  96.49
+  P99:  96.49
+
+Queueing Delay Statistics (ms):
+  Mean: 0.131
+  Std:  0.275
+  Min:  0.000
+  Max:  1.779
+  P95:  0.805
+  P99:  1.132

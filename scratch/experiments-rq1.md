@@ -49,8 +49,10 @@ Each run is a single, long-lived bulk transfer (unlimited bytes) on a 100 Mbps b
     - `EnableSeqTsSizeHeader`: true
 
 - **RTT jitter injection**  
-  - `UniformRandomVariable` over ±`jitterUs` on bottleneck link only
-  - `UpdateChannelDelay(...)` scheduled every 1 ms
+  - Jitter applied **only on the Server → R1 link** (the 10 ms / 40 ms leg that dominates RTT).  
+  - Delay offset follows a bounded random walk with step = 10 % of the amplitude.  
+  - Amplitude set via `--jitterUs` (micro-seconds); the wrapper script converts the *ms* values in the table to *µs* (`jitter_us = jitter_ms × 1000`).  
+  - `UpdateChannelDelay()` reschedules every **10 ms**.
 
 - **Simulation**  
   - `Duration`: 60 s  
