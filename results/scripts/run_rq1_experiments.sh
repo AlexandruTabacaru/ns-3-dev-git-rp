@@ -27,7 +27,7 @@ run_experiment() {
     jitter_us=$((jitter * 1000))
     
     # Run the simulation with explicit duration and unlimited bytes
-    ./ns3 run "l4s-wired-jitter --numPrague=$num_prague --numCubic=$num_cubic --numBbr=0 --wanLinkDelay=${base_delay}ms --jitterUs=$jitter_us --duration=60 --testName=$test_id --enableDualPI2=$enable_dualpi2 --showProgress=true --rngRun=1"
+    ./ns3 run "l4s-wired-jitter --numPrague=$num_prague --numCubic=$num_cubic --wanLinkDelay=${base_delay}ms --jitterUs=$jitter_us --duration=60 --testName=$test_id --enableDualPI2=$enable_dualpi2 --showProgress=true --rngRun=1"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then
@@ -49,17 +49,23 @@ run_experiment() {
 
 # Run all experiments from the matrix
 # Prague experiments
-#run_experiment "P-M0" "Prague" 10 0
-run_experiment "P-M1" "Prague" 10 1
-run_experiment "P-M5" "Prague" 10 5
+run_experiment "P-L0" "Prague" 10 0
+run_experiment "P-L1" "Prague" 10 1
+run_experiment "P-L5" "Prague" 10 5
+run_experiment "P-M0" "Prague" 20 0
+run_experiment "P-M1" "Prague" 20 1
+run_experiment "P-M5" "Prague" 20 5
 run_experiment "P-H0" "Prague" 40 0
 run_experiment "P-H1" "Prague" 40 1
 run_experiment "P-H5" "Prague" 40 5
 
-# Cubic experiments
-run_experiment "C-M0" "Cubic" 10 0
-run_experiment "C-M1" "Cubic" 10 1
-run_experiment "C-M5" "Cubic" 10 5
+#Cubic experiments
+run_experiment "C-L0" "Cubic" 10 0
+run_experiment "C-L1" "Cubic" 10 1
+run_experiment "C-L5" "Cubic" 10 5
+run_experiment "C-M0" "Cubic" 20 0
+run_experiment "C-M1" "Cubic" 20 1
+run_experiment "C-M5" "Cubic" 20 5
 run_experiment "C-H0" "Cubic" 40 0
 run_experiment "C-H1" "Cubic" 40 1
 run_experiment "C-H5" "Cubic" 40 5

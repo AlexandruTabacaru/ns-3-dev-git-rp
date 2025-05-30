@@ -34,9 +34,31 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/stats.h"
 #include "ns3/traffic-control-module.h"
+#include "ns3/drop-tail-queue.h"
+#include "ns3/packet.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+
+namespace ns3 {
+
+static void
+DropTailEnqueueTrace (Ptr<const Packet> p)
+{
+  std::cout << ">>> DT Enqueue @ "
+            << Simulator::Now().GetSeconds() << "s  "
+            << "pkt=" << p->GetSize() << "B\n";
+}
+
+static void
+DropTailDropTrace (Ptr<const Packet> p)
+{
+  std::cout << ">>> DT   Drop @ "
+            << Simulator::Now().GetSeconds() << "s  "
+            << "pkt=" << p->GetSize() << "B\n";
+}
+
+}
 
 using namespace ns3;
 
@@ -51,6 +73,8 @@ std::ofstream g_fileLSojourn;
 void TraceLSojourn(Time sojourn);
 std::ofstream g_fileCSojourn;
 void TraceCSojourn(Time sojourn);
+std::ofstream g_fileBytesInFqCoDelQueue;
+void TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal);
 
 // Add jitter-related variables
 double g_jitterUs = 0.0;  // Jitter in microseconds
@@ -124,47 +148,29 @@ void ConfigureCubicSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
 MinMaxAvgTotalCalculator<uint32_t> pragueThroughputCalculator; // units of Mbps
 MinMaxAvgTotalCalculator<uint32_t> cubicThroughputCalculator;  // units of Mbps
 
-// Add BBR-related variables
-uint32_t g_bbrData = 0;
-Time g_lastSeenBbr = Seconds(0);
-std::ofstream g_fileBbrThroughput;
-std::ofstream g_fileBbrCwnd;
-std::ofstream g_fileBbrSsthresh;
-std::ofstream g_fileBbrSendInterval;
-std::ofstream g_fileBbrPacingRate;
-std::ofstream g_fileBbrCongState;
-std::ofstream g_fileBbrRtt;
-Time g_bbrThroughputInterval = MilliSeconds(100);
-void TraceBbrThroughput();
-void TraceBbrTx(Ptr<const Packet> packet,
-                const TcpHeader& header,
-                Ptr<const TcpSocketBase> socket);
-void TraceBbrCwnd(uint32_t oldVal, uint32_t newVal);
-void TraceBbrSsthresh(uint32_t oldVal, uint32_t newVal);
-void TraceBbrPacingRate(DataRate oldVal, DataRate newVal);
-void TraceBbrCongState(TcpSocketState::TcpCongState_t oldVal,
-                       TcpSocketState::TcpCongState_t newVal);
-void TraceBbrRtt(Time oldVal, Time newVal);
-void TraceBbrSocket(Ptr<Application>, uint32_t);
-void ConfigureBbrSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2);
-
-// Add BBR throughput calculator
-MinMaxAvgTotalCalculator<uint32_t> bbrThroughputCalculator;  // units of Mbps
-
 // Add sink RX tracing variables
 std::ofstream g_filePragueSinkRx;
 std::ofstream g_fileCubicSinkRx;
-std::ofstream g_fileBbrSinkRx;
 Time g_sinkRxInterval = MilliSeconds(100);
 uint32_t g_pragueSinkRx = 0;
 uint32_t g_cubicSinkRx = 0;
-uint32_t g_bbrSinkRx = 0;
 void TracePragueSinkRx(Ptr<const Packet> packet, const Address& from);
 void TraceCubicSinkRx(Ptr<const Packet> packet, const Address& from);
-void TraceBbrSinkRx(Ptr<const Packet> packet, const Address& from);
 void TracePragueSinkRxPeriodic();
 void TraceCubicSinkRxPeriodic();
-void TraceBbrSinkRxPeriodic();
+
+void TraceDualPi2Drop(Ptr<const QueueDiscItem> item)
+{
+    std::cout << "DualPI2 DROP  " << Simulator::Now().GetSeconds()
+              << "  " << item->GetSize() << " B\n";
+}
+
+void TraceWanDrop(Ptr<const Packet> pkt)
+{
+    std::cout << "WAN DROP   " << Simulator::Now().GetSeconds()
+              << "  " << pkt->GetSize() << " B\n";
+}
+
 
 // Function to update channel delay with jitter
 void
@@ -220,7 +226,6 @@ main(int argc, char* argv[])
     std::string lossBurst = "";
     std::string testName = "";
     uint32_t rngRun = 1;                // Random number generator run number
-    uint32_t numBbr = 0;                // No BBR flows by default
     uint32_t sndBufSize = 0;            // 0 means auto-calculate based on BDP
     uint32_t rcvBufSize = 0;            // 0 means auto-calculate based on BDP
 
@@ -257,7 +262,6 @@ main(int argc, char* argv[])
     cmd.AddValue("jitterUs", "RTT jitter in microseconds (uniform distribution)", g_jitterUs);
     cmd.AddValue("rngRun", "Random number generator run number", rngRun);
     cmd.AddValue("enableDualPI2", "Enable DualPI2 queue disc (L4S mode)", enableDualPI2);
-    cmd.AddValue("numBbr", "Number of foreground BBR flows", numBbr);
     cmd.AddValue("sndBufSize", "TCP send buffer size in bytes (0 for auto-calculate)", sndBufSize);
     cmd.AddValue("rcvBufSize", "TCP receive buffer size in bytes (0 for auto-calculate)", rcvBufSize);
     cmd.Parse(argc, argv);
@@ -280,7 +284,7 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(sndBufSize));
     Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(rcvBufSize));
 
-    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0 && numBbr == 0,
+    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
                     "Error: configure at least one foreground flow");
     NS_ABORT_MSG_IF(numBackground > 0, "Background flows not yet supported");
 
@@ -323,11 +327,28 @@ main(int argc, char* argv[])
 
     // Create point-to-point links between server and AP
     PointToPointHelper pointToPoint;
-    pointToPoint.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("100p"));
+    pointToPoint.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("1p"));
     pointToPoint.SetDeviceAttribute("DataRate", StringValue("2Gbps"));
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), routerNodes.Get(0));
 
+    // 1) Trace the DropTail right on the device queue:
+    Ptr<PointToPointNetDevice> serverDev =
+  DynamicCast<PointToPointNetDevice>(wanDevices.Get(0));
+Ptr<DropTailQueue<Packet>> dtq =
+  serverDev->GetQueue()->GetObject<DropTailQueue<Packet>>();
+if (dtq)
+{
+//   dtq->TraceConnectWithoutContext(
+//           "Enqueue",
+//           MakeCallback(&DropTailEnqueueTrace));
+      dtq->TraceConnectWithoutContext(
+          "Drop",
+          MakeCallback(&DropTailDropTrace));
+}
+    wanDevices.Get(0)                             // server side NIC
+    ->TraceConnectWithoutContext("PhyTxDrop", // or "PhyRxDrop"
+        MakeCallback(&TraceWanDrop));
     pointToPoint.SetDeviceAttribute("DataRate", DataRateValue(bottleneckRate));
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
@@ -449,31 +470,6 @@ main(int argc, char* argv[])
         Simulator::Schedule(Seconds(1.05) - TimeStep(1), MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolClient));
     }
 
-    // Application configuration for BBR flows under test
-    port = 300;
-    ApplicationContainer bbrServerApps;
-    ApplicationContainer bbrClientApps;
-    Time bbrStartOffset = MilliSeconds(50) / (numBbr + 1);
-    for (auto i = 0U; i < numBbr; i++)
-    {
-        BulkSendHelper bulkBbr("ns3::TcpSocketFactory",
-                              InetSocketAddress(clientInterfaces.GetAddress(1), port + i));
-        bulkBbr.SetAttribute("MaxBytes", UintegerValue(numBytes));
-        bulkBbr.SetAttribute("StartTime", TimeValue(Seconds(1.1) + i * bbrStartOffset));
-        bbrServerApps.Add(bulkBbr.Install(serverNode.Get(0)));
-        NS_LOG_DEBUG("Creating BBR foreground flow " << i);
-        PacketSinkHelper sinkBbr =
-            PacketSinkHelper("ns3::TcpSocketFactory",
-                            InetSocketAddress(Ipv4Address::GetAny(), port + i));
-        sinkBbr.SetAttribute("StartTime", TimeValue(Seconds(1.1) + i * bbrStartOffset));
-        bbrClientApps.Add(sinkBbr.Install(clientNodes.Get(0)));
-        g_flowsToClose++;
-        Simulator::Schedule(Seconds(1.1) - TimeStep(1),
-                           MakeBoundCallback(&ConfigureBbrSockets,
-                                           tcpL4ProtocolServer,
-                                           tcpL4ProtocolClient));
-    }
-
     // PCAP traces
     if (enablePcapAll)
     {
@@ -558,41 +554,6 @@ main(int argc, char* argv[])
         }
     }
 
-    // Set up BBR tracing
-    if (bbrClientApps.GetN())
-    {
-        std::string traceName = "bbr-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrThroughput.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrCwnd.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrSsthresh.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-send-interval." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrSendInterval.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-pacing-rate." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrPacingRate.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-cong-state." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrCongState.open(traceName.c_str(), std::ofstream::out);
-        traceName = "bbr-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBbrRtt.open(traceName.c_str(), std::ofstream::out);
-    }
-
-    for (auto i = 0U; i < bbrClientApps.GetN(); i++)
-    {
-        Simulator::Schedule(Seconds(1.1) + i * MilliSeconds(10) + TimeStep(1),
-                           MakeBoundCallback(&TraceBbrSocket, bbrServerApps.Get(i), i));
-        std::ostringstream oss;
-        oss << "BBR:" << i;
-        NS_LOG_DEBUG("Setting up callbacks on BBR sockets " << i << " " << bbrClientApps.Get(i));
-        bbrClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect("PeerClose",
-                                                                   oss.str(),
-                                                                   MakeCallback(&HandlePeerClose));
-        bbrClientApps.Get(i)->GetObject<PacketSink>()->TraceConnect("PeerError",
-                                                                   oss.str(),
-                                                                   MakeCallback(&HandlePeerError));
-        bbrClientApps.Get(i)->GetObject<PacketSink>()->TraceConnectWithoutContext("Rx", MakeCallback(&TraceBbrSinkRx));
-    }
-
     // Trace bytes in DualPi2 queue
     Ptr<DualPi2QueueDisc> dualPi2 = 
         enableDualPI2 ? routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>()
@@ -603,6 +564,8 @@ main(int argc, char* argv[])
 
     if (dualPi2)        // only connect traces when the queue actually exists
     {
+        dualPi2->TraceConnectWithoutContext("Drop",
+        MakeCallback(&TraceDualPi2Drop));
         std::string traceName = "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
@@ -615,9 +578,21 @@ main(int argc, char* argv[])
     }
     else if (fqcodel)   // connect traces for FqCoDel queue
     {
-        std::string traceName = "wired-fqcodel-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+        std::string traceName = "wired-fqcodel-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileBytesInFqCoDelQueue.open(traceName.c_str(), std::ofstream::out);
+        fqcodel->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInFqCoDelQueue));
+        
+        traceName = "wired-fqcodel-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
-        fqcodel->TraceConnectWithoutContext("SojournTime", MakeCallback(&TraceLSojourn));
+        fqcodel->TraceConnectWithoutContext("SojournTime",
+                                        MakeCallback(&TraceLSojourn));
+        // Back-compat: some ns-3 versions still call it "Sojourn"
+        fqcodel->TraceConnectWithoutContext("Sojourn",
+                                            MakeCallback(&TraceLSojourn));
+    
+        // Optional debug to stdout so you see it's hooked
+        std::cout << "*** FqCoDel Sojourn trace hooked at "
+              << Simulator::Now().GetSeconds() << "s\n";
     }
 
     if (duration > Seconds(0))
@@ -631,8 +606,7 @@ main(int argc, char* argv[])
         Simulator::Stop(Seconds(1000));
     }
 
-    std::cout << "Foreground flows: Cubic: " << numCubic << " Prague: " << numPrague
-              << " BBR: " << numBbr << std::endl;
+    std::cout << "Foreground flows: Cubic: " << numCubic << " Prague: " << numPrague << std::endl;
     std::cout << "Background flows: " << numBackground << std::endl;
     std::cout << "RTT jitter: ±" << g_jitterUs << " microseconds" << std::endl;
     std::cout << "Random seed: " << rngRun << std::endl;
@@ -665,7 +639,7 @@ main(int argc, char* argv[])
 
     if (stopReason == "fail-safe")
     {
-        std::cout << "** Expected " << numCubic + numPrague + numBbr << " flows to close, but "
+        std::cout << "** Expected " << numCubic + numPrague << " flows to close, but "
                   << g_flowsToClose << " are remaining" << std::endl
                   << std::endl;
     }
@@ -683,14 +657,9 @@ main(int argc, char* argv[])
                   << " max: " << pragueThroughputCalculator.getMax()
                   << " min: " << pragueThroughputCalculator.getMin() << std::endl;
     }
-    if (numBbr)
-    {
-        std::cout << "BBR throughput (Mbps) mean: " << bbrThroughputCalculator.getMean()
-                  << " max: " << bbrThroughputCalculator.getMax()
-                  << " min: " << bbrThroughputCalculator.getMin() << std::endl;
-    }
 
     g_fileBytesInDualPi2Queue.close();
+    g_fileBytesInFqCoDelQueue.close();
     g_fileLSojourn.close();
     g_fileCSojourn.close();
     g_filePragueThroughput.close();
@@ -708,16 +677,8 @@ main(int argc, char* argv[])
     g_fileCubicPacingRate.close();
     g_fileCubicCongState.close();
     g_fileCubicRtt.close();
-    g_fileBbrThroughput.close();
-    g_fileBbrCwnd.close();
-    g_fileBbrSsthresh.close();
-    g_fileBbrSendInterval.close();
-    g_fileBbrPacingRate.close();
-    g_fileBbrCongState.close();
-    g_fileBbrRtt.close();
     g_filePragueSinkRx.close();
     g_fileCubicSinkRx.close();
-    g_fileBbrSinkRx.close();
     Simulator::Destroy();
     return 0;
 }
@@ -914,79 +875,6 @@ void HandlePeerError(std::string context, Ptr<const Socket> socket)
     }
 }
 
-void ConfigureBbrSockets(Ptr<TcpL4Protocol> tcp1, Ptr<TcpL4Protocol> tcp2)
-{
-    tcp1->SetAttribute("SocketType", TypeIdValue(TcpBbr::GetTypeId()));
-    tcp2->SetAttribute("SocketType", TypeIdValue(TcpBbr::GetTypeId()));
-}
-
-void TraceBbrTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
-{
-    g_bbrData += packet->GetSize();
-    if (g_lastSeenBbr > Seconds(0))
-    {
-        g_fileBbrSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
-                             << (Now() - g_lastSeenBbr).GetSeconds() << std::endl;
-    }
-    g_lastSeenBbr = Now();
-}
-
-void TraceBbrThroughput()
-{
-    g_fileBbrThroughput << Now().GetSeconds() << " " << std::fixed
-                        << (g_bbrData * 8) / g_bbrThroughputInterval.GetSeconds() / 1e6
-                        << std::endl;
-    bbrThroughputCalculator.Update((g_bbrData * 8) / g_bbrThroughputInterval.GetSeconds() / 1e6);
-    Simulator::Schedule(g_bbrThroughputInterval, &TraceBbrThroughput);
-    g_bbrData = 0;
-}
-
-void TraceBbrCwnd(uint32_t oldVal, uint32_t newVal)
-{
-    g_fileBbrCwnd << Now().GetSeconds() << " " << newVal << std::endl;
-}
-
-void TraceBbrSsthresh(uint32_t oldVal, uint32_t newVal)
-{
-    g_fileBbrSsthresh << Now().GetSeconds() << " " << newVal << std::endl;
-}
-
-void TraceBbrPacingRate(DataRate oldVal, DataRate newVal)
-{
-    g_fileBbrPacingRate << Now().GetSeconds() << " " << newVal.GetBitRate() << std::endl;
-}
-
-void TraceBbrCongState(TcpSocketState::TcpCongState_t oldVal, TcpSocketState::TcpCongState_t newVal)
-{
-    g_fileBbrCongState << Now().GetSeconds() << " " << TcpSocketState::TcpCongStateName[newVal]
-                       << std::endl;
-}
-
-void TraceBbrRtt(Time oldVal, Time newVal)
-{
-    g_fileBbrRtt << Now().GetSeconds() << " " << newVal.GetMicroSeconds() / 1000.0 << std::endl;
-}
-
-void TraceBbrSocket(Ptr<Application> a, uint32_t i)
-{
-    Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
-    NS_ASSERT_MSG(bulk, "Application failed");
-    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
-    NS_ASSERT_MSG(s, "Socket downcast failed");
-    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
-    NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
-    tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TraceBbrTx));
-    if (i == 0)
-    {
-        tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TraceBbrCwnd));
-        tcp->TraceConnectWithoutContext("SlowStartThreshold", MakeCallback(&TraceBbrSsthresh));
-        tcp->TraceConnectWithoutContext("PacingRate", MakeCallback(&TraceBbrPacingRate));
-        tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceBbrCongState));
-        tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TraceBbrRtt));
-        Simulator::Schedule(g_bbrThroughputInterval, &TraceBbrThroughput);
-    }
-}
-
 void TracePragueSinkRx(Ptr<const Packet> packet, const Address& from)
 {
     g_pragueSinkRx += packet->GetSize();
@@ -995,11 +883,6 @@ void TracePragueSinkRx(Ptr<const Packet> packet, const Address& from)
 void TraceCubicSinkRx(Ptr<const Packet> packet, const Address& from)
 {
     g_cubicSinkRx += packet->GetSize();
-}
-
-void TraceBbrSinkRx(Ptr<const Packet> packet, const Address& from)
-{
-    g_bbrSinkRx += packet->GetSize();
 }
 
 void TracePragueSinkRxPeriodic()
@@ -1014,8 +897,7 @@ void TraceCubicSinkRxPeriodic()
     Simulator::Schedule(g_sinkRxInterval, &TraceCubicSinkRxPeriodic);
 }
 
-void TraceBbrSinkRxPeriodic()
+void TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal)
 {
-    g_fileBbrSinkRx << Now().GetSeconds() << " " << g_bbrSinkRx << std::endl;
-    Simulator::Schedule(g_sinkRxInterval, &TraceBbrSinkRxPeriodic);
+    g_fileBytesInFqCoDelQueue << Now().GetSeconds() << " " << newVal << std::endl;
 } 

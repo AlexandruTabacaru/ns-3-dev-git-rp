@@ -144,7 +144,7 @@ main(int argc, char* argv[])
     uint32_t numBackground = 0;
     uint32_t numBytes = 0;             // default to unlimited transfer
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
-    Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
+    Time wanLinkDelay = MilliSeconds(20); // base RTT is 40ms
     DataRate initRate = DataRate("100Mbps"); // Initial bottleneck rate
     DataRate stepRate = DataRate("25Mbps");  // Rate to change to at t=10s
     bool useReno = false;
@@ -154,6 +154,7 @@ main(int argc, char* argv[])
     std::string lossSequence = "";
     std::string lossBurst = "";
     std::string testName = "";
+    uint32_t rngRun = 1;
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -188,7 +189,10 @@ main(int argc, char* argv[])
                  "Whether to enable PCAP trace output at all interfaces",
                  enablePcapAll);
     cmd.AddValue("enablePcap", "Whether to enable PCAP trace output only at endpoints", enablePcap);
+    cmd.AddValue ("rngRun", "RNG run number", rngRun);
+
     cmd.Parse(argc, argv);
+    RngSeedManager::SetRun (rngRun);
 
     NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
                     "Error: configure at least one foreground flow");
@@ -229,11 +233,12 @@ main(int argc, char* argv[])
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
 
     // Schedule rate change at t=10s for RQ2 experiments
-    Simulator::Schedule(Seconds(10), [=]() {
-        for (auto d : routerDevices) {
-            d->SetAttribute("DataRate", DataRateValue(stepRate));
-        }
+    Simulator::Schedule(Seconds(10), [&routerDevices, stepRate]() {
+    for (uint32_t i = 0; i < routerDevices.GetN(); ++i) {
+        routerDevices.Get(i)->SetAttribute("DataRate", DataRateValue(stepRate));
+    }
     });
+
 
     if (lossSequence != "")
     {
@@ -545,7 +550,6 @@ main(int argc, char* argv[])
     g_fileCubicSsthresh.close();
     g_fileCubicSendInterval.close();
     g_fileCubicPacingRate.close();
-    g_fileCubicCongState.close();
     g_fileCubicCongState.close();
     g_fileCubicRtt.close();
     Simulator::Destroy();
