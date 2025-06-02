@@ -1,0 +1,62 @@
+RQ1 Statistics Summary - C-M1
+==================================================
+
+Algorithm: Cubic
+Base RTT: 40ms RTT
+Jitter Level: 1ms
+Analysis Period: 5.0s - 55.0s
+
+THROUGHPUT Statistics:
+  mean: 91.30 Mbps
+  std: 6.11 Mbps
+  min: 72.17 Mbps
+  max: 96.96 Mbps
+  p95: 96.84 Mbps
+  p99: 96.96 Mbps
+
+GOODPUT Statistics:
+  mean: 91.31 Mbps
+  std: 5.96 Mbps
+  min: 71.59 Mbps
+  max: 96.49 Mbps
+  p95: 96.49 Mbps
+  p99: 96.49 Mbps
+
+EFFICIENCY Statistics:
+  mean: 1.000 (ratio)
+  std: 0.012 (ratio)
+  min: 0.950 (ratio)
+  max: 1.064 (ratio)
+
+QUEUE DELAY Statistics:
+  mean: 1.107 ms
+  std: 1.641 ms
+  min: 0.000 ms
+  max: 6.222 ms
+  p95: 4.564 ms
+  p99: 5.330 ms
+
+QUEUE BYTES Statistics:
+  mean: 14220 bytes
+  std: 20222 bytes
+  min: 0 bytes
+  max: 78000 bytes
+  p95: 57000 bytes
+  p99: 66000 bytes
+
+CWND Statistics:
+  mean: 457079 bytes
+  std: 47411 bytes
+  min: 369240 bytes
+  max: 554584 bytes
+  p95: 532647 bytes
+  p99: 547344 bytes
+
+RTT Statistics:
+  mean: 41.39 ms
+  std: 1.84 ms
+  min: 38.26 ms
+  max: 47.19 ms
+  p95: 44.81 ms
+  p99: 45.64 ms
+

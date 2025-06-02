@@ -284,6 +284,7 @@ main(int argc, char* argv[])
     Time txopLimit = MicroSeconds(2528);
     bool enableLogs = false;
     uint16_t rngRun = 1;
+    std::string testName = "";  // Add this line
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -349,6 +350,7 @@ main(int argc, char* argv[])
                  enableTraces);
     cmd.AddValue("enableLogs", "Whether to enable logs of DualPi2QueueDisc class", enableLogs);
     cmd.AddValue("rngRun", "Random Number Generator run number", rngRun);
+    cmd.AddValue("testName", "Test name", testName);  // Add this line
     cmd.Parse(argc, argv);
 
     if (limit < 65535)
@@ -699,10 +701,10 @@ main(int argc, char* argv[])
     wifi.AssignStreams(wifiDevices, 100);
 
     // schedule MCS changes, if configured above
-    // RQ2: Only change MCS once at t=10s
+    // RQ2: Only change MCS once at t=20s
     if (mcs != secondMcs) {
         uint32_t secondLimit = CalculateLimit(secondMcs, channelWidth, spatialStreams, txopLimit);
-        Simulator::Schedule(Seconds(10),
+        Simulator::Schedule(Seconds(20),
             &ChangeMcs,
             mcs,
             limit,
@@ -739,17 +741,21 @@ main(int argc, char* argv[])
     // PCAP traces
     if (enablePcapAll)
     {
-        pointToPoint.EnablePcapAll("l4s-wifi");
-        wifiPhy.EnablePcap("l4s-wifi", wifiDevices);
-        internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
+        std::string prefixName = "l4s-wifi" + ((testName != "") ? ("-" + testName) : "");
+        pointToPoint.EnablePcapAll(prefixName.c_str());
+        wifiPhy.EnablePcap(prefixName.c_str(), wifiDevices);
+        std::string ipPcapName = prefixName + "-2-0-ip.pcap";
+        internetStack.EnablePcapIpv4(ipPcapName.c_str(),
                                      staNode.Get(0)->GetObject<Ipv4>(),
                                      1,
                                      true);
     }
     else if (enablePcap)
     {
-        pointToPoint.EnablePcap("l4s-wifi", wanDevices.Get(0));
-        internetStack.EnablePcapIpv4("l4s-wifi-2-0-ip.pcap",
+        std::string prefixName = "l4s-wifi" + ((testName != "") ? ("-" + testName) : "");
+        pointToPoint.EnablePcap(prefixName.c_str(), wanDevices.Get(0));
+        std::string ipPcapName = prefixName + "-2-0-ip.pcap";
+        internetStack.EnablePcapIpv4(ipPcapName.c_str(),
                                      staNode.Get(0)->GetObject<Ipv4>(),
                                      1,
                                      true);
@@ -763,7 +769,8 @@ main(int argc, char* argv[])
     NS_ASSERT_MSG(apPhy, "Could not acquire pointer to AP's WifiPhy");
     if (enableTracesAll || enableTraces)
     {
-        g_fileBytesInAcBeQueue.open("wifi-queue-bytes.dat", std::ofstream::out);
+        std::string traceName = "wifi-queue-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileBytesInAcBeQueue.open(traceName.c_str(), std::ofstream::out);
         NS_ASSERT_MSG(apWifiMacQueue, "Could not acquire pointer to AC_BE WifiMacQueue on the AP");
         apWifiMacQueue->TraceConnectWithoutContext("BytesInQueue",
                                                    MakeCallback(&TraceBytesInAcBeQueue));
@@ -775,14 +782,18 @@ main(int argc, char* argv[])
                                  "background",
                                  MakeCallback(&TraceWifiPhyTxPsduBegin));
         }
-        g_fileWifiThroughput.open("wifi-throughput.dat", std::ofstream::out);
-        g_fileWifiFgThroughput.open("wifi-foreground-throughput.dat", std::ofstream::out);
-        g_fileWifiBgThroughput.open("wifi-background-throughput.dat", std::ofstream::out);
+        traceName = "wifi-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileWifiThroughput.open(traceName.c_str(), std::ofstream::out);
+        traceName = "wifi-foreground-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileWifiFgThroughput.open(traceName.c_str(), std::ofstream::out);
+        traceName = "wifi-background-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileWifiBgThroughput.open(traceName.c_str(), std::ofstream::out);
         Simulator::Schedule(g_wifiThroughputInterval, &TraceWifiThroughput);
     }
     if (enableTracesAll)
     {
-        g_fileWifiPhyTxPsduBegin.open("wifi-phy-tx-psdu-begin.dat", std::ofstream::out);
+        std::string traceName = "wifi-phy-tx-psdu-begin." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileWifiPhyTxPsduBegin.open(traceName.c_str(), std::ofstream::out);
     }
 
     // Throughput and latency for foreground flows, and set up close callbacks
@@ -790,19 +801,27 @@ main(int argc, char* argv[])
     {
         if (enableTracesAll || enableTraces)
         {
-            g_filePragueThroughput.open("prague-throughput.dat", std::ofstream::out);
-            g_filePragueThroughputPerStream.open("prague-throughput-per-stream.dat",
-                                                 std::ofstream::out);
-            g_filePragueCwnd.open("prague-cwnd.dat", std::ofstream::out);
-            g_filePragueRtt.open("prague-rtt.dat", std::ofstream::out);
+            std::string traceName = "prague-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueThroughput.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-throughput-per-stream." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueThroughputPerStream.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueCwnd.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueRtt.open(traceName.c_str(), std::ofstream::out);
         }
         if (enableTracesAll)
         {
-            g_filePragueSsthresh.open("prague-ssthresh.dat", std::ofstream::out);
-            g_filePragueSendInterval.open("prague-send-interval.dat", std::ofstream::out);
-            g_filePraguePacingRate.open("prague-pacing-rate.dat", std::ofstream::out);
-            g_filePragueCongState.open("prague-cong-state.dat", std::ofstream::out);
-            g_filePragueEcnState.open("prague-ecn-state.dat", std::ofstream::out);
+            std::string traceName = "prague-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueSsthresh.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-send-interval." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueSendInterval.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-pacing-rate." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePraguePacingRate.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-cong-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueCongState.open(traceName.c_str(), std::ofstream::out);
+            traceName = "prague-ecn-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_filePragueEcnState.open(traceName.c_str(), std::ofstream::out);
         }
     }
     for (auto i = 0U; i < pragueClientApps.GetN(); i++)
@@ -836,19 +855,27 @@ main(int argc, char* argv[])
     {
         if (enableTracesAll || enableTraces)
         {
-            g_fileCubicThroughput.open("cubic-throughput.dat", std::ofstream::out);
-            g_fileCubicThroughputPerStream.open("cubic-throughput-per-stream.dat",
-                                                std::ofstream::out);
-            g_fileCubicCwnd.open("cubic-cwnd.dat", std::ofstream::out);
-            g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+            std::string traceName = "cubic-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicThroughput.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-throughput-per-stream." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicThroughputPerStream.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicCwnd.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicRtt.open(traceName.c_str(), std::ofstream::out);
         }
         if (enableTracesAll)
         {
-            g_fileCubicSsthresh.open("cubic-ssthresh.dat", std::ofstream::out);
-            g_fileCubicSendInterval.open("cubic-send-interval.dat", std::ofstream::out);
-            g_fileCubicPacingRate.open("cubic-pacing-rate.dat", std::ofstream::out);
-            g_fileCubicCongState.open("cubic-cong-state.dat", std::ofstream::out);
-            g_fileCubicRtt.open("cubic-rtt.dat", std::ofstream::out);
+            std::string traceName = "cubic-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicSsthresh.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-send-interval." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicSendInterval.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-pacing-rate." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicPacingRate.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-cong-state." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicCongState.open(traceName.c_str(), std::ofstream::out);
+            traceName = "cubic-rtt." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCubicRtt.open(traceName.c_str(), std::ofstream::out);
         }
     }
     for (auto i = 0U; i < cubicClientApps.GetN(); i++)
@@ -887,18 +914,22 @@ main(int argc, char* argv[])
     NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
     if (enableTracesAll || enableTraces)
     {
-        g_fileBytesInDualPi2Queue.open("wifi-dualpi2-bytes.dat", std::ofstream::out);
+        std::string traceName = "wifi-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("BytesInQueue",
                                             MakeCallback(&TraceBytesInDualPi2Queue));
     }
     if (enableTracesAll)
     {
-        g_fileLSojourn.open("wifi-dualpi2-l-sojourn.dat", std::ofstream::out);
+        std::string traceName = "wifi-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
-        g_fileCSojourn.open("wifi-dualpi2-c-sojourn.dat", std::ofstream::out);
+        traceName = "wifi-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
         // Trace Probabilities
-        g_fileTraceProbChanges.open("wifi-dualpi2-TracedProbabilites.dat", std::ofstream::out);
+        traceName = "wifi-dualpi2-TracedProbabilites." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileTraceProbChanges.open(traceName.c_str(), std::ofstream::out);
         dualPi2->TraceConnectWithoutContext("ProbCL", MakeCallback(&TraceProbcL));
         dualPi2->TraceConnectWithoutContext("ProbL", MakeCallback(&TraceProbL));
         dualPi2->TraceConnectWithoutContext("ProbC", MakeCallback(&TraceProbC));

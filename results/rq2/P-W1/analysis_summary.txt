@@ -1,0 +1,28 @@
+Experiment Analysis Summary - P-W1
+=========================
+
+Throughput Statistics (Mbps):
+Before rate change:
+  Mean: 16.92
+  Std: 0.90
+  Min: 13.32
+  Max: 18.77
+
+After rate change:
+  Mean: 51.55
+  Std: 8.03
+  Min: 16.91
+  Max: 59.08
+
+Queue Delay Statistics (ms):
+Before rate change:
+  Mean: 0.953
+  Std: 1.576
+  Min: 0.000
+  Max: 13.608
+
+After rate change:
+  Mean: 0.600
+  Std: 1.211
+  Min: 0.000
+  Max: 9.621

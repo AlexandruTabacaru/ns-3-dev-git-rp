@@ -2,25 +2,25 @@ Experiment Analysis Summary - P-M1
 =========================
 
 Interface Rate Statistics (Mbps):
-  Mean: 96.30
-  Std:  0.70
-  Min:  89.89
-  Max:  97.54
-  P95:  97.07
-  P99:  97.31
+  Mean: 95.70
+  Std: 1.73
+  Min: 82.59
+  Max: 97.31
+  P95: 96.96
+  P99: 97.07
 
 Goodput Statistics (Mbps):
-  Mean: 96.30
-  Std:  0.36
-  Min:  91.05
-  Max:  96.49
-  P95:  96.49
-  P99:  96.49
+  Mean: 95.72
+  Std: 1.54
+  Min: 83.52
+  Max: 96.49
+  P95: 96.49
+  P99: 96.49
 
 Queueing Delay Statistics (ms):
-  Mean: 0.469
-  Std:  0.338
-  Min:  0.000
-  Max:  1.723
-  P95:  1.014
-  P99:  1.265
+  Mean: 0.296
+  Std: 0.344
+  Min: 0.000
+  Max: 1.610
+  P95: 0.970
+  P99: 1.218

@@ -1,0 +1,18 @@
+RQ2 Statistics Summary: C-W5
+==================================================
+
+Algorithm: Cubic
+Type: WiFi
+Scenario: MCS 4→7
+
+THROUGHPUT (Mbps)
+--------------------
+Before change: 36.50 ± 1.47
+After change:  58.84 ± 4.53
+Change: +22.34 Mbps (+61.2%)
+
+QUEUE DELAY (ms)
+----------------
+Before change: 9.854 ± 5.104
+After change:  4.679 ± 3.936
+Change: -5.176 ms (-52.5%)

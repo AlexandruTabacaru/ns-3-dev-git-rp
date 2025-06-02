@@ -22,7 +22,7 @@ run_wired_experiment() {
     fi
     
     # Run the simulation
-    ./ns3 run "l4s-wired-rq2 --numPrague=$num_prague --numCubic=$num_cubic --initRate=${init_rate}Mbps --stepRate=${step_rate}Mbps --wanLinkDelay=20ms --duration=30 --testName=$test_id --showProgress=true --rngRun=1"
+    ./ns3 run "l4s-wired-rq2 --numPrague=$num_prague --numCubic=$num_cubic --initRate=${init_rate}Mbps --stepRate=${step_rate}Mbps --wanLinkDelay=20ms --duration=40 --testName=$test_id --showProgress=true --rngRun=1"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then
@@ -61,7 +61,7 @@ run_wifi_experiment() {
     fi
     
     # Run the simulation
-    ./ns3 run "l4s-wifi-rq2 --numPrague=$num_prague --numCubic=$num_cubic --mcs=$mcs --secondMcs=$second_mcs --channelWidth=20 --spatialStreams=1 --wanLinkDelay=10ms --duration=30 --testName=$test_id --showProgress=true --rngRun=1"
+    ./ns3 run "l4s-wifi-rq2 --numPrague=$num_prague --numCubic=$num_cubic --mcs=$mcs --secondMcs=$second_mcs --channelWidth=20 --spatialStreams=1 --wanLinkDelay=10ms --duration=40 --testName=$test_id --showProgress=true --rngRun=1 --enableTracesAll=true"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then
@@ -90,8 +90,8 @@ run_wired_experiment "P-B2" "Prague" 100 25
 run_wired_experiment "C-B1" "Cubic" 25 100
 run_wired_experiment "C-B2" "Cubic" 100 25
 
-# Run WiFi experiments
-# Prague experiments
+#Run WiFi experiments
+#Prague experiments
 run_wifi_experiment "P-W1" "Prague" 2 7
 run_wifi_experiment "P-W2" "Prague" 7 2
 run_wifi_experiment "P-W3" "Prague" 4 9

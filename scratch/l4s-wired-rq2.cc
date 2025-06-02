@@ -80,6 +80,12 @@ std::ofstream g_filePraguePacingRate;
 std::ofstream g_filePragueCongState;
 std::ofstream g_filePragueEcnState;
 std::ofstream g_filePragueRtt;
+std::ofstream g_fileBytesInFqCoDelQueue;
+std::ofstream g_fileFqCoDelSojourn;
+
+// Add these function declarations with the others
+void TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal);
+void TraceFqCoDelSojourn(Time sojourn);
 Time g_pragueThroughputInterval = MilliSeconds(100);
 void TracePragueThroughput();
 void TracePragueTx(Ptr<const Packet> packet,
@@ -165,9 +171,10 @@ main(int argc, char* argv[])
     // Enable pacing for Cubic
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
+    // Enable ECN for both Prague and Cubic
+    Config::SetDefault("ns3::TcpSocketBase::UseEcn", StringValue("On"));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
-    Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
     // The bulk send application should do 1448-byte writes (one timestamp per TCP packet)
     Config::SetDefault("ns3::BulkSendApplication::SendSize", UintegerValue(1448));
 
@@ -232,8 +239,8 @@ main(int argc, char* argv[])
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
 
-    // Schedule rate change at t=10s for RQ2 experiments
-    Simulator::Schedule(Seconds(10), [&routerDevices, stepRate]() {
+    // Schedule rate change at t=20s for RQ2 experiments
+    Simulator::Schedule(Seconds(20), [&routerDevices, stepRate]() {
     for (uint32_t i = 0; i < routerDevices.GetN(); ++i) {
         routerDevices.Get(i)->SetAttribute("DataRate", DataRateValue(stepRate));
     }
@@ -461,18 +468,35 @@ main(int argc, char* argv[])
             MakeCallback(&HandlePeerError));
     }
 
-    // Trace bytes in DualPi2 queue
-    if (auto dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>()) {
-        std::string traceName =
-            "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
-        dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
-        traceName = "wired-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
-        dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
-        traceName = "wired-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
-        g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
-        dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+    // Trace queue metrics based on which queue type is being used
+    if (numPrague > 0) {
+        // DualPI2 tracing for Prague
+        if (auto dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>()) {
+            std::string traceName =
+                "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
+            dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
+            
+            traceName = "wired-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
+            dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
+            
+            traceName = "wired-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
+            dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+        }
+    } else {
+        // FqCoDel tracing for Cubic
+        if (auto fqCoDel = routerQueueDiscContainer.Get(0)->GetObject<FqCoDelQueueDisc>()) {
+            std::string traceName =
+                "wired-fqcodel-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileBytesInFqCoDelQueue.open(traceName.c_str(), std::ofstream::out);
+            fqCoDel->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInFqCoDelQueue));
+            
+            traceName = "wired-fqcodel-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+            g_fileFqCoDelSojourn.open(traceName.c_str(), std::ofstream::out);
+            fqCoDel->TraceConnectWithoutContext("SojournTime", MakeCallback(&TraceFqCoDelSojourn));
+        }
     }
 
     if (duration > Seconds(0))
@@ -552,6 +576,8 @@ main(int argc, char* argv[])
     g_fileCubicPacingRate.close();
     g_fileCubicCongState.close();
     g_fileCubicRtt.close();
+    g_fileBytesInFqCoDelQueue.close();
+    g_fileFqCoDelSojourn.close();
     Simulator::Destroy();
     return 0;
 }
@@ -769,4 +795,16 @@ HandlePeerError(std::string context, Ptr<const Socket> socket)
         // Close 1 second after last TCP flow closes
         Simulator::Stop(Seconds(1));
     }
+}
+
+void
+TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal)
+{
+    g_fileBytesInFqCoDelQueue << Now().GetSeconds() << " " << newVal << std::endl;
+}
+
+void
+TraceFqCoDelSojourn(Time sojourn)
+{
+    g_fileFqCoDelSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
 } 

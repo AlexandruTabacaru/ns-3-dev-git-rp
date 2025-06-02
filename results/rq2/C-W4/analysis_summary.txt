@@ -1,0 +1,28 @@
+Experiment Analysis Summary - C-W4
+=========================
+
+Throughput Statistics (Mbps):
+Before rate change:
+  Mean: 79.93
+  Std: 4.82
+  Min: 59.08
+  Max: 88.15
+
+After rate change:
+  Mean: 37.67
+  Std: 3.96
+  Min: 28.84
+  Max: 82.59
+
+Queue Delay Statistics (ms):
+Before rate change:
+  Mean: 3.752
+  Std: 3.272
+  Min: 0.000
+  Max: 17.566
+
+After rate change:
+  Mean: 10.002
+  Std: 5.491
+  Min: 0.000
+  Max: 45.073

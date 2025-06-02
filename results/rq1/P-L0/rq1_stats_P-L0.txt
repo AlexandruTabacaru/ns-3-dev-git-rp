@@ -1,0 +1,62 @@
+RQ1 Statistics Summary - P-L0
+==================================================
+
+Algorithm: Prague
+Base RTT: 20ms RTT
+Jitter Level: 0ms
+Analysis Period: 5.0s - 54.9s
+
+THROUGHPUT Statistics:
+  mean: 96.38 Mbps
+  std: 0.37 Mbps
+  min: 94.99 Mbps
+  max: 97.31 Mbps
+  p95: 96.96 Mbps
+  p99: 97.19 Mbps
+
+GOODPUT Statistics:
+  mean: 96.38 Mbps
+  std: 0.08 Mbps
+  min: 96.03 Mbps
+  max: 96.49 Mbps
+  p95: 96.49 Mbps
+  p99: 96.49 Mbps
+
+EFFICIENCY Statistics:
+  mean: 1.000 (ratio)
+  std: 0.002 (ratio)
+  min: 0.995 (ratio)
+  max: 1.007 (ratio)
+
+QUEUE DELAY Statistics:
+  mean: 0.643 ms
+  std: 0.237 ms
+  min: 0.000 ms
+  max: 1.175 ms
+  p95: 0.934 ms
+  p99: 1.053 ms
+
+QUEUE BYTES Statistics:
+  mean: 7952 bytes
+  std: 2947 bytes
+  min: 0 bytes
+  max: 15000 bytes
+  p95: 12000 bytes
+  p99: 13500 bytes
+
+CWND Statistics:
+  mean: 257829 bytes
+  std: 2041 bytes
+  min: 250504 bytes
+  max: 262088 bytes
+  p95: 260640 bytes
+  p99: 262088 bytes
+
+RTT Statistics:
+  mean: 21.25 ms
+  std: 0.33 ms
+  min: 20.20 ms
+  max: 24.84 ms
+  p95: 21.75 ms
+  p99: 22.25 ms
+

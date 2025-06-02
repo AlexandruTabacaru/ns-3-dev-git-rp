@@ -1,0 +1,62 @@
+RQ1 Statistics Summary - P-M5
+==================================================
+
+Algorithm: Prague
+Base RTT: 40ms RTT
+Jitter Level: 5ms
+Analysis Period: 5.0s - 54.9s
+
+THROUGHPUT Statistics:
+  mean: 77.81 Mbps
+  std: 12.91 Mbps
+  min: 43.44 Mbps
+  max: 97.54 Mbps
+  p95: 95.34 Mbps
+  p99: 97.08 Mbps
+
+GOODPUT Statistics:
+  mean: 77.76 Mbps
+  std: 12.96 Mbps
+  min: 39.73 Mbps
+  max: 96.49 Mbps
+  p95: 95.12 Mbps
+  p99: 96.27 Mbps
+
+EFFICIENCY Statistics:
+  mean: 0.999 (ratio)
+  std: 0.033 (ratio)
+  min: 0.653 (ratio)
+  max: 1.096 (ratio)
+
+QUEUE DELAY Statistics:
+  mean: 0.082 ms
+  std: 0.404 ms
+  min: 0.000 ms
+  max: 5.466 ms
+  p95: 0.372 ms
+  p99: 2.207 ms
+
+QUEUE BYTES Statistics:
+  mean: 1685 bytes
+  std: 4968 bytes
+  min: 0 bytes
+  max: 69000 bytes
+  p95: 4500 bytes
+  p99: 27000 bytes
+
+CWND Statistics:
+  mean: 387312 bytes
+  std: 72527 bytes
+  min: 190412 bytes
+  max: 559562 bytes
+  p95: 511778 bytes
+  p99: 547297 bytes
+
+RTT Statistics:
+  mean: 39.15 ms
+  std: 5.78 ms
+  min: 30.29 ms
+  max: 50.77 ms
+  p95: 48.72 ms
+  p99: 50.34 ms
+

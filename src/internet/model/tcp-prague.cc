@@ -52,7 +52,7 @@ TcpPrague::GetTypeId()
                           "Initial alpha value",
                           // GWhite testing 3/19/24
                           // DoubleValue(1.0),
-                          DoubleValue(0.0),
+                          DoubleValue(0.0625),
                           MakeDoubleAccessor(&TcpPrague::m_alpha),
                           MakeDoubleChecker<double>(0, 1))
             .AddAttribute("UseEct0",

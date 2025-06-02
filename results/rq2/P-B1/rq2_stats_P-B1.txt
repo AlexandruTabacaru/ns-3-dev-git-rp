@@ -1,0 +1,18 @@
+RQ2 Statistics Summary: P-B1
+==================================================
+
+Algorithm: Prague
+Type: Wired
+Scenario: 25→100 Mbps
+
+THROUGHPUT (Mbps)
+--------------------
+Before change: 23.86 ± 0.58
+After change:  71.21 ± 24.25
+Change: +47.35 Mbps (+198.5%)
+
+QUEUE DELAY (ms)
+----------------
+Before change: 0.336 ± 0.443
+After change:  0.209 ± 0.322
+Change: -0.127 ms (-37.8%)

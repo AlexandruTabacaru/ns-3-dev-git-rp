@@ -1,0 +1,28 @@
+Experiment Analysis Summary - C-W6
+=========================
+
+Throughput Statistics (Mbps):
+Before rate change:
+  Mean: 61.33
+  Std: 3.11
+  Min: 48.31
+  Max: 65.68
+
+After rate change:
+  Mean: 37.28
+  Std: 2.40
+  Min: 27.11
+  Max: 55.26
+
+Queue Delay Statistics (ms):
+Before rate change:
+  Mean: 5.509
+  Std: 3.870
+  Min: 0.000
+  Max: 20.058
+
+After rate change:
+  Mean: 9.322
+  Std: 4.976
+  Min: 0.000
+  Max: 36.302

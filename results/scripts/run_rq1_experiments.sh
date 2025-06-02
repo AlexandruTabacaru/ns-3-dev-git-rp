@@ -59,7 +59,7 @@ run_experiment "P-H0" "Prague" 40 0
 run_experiment "P-H1" "Prague" 40 1
 run_experiment "P-H5" "Prague" 40 5
 
-#Cubic experiments
+# Cubic experiments
 run_experiment "C-L0" "Cubic" 10 0
 run_experiment "C-L1" "Cubic" 10 1
 run_experiment "C-L5" "Cubic" 10 5
@@ -70,4 +70,5 @@ run_experiment "C-H0" "Cubic" 40 0
 run_experiment "C-H1" "Cubic" 40 1
 run_experiment "C-H5" "Cubic" 40 5
 
-echo "All experiments completed and analyzed!" 
+echo "All experiments completed!"
+echo "Now run: cd results/scripts && python analyze_rq1_enhanced.py" 

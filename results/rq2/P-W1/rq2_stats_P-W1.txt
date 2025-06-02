@@ -1,0 +1,18 @@
+RQ2 Statistics Summary: P-W1
+==================================================
+
+Algorithm: Prague
+Type: WiFi
+Scenario: MCS 2→7
+
+THROUGHPUT (Mbps)
+--------------------
+Before change: 16.92 ± 0.90
+After change:  51.59 ± 8.03
+Change: +34.68 Mbps (+205.0%)
+
+QUEUE DELAY (ms)
+----------------
+Before change: 0.953 ± 1.576
+After change:  0.600 ± 1.209
+Change: -0.353 ms (-37.0%)

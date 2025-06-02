@@ -2,25 +2,25 @@ Experiment Analysis Summary - C-H5
 =========================
 
 Interface Rate Statistics (Mbps):
-  Mean: 59.28
-  Std:  12.17
-  Min:  34.87
-  Max:  82.13
-  P95:  76.70
-  P99:  79.58
+  Mean: 62.08
+  Std: 11.36
+  Min: 38.69
+  Max: 85.26
+  P95: 79.25
+  P99: 82.60
 
 Goodput Statistics (Mbps):
-  Mean: 59.26
-  Std:  12.17
-  Min:  32.78
-  Max:  82.25
-  P95:  76.69
-  P99:  78.89
+  Mean: 62.06
+  Std: 11.34
+  Min: 38.23
+  Max: 85.26
+  P95: 79.14
+  P99: 83.06
 
 Queueing Delay Statistics (ms):
-  Mean: 0.000
-  Std:  0.000
-  Min:  0.000
-  Max:  0.000
-  P95:  0.000
-  P99:  0.000
+  Mean: 0.003
+  Std: 0.028
+  Min: 0.000
+  Max: 0.676
+  P95: 0.000
+  P99: 0.125
