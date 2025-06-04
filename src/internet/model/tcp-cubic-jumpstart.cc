@@ -102,49 +102,6 @@ void TcpCubicJumpstart::Init(Ptr<TcpSocketState> tcb)
         m_initialRtt = MilliSeconds(100);
     }
 
-    // Ptr<TcpSocketBase> sock = tcb->GetObject<TcpSocketBase>();
-    // if (!sock)
-    // {
-    //     NS_LOG_UNCOND("No socket found");
-    //     return;
-    // }
-
-    // uint32_t txSize = sock->GetTxBuffer()->Size();
-    // uint32_t advWnd = tcb->m_rxBuffer->MaxBufferSize() * tcb->m_segmentSize;
-    uint32_t advWnd = tcb->m_rxBuffer->MaxBufferSize();
-    m_initialBurstSize = advWnd / tcb->m_segmentSize;
-    // m_initialBurstSize = std::min(txSize, advWnd) / tcb->m_segmentSize;
-
-
-    uint32_t oldCwnd = tcb->m_cWnd;
-    uint32_t newCwnd = std::max(tcb->m_cWnd.Get(), advWnd);
-    // uint32_t newCwnd = std::max(tcb->m_cWnd.Get(), m_initialBurstSize * tcb->m_segmentSize);
-
-    if (oldCwnd != newCwnd)
-    {
-        // NS_LOG_UNCOND("JumpStart: old cwnd " << oldCwnd << " new cwnd " << newCwnd);
-        tcb->m_cWnd = newCwnd;
-    }
-
-    // tcb->m_cWnd = std::max(tcb->m_cWnd.Get(), m_initialBurstSize * tcb->m_segmentSize);
-
-    // Time interval = m_initialRtt / m_initialBurstSize;
-
-    tcb->m_pacingRate = DataRate(tcb->m_cWnd * 8 / m_initialRtt.GetSeconds());
-
-    // for (uint32_t i = 0; i < m_initialBurstSize; ++i)
-    // {
-    //     Simulator::Schedule(interval * i, &TcpCubicJumpstart::SendOneSegment, this, sock, tcb);
-    //     NS_LOG_UNCOND("Scheduled packet" << i << "out of " << m_initialBurstSize);
-    // }
-
-    tcb->m_ssThresh = tcb->m_cWnd;
-
-    // NS_LOG_UNCOND("CWND: " << tcb->m_cWnd);
-    // NS_LOG_UNCOND("SSTHRESH: " << tcb->m_ssThresh);
-
-    // m_jumpstartDone = true;
-    // NS_LOG_UNCOND("JumpStart Done");
 }
 
 void TcpCubicJumpstart::JumpStart(Ptr<TcpSocketState> tcb)
@@ -160,7 +117,8 @@ void TcpCubicJumpstart::JumpStart(Ptr<TcpSocketState> tcb)
         m_initialRtt = MilliSeconds(100);
     }
 
-    uint32_t advWnd = tcb->m_rxBuffer->MaxBufferSize();
+    // uint32_t advWnd = tcb->m_rxBuffer->MaxBufferSize();
+    uint32_t advWnd = 65536;
     m_initialBurstSize = advWnd / tcb->m_segmentSize;
 
     uint32_t oldCwnd = tcb->m_cWnd;

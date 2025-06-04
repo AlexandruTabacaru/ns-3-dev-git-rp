@@ -104,25 +104,50 @@ TutorialApp::SendPacket()
     // {
     //     StopApplication();
     // }
-    while (m_packetsSent < m_nPackets)
-    {
-        Ptr<Packet> packet = Create<Packet>(m_packetSize);
-        int sent = m_socket->Send(packet);
 
-        if (sent > 0)
-        {
-            ++m_packetsSent;
-        }
-        else
-        {
-            // Socket buffer is full; wait for space
-            break;
-        }
-    }
+
+    // while (m_packetsSent < m_nPackets)
+    // {
+    //     Ptr<Packet> packet = Create<Packet>(m_packetSize);
+    //     int sent = m_socket->Send(packet);
+
+    //     if (sent > 0)
+    //     {
+    //         ++m_packetsSent;
+    //     }
+    //     else
+    //     {
+    //         // Socket buffer is full; wait for space
+    //         break;
+    //     }
+    // }
+
+    // if (m_packetsSent >= m_nPackets)
+    // {
+    //     StopApplication(); // We're done
+    // }
 
     if (m_packetsSent >= m_nPackets)
     {
-        StopApplication(); // We're done
+        StopApplication();
+        return;
+    }
+
+    Ptr<Packet> packet = Create<Packet>(m_packetSize);
+    int sent = m_socket->Send(packet);
+
+    if (sent > 0)
+    {
+        ++m_packetsSent;
+    }
+
+    if (m_packetsSent < m_nPackets)
+    {
+        ScheduleTx();
+    }
+    else
+    {
+        StopApplication(); // Done
     }
 }
 
@@ -131,7 +156,7 @@ TutorialApp::ScheduleTx()
 {
     if (m_running)
     {
-        // Time tNext(Seconds(m_packetSize * 8 / static_cast<double>(m_dataRate.GetBitRate())));
-        // m_sendEvent = Simulator::Schedule(tNext, &TutorialApp::SendPacket, this);
+        Time tNext = MicroSeconds(200);  // Adjust as needed: 5 Kpps for 1000-byte packets ≈ 40 Mbps
+        Simulator::Schedule(tNext, &TutorialApp::SendPacket, this);
     }
 }

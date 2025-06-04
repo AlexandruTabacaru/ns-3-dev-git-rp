@@ -35,9 +35,47 @@ PointToPointDumbbellHelper* dumbbell;
 static void
 CwndChange(Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
 {
-    NS_LOG_UNCOND(Simulator::Now().GetSeconds() << "\t" << newCwnd);
+    // NS_LOG_UNCOND(Simulator::Now().GetSeconds() << "\t" << newCwnd);
     *stream->GetStream() << Simulator::Now().GetSeconds() << "\t" << oldCwnd << "\t" << newCwnd
                          << std::endl;
+}
+
+void
+TxTraceCallback(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    std::cout << "[" << Simulator::Now().GetSeconds() << "s] Packet of size "
+              << packet->GetSize() << " bytes sent. Seq: " << header.GetSequenceNumber() << std::endl;
+}
+
+void RxCallback(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    std::cout << Simulator::Now().GetSeconds() << "s: Received ACK of size "
+              << packet->GetSize() << " bytes" << std::endl;
+}
+
+void PacketReceived(Ptr<const Packet> packet, const Address &address)
+{
+    std::cout << Simulator::Now().GetSeconds() << "s: Received packet of size "
+              << packet->GetSize() << " bytes" << std::endl;
+}
+
+void AckedBytes(uint32_t bytes)
+{
+    std::cout << Simulator::Now().GetSeconds() << "s: Acked " << bytes << " bytes" << std::endl;
+}
+
+void TcpPacketRx(Ptr<const Packet> p, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
+{
+    // TcpHeader tcpHeader;
+    // p->PeekHeader(tcpHeader);
+    if (header.GetFlags() & TcpHeader::ACK)
+    {
+        std::cout << Simulator::Now().GetSeconds()
+                  << "s: Received ACK with ackNo="
+                  << header.GetAckNumber()
+                  << ", flags=" << header.GetFlags()
+                  << std::endl;
+    }
 }
 
 /**
@@ -161,18 +199,30 @@ PeriodicThroughputLogger(ThroughputMonitorState* state) // Takes a raw pointer
     }
 }
 
-std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupDumbbellTopology() {
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupDumbbellTopology(uint32_t bandwidthMbps = 100, uint32_t delayMs = 25) {
     // number of nodes on the left and right
     uint32_t nLeaf = 2;
 
     PointToPointHelper accessLink;
-    accessLink.SetDeviceAttribute("DataRate", StringValue("100Mbps"));
-    accessLink.SetChannelAttribute("Delay", StringValue("2ms"));
+    accessLink.SetDeviceAttribute("DataRate", StringValue("10Gbps"));
+    accessLink.SetChannelAttribute("Delay", StringValue("1ms"));
+
+    double bdpKB = ((bandwidthMbps * 1000000.0) * (delayMs / 1000.0) / 8.0) / 1000.0; // Bandwidth-Delay Product in KB
+
+    std::string bandwidthStr = std::to_string(bandwidthMbps) + "Mbps";
+    std::string delayStr = std::to_string(delayMs) + "ms";
+    std::string bdpStr = std::to_string(bdpKB) + "KB";
+
+    std::cout << "Bandwidth: " << bandwidthStr << ", Delay: " << delayStr
+              << ", BDP: " << bdpStr << std::endl;
 
     PointToPointHelper bottleneckLink;
-    bottleneckLink.SetDeviceAttribute("DataRate", StringValue("10Mbps"));
-    bottleneckLink.SetChannelAttribute("Delay", StringValue("20ms"));
-    bottleneckLink.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("1000p"));
+    bottleneckLink.SetDeviceAttribute("DataRate", StringValue(bandwidthStr));
+    bottleneckLink.SetChannelAttribute("Delay", StringValue(delayStr));
+    bottleneckLink.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue(bdpStr));
+    // bottleneckLink.SetDeviceAttribute("DataRate", StringValue("100Mbps"));
+    // bottleneckLink.SetChannelAttribute("Delay", StringValue("25ms"));
+    // bottleneckLink.SetQueue("ns3::DropTailQueue", "MaxSize", StringValue("312.5KB"));
 
     dumbbell = new PointToPointDumbbellHelper(
         nLeaf, accessLink,
@@ -213,19 +263,27 @@ std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupDumbbellTopol
 
 void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::string tcpType, uint32_t packetSize, uint32_t nPackets, double startTime, double stopTime) {
     // set the TCP variant
+
+    TypeId tcpTypeId;
+
     if (tcpType == "cubic") {
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpCubic::GetTypeId()));
+        tcpTypeId = TcpCubic::GetTypeId();
     } else if (tcpType == "bbr") {
-        // BBRv1
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpBbr::GetTypeId()));
+        tcpTypeId = TcpBbr::GetTypeId();
     } else if (tcpType == "jumpstart") {
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpCubicJumpstart::GetTypeId()));
+        tcpTypeId = TcpCubicJumpstart::GetTypeId();
     } else if (tcpType == "bbrv3") {
-        Config::Set("/NodeList/*/$ns3::TcpL4Protocol/SocketType", TypeIdValue(TcpBbr3::GetTypeId()));
+        tcpTypeId = TcpBbr3::GetTypeId();
     } else {
         NS_LOG_UNCOND("Unknown TCP type: " << tcpType);
         return;
     }
+
+    // Set the SocketType **only for the source node**
+    Ptr<Node> srcNode = dumbbell->GetLeft(srcIndex);
+    std::ostringstream oss;
+    oss << "/NodeList/" << srcNode->GetId() << "/$ns3::TcpL4Protocol/SocketType";
+    Config::Set(oss.str(), TypeIdValue(tcpTypeId));
 
     // get the destination node's address
     Ptr<Node> dstNode = dumbbell->GetRight(dstIndex);
@@ -242,21 +300,51 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     sinkApp.Stop(Seconds(stopTime + 1));
     
     // set up Application
-    Ptr<Node> srcNode = dumbbell->GetLeft(srcIndex);
+    // Ptr<Node> srcNode = dumbbell->GetLeft(srcIndex);
 
     Ptr<Socket> ns3TcpSocket = Socket::CreateSocket(srcNode, TcpSocketFactory::GetTypeId());
 
-    Ptr<TutorialApp> app = CreateObject<TutorialApp>();
-    app->Setup(ns3TcpSocket, sinkAddr, packetSize, nPackets);
-    srcNode->AddApplication(app);
-    app->SetStartTime(Seconds(startTime));
-    app->SetStopTime(Seconds(stopTime));
+    ns3TcpSocket->TraceConnectWithoutContext("BytesAcked", MakeCallback(&AckedBytes));
+
+    // Ptr<TutorialApp> app = CreateObject<TutorialApp>();
+    // app->Setup(ns3TcpSocket, sinkAddr, packetSize, nPackets);
+    // srcNode->AddApplication(app);
+    // app->SetStartTime(Seconds(startTime));
+    // app->SetStopTime(Seconds(stopTime));
+
+    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(1 << 20));
+    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(1 << 20));
+    // Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue(102400));
+    // Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue(102400));
+
+    BulkSendHelper source("ns3::TcpSocketFactory", sinkAddr);
+    source.SetAttribute("MaxBytes", UintegerValue(packetSize * nPackets));
+    source.SetAttribute("SendSize", UintegerValue(packetSize));
+
+    ApplicationContainer sourceApp = source.Install(srcNode);
+    sourceApp.Start(Seconds(startTime));
+    sourceApp.Stop(Seconds(stopTime));
+
+    Ptr<Application> app = sourceApp.Get(0);
+
+    Simulator::Schedule(Seconds(startTime + 0.001), [app, flowIndex]() {
+        Ptr<BulkSendApplication> bulkApp = DynamicCast<BulkSendApplication>(app);
+        Ptr<Socket> socket = bulkApp->GetSocket();
+        if (socket)
+        {
+            AsciiTraceHelper asciiTraceHelper;
+            Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream(
+                "metrics/flow-" + std::to_string(flowIndex) + ".cwnd");
+
+            socket->TraceConnectWithoutContext("CongestionWindow", MakeBoundCallback(&CwndChange, stream));
+        }
+    });
 
     // set up congestion window tracing
     AsciiTraceHelper asciiTraceHelper;
-    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("metrics/flow-" + std::to_string(flowIndex) + ".cwnd");
-    ns3TcpSocket->TraceConnectWithoutContext("CongestionWindow",
-                                             MakeBoundCallback(&CwndChange, stream));
+    // Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("metrics/flow-" + std::to_string(flowIndex) + ".cwnd");
+    // ns3TcpSocket->TraceConnectWithoutContext("CongestionWindow",
+    //                                          MakeBoundCallback(&CwndChange, stream));
 
     // Setup throughput monitoring
     Ptr<PacketSink> packetSink = DynamicCast<PacketSink>(sinkApp.Get(0));
@@ -264,7 +352,7 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     std::filesystem::create_directories("metrics"); 
     Ptr<OutputStreamWrapper> throughputStream = asciiTraceHelper.CreateFileStream(throughputFileName);
     
-    double monitoringInterval = 0.01;
+    double monitoringInterval = 0.05;
     
     ThroughputMonitorState* monitorStateRaw = 
         new ThroughputMonitorState(packetSink, throughputStream, monitoringInterval, startTime, flowIndex, packetSize * nPackets);
@@ -283,40 +371,78 @@ void AddTcpFlow(uint32_t flowIndex, uint32_t srcIndex, uint32_t dstIndex, std::s
     // debugging purposes
     std::cout << "Destination IP: " << dstAddr << std::endl;
 
-    Ptr<PacketSink> sink1 = DynamicCast<PacketSink>(sinkApp.Get(0));
+    // Ptr<PacketSink> sink1 = DynamicCast<PacketSink>(sinkApp.Get(0));
     Simulator::Schedule(Seconds(stopTime + 0.5), [=]() {
-        std::cout << "Sink received: " << sink1->GetTotalRx() << " bytes\n";
+        std::cout << "Sink received: " << packetSink->GetTotalRx() << " bytes\n";
     });
 }
-std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupSingleFlow()
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupSingleFlow(uint32_t flowIndex = 0, std::string tcpType = "cubic", uint32_t nPackets = 100, uint32_t bandwidthMbps = 100, uint32_t delayMs = 25)
 {
     // set up topology and simulate flows
-    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology();
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology(bandwidthMbps, delayMs);
 
-    uint32_t flowCnt = 0;
-    AddTcpFlow(flowCnt++, 0, 1, "jumpstart", 1024, 128, 2.0, 10.0);
+    // uint32_t flowCnt = 0;
+    AddTcpFlow(flowIndex, 0, 1, tcpType, 1000, nPackets, 2.0, 40.0);
     return result;
 }
-std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupMultipleFlows()
+std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> SetupMultipleFlows(std::string type1, std::string type2, uint32_t exp)
 {
     // set up topology and simulate flows
     std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> result = SetupDumbbellTopology();
 
     uint32_t flowCnt = 0;
-    AddTcpFlow(flowCnt++, 0, 1, "cubic", 1024, 1000, 2.0, 10.0);
-    AddTcpFlow(flowCnt++, 1, 0, "cubic", 1024, 1000, 3.0, 10.0);
+
+    if (exp == 3)
+    {
+        AddTcpFlow(flowCnt++, 0, 1, "cubic", 1000, 100000, 2.0, 500.0);
+        AddTcpFlow(flowCnt++, 1, 0, type1, 1000, 100, 5.0, 20.0);
+    } else
+    {
+        AddTcpFlow(flowCnt++, 0, 1, type1, 1000, 100, 2.0, 20.0);
+        AddTcpFlow(flowCnt++, 1, 0, type2, 1000, 100, 2.0, 20.0);
+    }
+    
+
+    
     return result;
 }
 
 int main(int argc, char* argv[]) {
     CommandLine cmd(__FILE__);
+
+    uint32_t idx = 0;
+    std::string type = "cubic";
+    uint32_t nPackets = 100;
+    uint32_t bw = 100;
+    uint32_t delay = 25;
+    std::string type2 = "cubic";
+    uint32_t expNo = 1;
+    
+    cmd.AddValue("idx", "Index of the flow to simulate (0 for single flow, 1 for multiple flows)", idx);
+    cmd.AddValue("type", "TCP type to use (cubic, bbr, jumpstart, bbrv3)", type);
+    cmd.AddValue("nPackets", "Number of packets to send in each flow", nPackets);
+    cmd.AddValue("bw", "Bandwidth for the bottleneck link in Mbps", bw);
+    cmd.AddValue("delay", "Delay for the bottleneck link in milliseconds", delay);
+    cmd.AddValue("type2", "TCP type to use (cubic, bbr, jumpstart, bbrv3)", type2);
+    cmd.AddValue("expNo", "Set to true to simulate multiple flows, false for a single flow", expNo);
+
     cmd.Parse(argc, argv);
 
     Time::SetResolution(Time::NS);
 
     // set up topology and simulate flows
-   // std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupMultipleFlows();
-    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupSingleFlow();
+
+    std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses;
+
+    std::cout << "type: " << type << ", type2: " << type2 << ", expNo: " << expNo << std::endl;
+
+    if (expNo == 3 || expNo == 4) {
+        addresses = SetupMultipleFlows(type, type2, expNo);
+    } else {
+        addresses = SetupSingleFlow(idx, type, nPackets, bw, delay);
+    }
+    
+    // std::tuple<std::vector<Ipv4Address>,std::vector<Ipv4Address>> addresses = SetupSingleFlow(idx, type, nPackets, bw, delay);
     std::vector<Ipv4Address> senderAddresses = std::get<0>(addresses);
     std::vector<Ipv4Address> receiverAddresses =  std::get<1>(addresses);
 
@@ -325,7 +451,7 @@ int main(int argc, char* argv[]) {
     FlowMonitorHelper flowHelper;
     flowMonitor = flowHelper.InstallAll();
 
-    Simulator::Stop(Seconds(60.0));
+    Simulator::Stop(Seconds(600.0));
     Simulator::Run();
     double sumThroughput = 0.0;
     double sumSquaredThroughput = 0.0;
