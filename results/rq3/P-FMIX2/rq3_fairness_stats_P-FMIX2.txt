@@ -1,0 +1,32 @@
+RQ3 Fairness Statistics: P-FMIX2
+==================================================
+
+Description: Mixed Prague+Cubic (P-FMIX2)
+
+Jain's Fairness Index: 0.6678
+  → Moderate fairness
+
+Individual Flow Throughputs (Mbps):
+  Flow 0: 21.86
+  Flow 1: 32.96
+  Flow 2: 25.94
+  Flow 3: 5.16
+  Flow 4: 6.37
+  Flow 5: 4.16
+
+PRAGUE THROUGHPUT:
+  Mean: 80.78 Mbps
+  Std:  1.17 Mbps
+
+CUBIC THROUGHPUT:
+  Mean: 15.62 Mbps
+  Std:  1.57 Mbps
+
+L4S QUEUE DELAY:
+  Mean: 0.105 ms
+  Std:  0.062 ms
+
+CLASSIC QUEUE DELAY:
+  Mean: 15.177 ms
+  Std:  3.353 ms
+

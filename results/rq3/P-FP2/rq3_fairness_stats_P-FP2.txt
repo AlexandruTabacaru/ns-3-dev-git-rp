@@ -1,0 +1,20 @@
+RQ3 Fairness Statistics: P-FP2
+==================================================
+
+Description: 2 Prague flows only
+
+Jain's Fairness Index: 0.9995
+  → Excellent fairness
+
+Individual Flow Throughputs (Mbps):
+  Flow 0: 47.11
+  Flow 1: 49.22
+
+PRAGUE THROUGHPUT:
+  Mean: 96.32 Mbps
+  Std:  0.17 Mbps
+
+L4S QUEUE DELAY:
+  Mean: 0.496 ms
+  Std:  0.350 ms
+

@@ -10,7 +10,7 @@ How does L4S (Prague) compare to legacy TCP (Cubic) in:
 
 ## 1. Wired (ns-3 “l4s-wired”)
 
-Tests use a 100 Mb/s bottleneck link with fixed 20 ms one-way delay (≈40 ms RTT), no jitter. All flows are long-lived bulk transfers (`MaxBytes = 0`).
+Tests use a 100 Mb/s bottleneck link with fixed 10 ms one-way delay (≈20 ms RTT), no jitter. All flows are long-lived bulk transfers (`MaxBytes = 0`).
 
 ### 1.1 Fairness & Coexistence
 
@@ -27,7 +27,7 @@ Tests use a 100 Mb/s bottleneck link with fixed 20 ms one-way delay (≈40 ms RT
 | 9  | 8            | 0           | P-FP8   |
 
 > **Notes (wired):**  
-> – QueueDisc: DualPI2 (Prague) / FqCoDel (Cubic)  
+> – QueueDisc: DualPI2 only (both Prague and Cubic share a single DualPI2)  
 > – Measure throughput fairness and queue sojourn time  
 > – Each flow is a BulkSendApplication with `MaxBytes = 0`
 

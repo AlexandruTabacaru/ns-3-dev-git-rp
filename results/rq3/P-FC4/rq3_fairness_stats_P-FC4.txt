@@ -1,0 +1,31 @@
+RQ3 Fairness Statistics: P-FC4
+==================================================
+
+Description: Prague vs 4 Cubic flow(s)
+
+Jain's Fairness Index: 0.6154
+  → Moderate fairness
+
+Individual Flow Throughputs (Mbps):
+  Flow 0: 49.07
+  Flow 1: 9.10
+  Flow 2: 18.02
+  Flow 3: 10.92
+  Flow 4: 9.31
+
+PRAGUE THROUGHPUT:
+  Mean: 50.77 Mbps
+  Std:  1.29 Mbps
+
+CUBIC THROUGHPUT:
+  Mean: 45.64 Mbps
+  Std:  2.18 Mbps
+
+L4S QUEUE DELAY:
+  Mean: 0.061 ms
+  Std:  0.035 ms
+
+CLASSIC QUEUE DELAY:
+  Mean: 15.127 ms
+  Std:  1.417 ms
+

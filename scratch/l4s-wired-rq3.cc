@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright (c) 2023 CableLabs (L4S over wired scenario for RQ2)
+ * Copyright (c) 2023 CableLabs (L4S RQ3 Wired Fairness Testing)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -15,6 +15,19 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
+// RQ3 Wired Fairness & Coexistence Testing
+//
+// Tests fairness between Prague and Cubic flows sharing a bottleneck:
+// P-FC1, P-FC4, P-FC8: Prague vs 1,4,8 Cubic flows
+// P-FP2, P-FP4, P-FP8: 2,4,8 Prague flows only
+// P-FMIX, P-FMIX2, P-FMIX3: Mixed scenarios with both algorithms
+//
+// Configuration:
+// - 100 Mbps bottleneck, 10 ms one-way delay (≈20 ms RTT)
+// - Single DualPI2 queue for both Prague (L4S) and Cubic flows
+// - Duration: 60s, unlimited transfer (MaxBytes = 0)
+// - Measures throughput fairness using Jain's fairness index
 
 // Nodes 0               Node 1                     Node 2          Nodes 3+
 //                                                         ------->
@@ -36,7 +49,6 @@
 //
 // Behavior:
 // - at around simulation time 1 second, each flow starts
-// - at t=10s, bottleneck rate changes once
 // - simulation ends 1 second after last foreground flow terminates, unless
 //   a specific duration was configured
 //
@@ -58,11 +70,9 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("L4sWiredRq2");
+NS_LOG_COMPONENT_DEFINE("L4sWired");
 
 // Declare trace functions that are defined later in this file
-std::ofstream g_fileBytesInAcBeQueue;
-void TraceBytesInAcBeQueue(uint32_t oldVal, uint32_t newVal);
 std::ofstream g_fileBytesInDualPi2Queue;
 void TraceBytesInDualPi2Queue(uint32_t oldVal, uint32_t newVal);
 std::ofstream g_fileLSojourn;
@@ -70,9 +80,16 @@ void TraceLSojourn(Time sojourn);
 std::ofstream g_fileCSojourn;
 void TraceCSojourn(Time sojourn);
 
-uint32_t g_pragueData = 0;
+// RQ3: Per-flow throughput tracking for fairness analysis
+std::vector<uint32_t> g_pragueFlowData;     // Per-flow data counters (reset every interval)
+std::vector<uint32_t> g_cubicFlowData;      // Per-flow data counters (reset every interval)
+std::vector<uint32_t> g_pragueTotalData;    // RQ3: Total data counters (never reset, for final fairness)
+std::vector<uint32_t> g_cubicTotalData;     // RQ3: Total data counters (never reset, for final fairness)
+std::map<uint32_t, uint32_t> g_flowPortToIndex;  // Map port numbers to flow indices
+uint64_t g_pragueData = 0;
 Time g_lastSeenPrague = Seconds(0);
 std::ofstream g_filePragueThroughput;
+std::ofstream g_filePraguePerFlowThroughput; // RQ3: Per-flow throughput
 std::ofstream g_filePragueCwnd;
 std::ofstream g_filePragueSsthresh;
 std::ofstream g_filePragueSendInterval;
@@ -80,18 +97,15 @@ std::ofstream g_filePraguePacingRate;
 std::ofstream g_filePragueCongState;
 std::ofstream g_filePragueEcnState;
 std::ofstream g_filePragueRtt;
-std::ofstream g_fileBytesInFqCoDelQueue;
-std::ofstream g_fileFqCoDelSojourn;
-
-// Add these function declarations with the others
-void TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal);
-void TraceFqCoDelSojourn(Time sojourn);
 Time g_pragueThroughputInterval = MilliSeconds(100);
 void TracePragueThroughput();
 void TracePragueTx(Ptr<const Packet> packet,
                    const TcpHeader& header,
                    Ptr<const TcpSocketBase> socket);
-void TracePragueCwnd(uint32_t oldVal, uint32_t newVal);
+void TracePragueRx (Ptr<const Packet>, const TcpHeader&,
+                    Ptr<const TcpSocketBase>);
+void TraceCubicRx  (Ptr<const Packet>, const TcpHeader&,
+                    Ptr<const TcpSocketBase>);void TracePragueCwnd(uint32_t oldVal, uint32_t newVal);
 void TracePragueSsthresh(uint32_t oldVal, uint32_t newVal);
 void TracePraguePacingRate(DataRate oldVal, DataRate newVal);
 void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
@@ -99,10 +113,13 @@ void TracePragueCongState(TcpSocketState::TcpCongState_t oldVal,
 void TracePragueEcnState(TcpSocketState::EcnState_t oldVal, TcpSocketState::EcnState_t newVal);
 void TracePragueRtt(Time oldVal, Time newVal);
 void TracePragueSocket(Ptr<Application>, uint32_t);
+void TracePragueServerSocket (Ptr<Socket>);
+void TraceCubicServerSocket  (Ptr<Socket>);
 
-uint32_t g_cubicData = 0;
+uint64_t g_cubicData = 0;
 Time g_lastSeenCubic = Seconds(0);
 std::ofstream g_fileCubicThroughput;
+std::ofstream g_fileCubicPerFlowThroughput; // RQ3: Per-flow throughput
 std::ofstream g_fileCubicCwnd;
 std::ofstream g_fileCubicSsthresh;
 std::ofstream g_fileCubicSendInterval;
@@ -120,7 +137,17 @@ void TraceCubicPacingRate(DataRate oldVal, DataRate newVal);
 void TraceCubicCongState(TcpSocketState::TcpCongState_t oldVal,
                          TcpSocketState::TcpCongState_t newVal);
 void TraceCubicRtt(Time oldVal, Time newVal);
-void TraceCubicSocket(Ptr<Application>, uint32_t);
+void TraceCubicSocket(Ptr<Application> a, uint32_t i);
+void TracePragueAppRx (uint32_t flowIdx, Ptr<const Packet>,
+                       const Address& src, const Address& dst);
+void TraceCubicAppRx  (uint32_t flowIdx, Ptr<const Packet>,
+                       const Address& src, const Address& dst);
+// RQ3: Per-flow throughput tracing functions
+void TracePraguePerFlowThroughput();
+void TraceCubicPerFlowThroughput();
+// RQ3: Fairness analysis functions  
+double CalculateJainsFairnessIndex(const std::vector<uint32_t>& flowData);
+void ReportFairnessStatistics(std::string testName, uint32_t numPrague, uint32_t numCubic);
 
 // Count the number of flows to wait for completion before stopping the simulation
 uint32_t g_flowsToClose = 0;
@@ -148,11 +175,10 @@ main(int argc, char* argv[])
     uint32_t numCubic = 1;
     uint32_t numPrague = 1;
     uint32_t numBackground = 0;
-    uint32_t numBytes = 0;             // default to unlimited transfer
-    Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
-    Time wanLinkDelay = MilliSecon  ds(20); // base RTT is 40ms
-    DataRate initRate = DataRate("100Mbps"); // Initial bottleneck rate
-    DataRate stepRate = DataRate("25Mbps");  // Rate to change to at t=10s
+    uint32_t numBytes = 0;                // RQ3: Unlimited transfer (MaxBytes = 0)
+    Time duration = Seconds(60);          // RQ3: Fixed 60 second duration
+    Time wanLinkDelay = MilliSeconds(10); // base RTT is 20ms
+    DataRate bottleneckRate = DataRate("100Mbps");
     bool useReno = false;
     bool showProgress = false;
     bool enablePcapAll = false;
@@ -160,7 +186,7 @@ main(int argc, char* argv[])
     std::string lossSequence = "";
     std::string lossBurst = "";
     std::string testName = "";
-    uint32_t rngRun = 1;
+    uint16_t rngRun = 1;  // RQ3: Add random number generator run parameter
 
     // Increase some defaults (command-line can override below)
     // ns-3 TCP does not automatically adjust MSS from the device MTU
@@ -171,40 +197,51 @@ main(int argc, char* argv[])
     // Enable pacing for Cubic
     Config::SetDefault("ns3::TcpSocketState::EnablePacing", BooleanValue(true));
     Config::SetDefault("ns3::TcpSocketState::PaceInitialWindow", BooleanValue(true));
-    // Enable ECN for both Prague and Cubic
-    Config::SetDefault("ns3::TcpSocketBase::UseEcn", StringValue("On"));
     // Enable a timestamp (for latency sampling) in the bulk send application
     Config::SetDefault("ns3::BulkSendApplication::EnableSeqTsSizeHeader", BooleanValue(true));
+    Config::SetDefault("ns3::PacketSink::EnableSeqTsSizeHeader", BooleanValue(true));
     // The bulk send application should do 1448-byte writes (one timestamp per TCP packet)
     Config::SetDefault("ns3::BulkSendApplication::SendSize", UintegerValue(1448));
 
     CommandLine cmd;
-    cmd.Usage("The l4s-wired-rq2 program experiments with TCP flows over L4S wired configuration for RQ2");
+    cmd.Usage("RQ3: L4S Wired Fairness & Coexistence Testing - Multiple flows sharing bottleneck");
     cmd.AddValue("numCubic", "Number of foreground Cubic flows", numCubic);
     cmd.AddValue("numPrague", "Number of foreground Prague flows", numPrague);
-    cmd.AddValue("numBytes", "Number of bytes for each TCP transfer", numBytes);
-    cmd.AddValue("duration", "(optional) scheduled end of simulation", duration);
+    cmd.AddValue("numBackground", "Number of background flows", numBackground);
+    cmd.AddValue("numBytes", "Number of bytes for each TCP transfer (0=unlimited)", numBytes);
+    cmd.AddValue("duration", "Simulation duration", duration);
     cmd.AddValue("wanLinkDelay", "one-way base delay from server to AP", wanLinkDelay);
-    cmd.AddValue("initRate", "Initial bottleneck data rate between routers", initRate);
-    cmd.AddValue("stepRate", "Rate to change to at t=10s", stepRate);
+    cmd.AddValue("bottleneckRate", "bottleneck data rate between routers", bottleneckRate);
     cmd.AddValue("useReno", "Use Linux Reno instead of Cubic", useReno);
     cmd.AddValue("lossSequence", "Packets to drop", lossSequence);
     cmd.AddValue("lossBurst", "Packets to drop", lossBurst);
-    cmd.AddValue("testName", "Test name", testName);
+    cmd.AddValue("testName", "Test name (P-FC1, P-FC4, P-FC8, P-FP2, P-FP4, P-FP8, P-FMIX, P-FMIX2, P-FMIX3)", testName);
     cmd.AddValue("showProgress", "Show simulation progress every 5s", showProgress);
-    cmd.AddValue("enablePcapAll",
-                 "Whether to enable PCAP trace output at all interfaces",
-                 enablePcapAll);
+    cmd.AddValue("enablePcapAll", "Whether to enable PCAP trace output at all interfaces", enablePcapAll);
     cmd.AddValue("enablePcap", "Whether to enable PCAP trace output only at endpoints", enablePcap);
-    cmd.AddValue ("rngRun", "RNG run number", rngRun);
-
+    cmd.AddValue("rngRun", "Random number generator run", rngRun);
     cmd.Parse(argc, argv);
-    RngSeedManager::SetRun (rngRun);
 
-    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0,
-                    "Error: configure at least one foreground flow");
-
+    // RQ3 validation
+    NS_ABORT_MSG_IF(numCubic == 0 && numPrague == 0, "RQ3: Configure at least one foreground flow");
+    NS_ABORT_MSG_IF(testName == "", "RQ3: testName is required for fairness experiments");
     NS_ABORT_MSG_IF(numBackground > 0, "Background flows not yet supported");
+
+    // RQ3: Initialize per-flow tracking
+    g_pragueFlowData.resize(numPrague, 0);
+    g_cubicFlowData.resize(numCubic, 0);
+    g_pragueTotalData.resize(numPrague, 0);  // RQ3: Total data arrays for final fairness
+    g_cubicTotalData.resize(numCubic, 0);    // RQ3: Total data arrays for final fairness
+
+    // Map port numbers to flow indices for tracking
+    for (uint32_t i = 0; i < numPrague; i++)
+    {
+        g_flowPortToIndex[100 + i] = i;  // Prague ports start at 100
+    }
+    for (uint32_t i = 0; i < numCubic; i++)
+    {
+        g_flowPortToIndex[200 + i] = i;  // Cubic ports start at 200
+    }
 
     // When using DCE with ns-3, or reading pcaps with Wireshark,
     // enable checksum computations in ns-3 models
@@ -216,6 +253,10 @@ main(int argc, char* argv[])
         Config::SetDefault("ns3::TcpL4Protocol::SocketType",
                            TypeIdValue(TcpLinuxReno::GetTypeId()));
     }
+    
+    // RQ3: Set the random number generator run
+    RngSeedManager::SetRun(rngRun);
+    
     // Workaround until PRR response is debugged
     Config::SetDefault("ns3::TcpL4Protocol::RecoveryType",
                        TypeIdValue(TcpClassicRecovery::GetTypeId()));
@@ -235,17 +276,9 @@ main(int argc, char* argv[])
     pointToPoint.SetChannelAttribute("Delay", TimeValue(wanLinkDelay));
     NetDeviceContainer wanDevices = pointToPoint.Install(serverNode.Get(0), routerNodes.Get(0));
 
-    pointToPoint.SetDeviceAttribute("DataRate", DataRateValue(initRate));
+    pointToPoint.SetDeviceAttribute("DataRate", DataRateValue(bottleneckRate));
     pointToPoint.SetChannelAttribute("Delay", StringValue("50us"));
     NetDeviceContainer routerDevices = pointToPoint.Install(routerNodes);
-
-    // Schedule rate change at t=20s for RQ2 experiments
-    Simulator::Schedule(Seconds(20), [&routerDevices, stepRate]() {
-    for (uint32_t i = 0; i < routerDevices.GetN(); ++i) {
-        routerDevices.Get(i)->SetAttribute("DataRate", DataRateValue(stepRate));
-    }
-    });
-
 
     if (lossSequence != "")
     {
@@ -291,12 +324,9 @@ main(int argc, char* argv[])
 
     // By default, Ipv4AddressHelper below will configure a FqCoDelQueueDiscs on routers
     // The following statements change this configuration on the bottleneck link
+    // RQ3: Use single DualPI2 queue where Prague and Cubic flows compete
     TrafficControlHelper tch;
-    if (numPrague > 0) {
-        tch.SetRootQueueDisc("ns3::DualPi2QueueDisc");
-    } else {
-        tch.SetRootQueueDisc("ns3::FqCoDelQueueDisc");
-    }
+    tch.SetRootQueueDisc("ns3::DualPi2QueueDisc");
     tch.SetQueueLimits("ns3::DynamicQueueLimits"); // enable BQL
     QueueDiscContainer routerQueueDiscContainer = tch.Install(routerDevices);
 
@@ -378,15 +408,37 @@ main(int argc, char* argv[])
             MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolClient));
     }
 
+    // Add a cubic application on the server for each background flow
+    // Send the traffic from a different STA.
+    port = 300;
+    Simulator::Schedule(
+        Seconds(1.1) - TimeStep(1),
+        MakeBoundCallback(&ConfigureCubicSockets, tcpL4ProtocolServer, tcpL4ProtocolClient));
+    for (auto i = 0U; i < numBackground; i++)
+    {
+        ApplicationContainer serverAppBackground;
+        BulkSendHelper bulkBackground("ns3::TcpSocketFactory",
+                                      InetSocketAddress(wanInterfaces.GetAddress(0), port + i));
+        bulkBackground.SetAttribute("MaxBytes", UintegerValue(numBytes));
+        serverAppBackground = bulkBackground.Install(clientNodes.Get(1 + i));
+        serverAppBackground.Start(Seconds(1.1));
+        ApplicationContainer clientAppBackground;
+        PacketSinkHelper sinkBackground =
+            PacketSinkHelper("ns3::TcpSocketFactory",
+                             InetSocketAddress(Ipv4Address::GetAny(), port + i));
+        clientAppBackground = sinkBackground.Install(serverNode.Get(0));
+        clientAppBackground.Start(Seconds(1.1));
+    }
+
     // PCAP traces
     if (enablePcapAll)
     {
-        std::string prefixName = "l4s-wired-rq2" + ((testName != "") ? ("-" + testName) : "");
+        std::string prefixName = "l4s-wired" + ((testName != "") ? ("-" + testName) : "");
         pointToPoint.EnablePcapAll(prefixName.c_str());
     }
     else if (enablePcap)
     {
-        std::string prefixName = "l4s-wired-rq2" + ((testName != "") ? ("-" + testName) : "");
+        std::string prefixName = "l4s-wired" + ((testName != "") ? ("-" + testName) : "");
         pointToPoint.EnablePcap(prefixName.c_str(), wanDevices.Get(0));
         pointToPoint.EnablePcap(prefixName.c_str(), clientDevices.Get(0));
     }
@@ -397,6 +449,9 @@ main(int argc, char* argv[])
         std::string traceName =
             "prague-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_filePragueThroughput.open(traceName.c_str(), std::ofstream::out);
+        // RQ3: Per-flow throughput file
+        traceName = "prague-per-flow-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_filePraguePerFlowThroughput.open(traceName.c_str(), std::ofstream::out);
         traceName = "prague-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_filePragueCwnd.open(traceName.c_str(), std::ofstream::out);
         traceName = "prague-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
@@ -429,6 +484,10 @@ main(int argc, char* argv[])
             "PeerError",
             oss.str(),
             MakeCallback(&HandlePeerError));
+        // RQ3: Connect PacketSink Rx trace for per-flow throughput tracking
+         pragueClientApps.Get(i)->GetObject<PacketSink>()
+     ->TraceConnectWithoutContext("RxWithAddresses",
+                                  MakeBoundCallback(&TracePragueAppRx, i));
     }
 
     if (cubicClientApps.GetN())
@@ -436,6 +495,9 @@ main(int argc, char* argv[])
         std::string traceName =
             "cubic-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_fileCubicThroughput.open(traceName.c_str(), std::ofstream::out);
+        // RQ3: Per-flow throughput file
+        traceName = "cubic-per-flow-throughput." + ((testName != "") ? (testName + ".") : "") + "dat";
+        g_fileCubicPerFlowThroughput.open(traceName.c_str(), std::ofstream::out);
         traceName = "cubic-cwnd." + ((testName != "") ? (testName + ".") : "") + "dat";
         g_fileCubicCwnd.open(traceName.c_str(), std::ofstream::out);
         traceName = "cubic-ssthresh." + ((testName != "") ? (testName + ".") : "") + "dat";
@@ -466,39 +528,26 @@ main(int argc, char* argv[])
             "PeerError",
             oss.str(),
             MakeCallback(&HandlePeerError));
+        // RQ3: Connect PacketSink Rx trace for per-flow throughput tracking
+        cubicClientApps.Get(i)->GetObject<PacketSink>()
+            ->TraceConnectWithoutContext("RxWithAddresses",
+                                         MakeBoundCallback(&TraceCubicAppRx, i));
     }
 
-    // Trace queue metrics based on which queue type is being used
-    if (numPrague > 0) {
-        // DualPI2 tracing for Prague
-        if (auto dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>()) {
-            std::string traceName =
-                "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
-            g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
-            dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
-            
-            traceName = "wired-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
-            g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
-            dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
-            
-            traceName = "wired-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
-            g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
-            dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
-        }
-    } else {
-        // FqCoDel tracing for Cubic
-        if (auto fqCoDel = routerQueueDiscContainer.Get(0)->GetObject<FqCoDelQueueDisc>()) {
-            std::string traceName =
-                "wired-fqcodel-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
-            g_fileBytesInFqCoDelQueue.open(traceName.c_str(), std::ofstream::out);
-            fqCoDel->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInFqCoDelQueue));
-            
-            traceName = "wired-fqcodel-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
-            g_fileFqCoDelSojourn.open(traceName.c_str(), std::ofstream::out);
-            fqCoDel->TraceConnectWithoutContext("SojournTime", MakeCallback(&TraceFqCoDelSojourn));
-        }
-    }
-
+    // Trace bytes in DualPi2 queue
+    Ptr<DualPi2QueueDisc> dualPi2 = routerQueueDiscContainer.Get(0)->GetObject<DualPi2QueueDisc>();
+    NS_ASSERT_MSG(dualPi2, "Could not acquire pointer to DualPi2 queue");
+    std::string traceName =
+        "wired-dualpi2-bytes." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileBytesInDualPi2Queue.open(traceName.c_str(), std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("BytesInQueue", MakeCallback(&TraceBytesInDualPi2Queue));
+    traceName = "wired-dualpi2-l-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileLSojourn.open(traceName.c_str(), std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("L4sSojournTime", MakeCallback(&TraceLSojourn));
+    traceName = "wired-dualpi2-c-sojourn." + ((testName != "") ? (testName + ".") : "") + "dat";
+    g_fileCSojourn.open(traceName.c_str(), std::ofstream::out);
+    dualPi2->TraceConnectWithoutContext("ClassicSojournTime", MakeCallback(&TraceCSojourn));
+    
     if (duration > Seconds(0))
     {
         Simulator::Stop(duration);
@@ -558,10 +607,14 @@ main(int argc, char* argv[])
                   << " min: " << pragueThroughputCalculator.getMin() << std::endl;
     }
 
+    // RQ3: Report fairness statistics
+    ReportFairnessStatistics(testName, numPrague, numCubic);
+
     g_fileBytesInDualPi2Queue.close();
     g_fileLSojourn.close();
     g_fileCSojourn.close();
     g_filePragueThroughput.close();
+    g_filePraguePerFlowThroughput.close(); // RQ3: Close per-flow file
     g_filePragueCwnd.close();
     g_filePragueSsthresh.close();
     g_filePragueSendInterval.close();
@@ -570,14 +623,13 @@ main(int argc, char* argv[])
     g_filePragueEcnState.close();
     g_filePragueRtt.close();
     g_fileCubicThroughput.close();
+    g_fileCubicPerFlowThroughput.close(); // RQ3: Close per-flow file
     g_fileCubicCwnd.close();
     g_fileCubicSsthresh.close();
     g_fileCubicSendInterval.close();
     g_fileCubicPacingRate.close();
     g_fileCubicCongState.close();
     g_fileCubicRtt.close();
-    g_fileBytesInFqCoDelQueue.close();
-    g_fileFqCoDelSojourn.close();
     Simulator::Destroy();
     return 0;
 }
@@ -617,7 +669,8 @@ TraceCSojourn(Time sojourn)
 void
 TracePragueTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_pragueData += packet->GetSize();
+    // RQ3: Remove double-counting - only count on Rx side
+    // g_pragueData += packet->GetSize();  // REMOVED - was double-counting
     if (g_lastSeenPrague > Seconds(0))
     {
         g_filePragueSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
@@ -681,11 +734,20 @@ TracePragueSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
     NS_ASSERT_MSG(bulk, "Application failed");
-    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
-    NS_ASSERT_MSG(s, "Socket downcast failed");
+    
+    // Check if socket is ready, if not, reschedule
+    Ptr<Socket> s = bulk->GetSocket();
+    if (!s)
+    {
+        // Socket not ready yet, reschedule for later
+        Simulator::Schedule(MilliSeconds(10), MakeBoundCallback(&TracePragueSocket, a, i));
+        return;
+    }
+    
     Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
     NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
     tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TracePragueTx));
+    // RQ3: Rx trace not needed on client side - we'll trace server side
     if (i == 0)
     {
         tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TracePragueCwnd));
@@ -695,13 +757,19 @@ TracePragueSocket(Ptr<Application> a, uint32_t i)
         tcp->TraceConnectWithoutContext("EcnState", MakeCallback(&TracePragueEcnState));
         tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TracePragueRtt));
         Simulator::Schedule(g_pragueThroughputInterval, &TracePragueThroughput);
+        // RQ3: Schedule per-flow throughput tracing
+        if (g_pragueFlowData.size() > 0)
+        {
+            Simulator::Schedule(g_pragueThroughputInterval, &TracePraguePerFlowThroughput);
+        }
     }
 }
 
 void
 TraceCubicTx(Ptr<const Packet> packet, const TcpHeader& header, Ptr<const TcpSocketBase> socket)
 {
-    g_cubicData += packet->GetSize();
+    // RQ3: Remove double-counting - only count on Rx side  
+    // g_cubicData += packet->GetSize();  // REMOVED - was double-counting
     if (g_lastSeenCubic > Seconds(0))
     {
         g_fileCubicSendInterval << std::fixed << std::setprecision(6) << Now().GetSeconds() << " "
@@ -758,11 +826,20 @@ TraceCubicSocket(Ptr<Application> a, uint32_t i)
 {
     Ptr<BulkSendApplication> bulk = DynamicCast<BulkSendApplication>(a);
     NS_ASSERT_MSG(bulk, "Application failed");
-    Ptr<Socket> s = a->GetObject<BulkSendApplication>()->GetSocket();
-    NS_ASSERT_MSG(s, "Socket downcast failed");
+    
+    // Check if socket is ready, if not, reschedule
+    Ptr<Socket> s = bulk->GetSocket();
+    if (!s)
+    {
+        // Socket not ready yet, reschedule for later
+        Simulator::Schedule(MilliSeconds(10), MakeBoundCallback(&TraceCubicSocket, a, i));
+        return;
+    }
+    
     Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase>(s);
     NS_ASSERT_MSG(tcp, "TCP socket downcast failed");
     tcp->TraceConnectWithoutContext("Tx", MakeCallback(&TraceCubicTx));
+    // RQ3: Rx trace not needed on client side - we'll trace server side
     if (i == 0)
     {
         tcp->TraceConnectWithoutContext("CongestionWindow", MakeCallback(&TraceCubicCwnd));
@@ -771,6 +848,11 @@ TraceCubicSocket(Ptr<Application> a, uint32_t i)
         tcp->TraceConnectWithoutContext("CongState", MakeCallback(&TraceCubicCongState));
         tcp->TraceConnectWithoutContext("RTT", MakeCallback(&TraceCubicRtt));
         Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicThroughput);
+        // RQ3: Schedule per-flow throughput tracing
+        if (g_cubicFlowData.size() > 0)
+        {
+            Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicPerFlowThroughput);
+        }
     }
 }
 
@@ -798,13 +880,182 @@ HandlePeerError(std::string context, Ptr<const Socket> socket)
 }
 
 void
-TraceBytesInFqCoDelQueue(uint32_t oldVal, uint32_t newVal)
+TracePragueRx (Ptr<const Packet> pkt,
+               const TcpHeader&  hdr,
+               Ptr<const TcpSocketBase> /*socket*/)
 {
-    g_fileBytesInFqCoDelQueue << Now().GetSeconds() << " " << newVal << std::endl;
+    g_pragueData += pkt->GetSize ();
+
+    uint16_t port = hdr.GetDestinationPort ();          // 100,101…
+    if (port >= 100 && port < 200)
+    {
+        uint32_t idx = port - 100;
+        if (idx < g_pragueFlowData.size ())
+        {
+            g_pragueFlowData [idx]   += pkt->GetSize ();
+            g_pragueTotalData [idx]  += pkt->GetSize ();
+        }
+    }
 }
 
 void
-TraceFqCoDelSojourn(Time sojourn)
+TraceCubicRx (Ptr<const Packet> pkt,
+              const TcpHeader&  hdr,
+              Ptr<const TcpSocketBase> /*socket*/)
 {
-    g_fileFqCoDelSojourn << Now().GetSeconds() << " " << sojourn.GetMicroSeconds() / 1000.0 << std::endl;
-} 
+    g_cubicData += pkt->GetSize ();
+
+    uint16_t port = hdr.GetDestinationPort ();          // 200,201…
+    if (port >= 200 && port < 300)
+    {
+        uint32_t idx = port - 200;
+        if (idx < g_cubicFlowData.size ())
+        {
+            g_cubicFlowData [idx]   += pkt->GetSize ();
+            g_cubicTotalData [idx]  += pkt->GetSize ();
+        }
+    }
+}
+
+
+void
+TracePraguePerFlowThroughput()
+{
+    for (uint32_t i = 0; i < g_pragueFlowData.size(); i++)
+    {
+        double throughput = (g_pragueFlowData[i] * 8) / g_pragueThroughputInterval.GetSeconds() / 1e6;
+        g_filePraguePerFlowThroughput << Now().GetSeconds() << " " << (100 + i) << " " 
+                                      << std::fixed << throughput << std::endl;
+        g_pragueFlowData[i] = 0; // Reset for next interval
+    }
+    Simulator::Schedule(g_pragueThroughputInterval, &TracePraguePerFlowThroughput);
+}
+
+void
+TraceCubicPerFlowThroughput()
+{
+    for (uint32_t i = 0; i < g_cubicFlowData.size(); i++)
+    {
+        double throughput = (g_cubicFlowData[i] * 8) / g_cubicThroughputInterval.GetSeconds() / 1e6;
+        g_fileCubicPerFlowThroughput << Now().GetSeconds() << " " << (200 + i) << " " 
+                                     << std::fixed << throughput << std::endl;
+        g_cubicFlowData[i] = 0; // Reset for next interval
+    }
+    Simulator::Schedule(g_cubicThroughputInterval, &TraceCubicPerFlowThroughput);
+}
+
+double
+CalculateJainsFairnessIndex(const std::vector<uint32_t>& flowData)
+{
+    if (flowData.empty())
+    {
+        return 1.0; // Perfect fairness for empty set
+    }
+    
+    double sumThroughput = 0.0;
+    double sumSquaredThroughput = 0.0;
+    double totalTimeSeconds = Simulator::Now().GetSeconds(); // RQ3: Use actual simulation time
+    uint32_t totalFlows = flowData.size(); // RQ3: Include ALL flows, even starved ones
+    
+    for (uint32_t data : flowData)
+    {
+        // RQ3: Include flows with 0 data (starved flows) in calculation
+        double throughput = (data * 8) / totalTimeSeconds / 1e6; // RQ3: Fixed time calculation
+        sumThroughput += throughput;
+        sumSquaredThroughput += throughput * throughput;
+    }
+    
+    if (totalFlows == 0 || sumSquaredThroughput == 0.0)
+    {
+        return 1.0; // Perfect fairness when no flows or all zero
+    }
+    
+    // Jain's Fairness Index: (sum of xi)^2 / (n * sum of xi^2)
+    // RQ3: Use totalFlows (not activeFlows) to properly penalize starved flows
+    return (sumThroughput * sumThroughput) / (totalFlows * sumSquaredThroughput);
+}
+
+void
+ReportFairnessStatistics(std::string testName, uint32_t numPrague, uint32_t numCubic)
+{
+    std::cout << std::endl << "=== RQ3 Fairness Analysis for " << testName << " ===" << std::endl;
+    
+    // Calculate individual algorithm fairness using total data (never reset)
+    if (numPrague > 0)
+    {
+        double pragueJFI = CalculateJainsFairnessIndex(g_pragueTotalData);
+        std::cout << "Prague flows JFI: " << std::fixed << std::setprecision(4) << pragueJFI << std::endl;
+    }
+    
+    if (numCubic > 0)
+    {
+        double cubicJFI = CalculateJainsFairnessIndex(g_cubicTotalData);
+        std::cout << "Cubic flows JFI: " << std::fixed << std::setprecision(4) << cubicJFI << std::endl;
+    }
+    
+    // Calculate overall fairness across all flows using total data
+    std::vector<uint32_t> allFlowTotalData;
+    allFlowTotalData.insert(allFlowTotalData.end(), g_pragueTotalData.begin(), g_pragueTotalData.end());
+    allFlowTotalData.insert(allFlowTotalData.end(), g_cubicTotalData.begin(), g_cubicTotalData.end());
+    
+    if (!allFlowTotalData.empty())
+    {
+        double overallJFI = CalculateJainsFairnessIndex(allFlowTotalData);
+        std::cout << "Overall JFI (all flows): " << std::fixed << std::setprecision(4) << overallJFI << std::endl;
+        
+        // Report individual flow throughputs using total data
+        std::cout << "Individual flow throughputs (Mbps):" << std::endl;
+        for (uint32_t i = 0; i < g_pragueTotalData.size(); i++)
+        {
+            double throughput = (g_pragueTotalData[i] * 8) / Simulator::Now().GetSeconds() / 1e6;
+            std::cout << "  Prague-" << i << ": " << std::fixed << std::setprecision(2) << throughput << std::endl;
+        }
+        for (uint32_t i = 0; i < g_cubicTotalData.size(); i++)
+        {
+            double throughput = (g_cubicTotalData[i] * 8) / Simulator::Now().GetSeconds() / 1e6;
+            std::cout << "  Cubic-" << i << ": " << std::fixed << std::setprecision(2) << throughput << std::endl;
+        }
+    }
+    
+    std::cout << "=================================" << std::endl;
+}
+
+void
+TracePragueServerSocket (Ptr<Socket> sock)
+{
+    // cast away const so we can attach another trace
+    Ptr<Socket> s = ConstCast<Socket> (sock);
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase> (sock);
+    if (tcp)
+    {
+        // *server* side Rx gets the correct destination port (100+ / 200+)
+        tcp->TraceConnectWithoutContext ("Rx", MakeCallback (&TracePragueRx));
+    }
+}
+
+void
+TraceCubicServerSocket (Ptr<Socket> sock)
+{
+    Ptr<Socket> s = ConstCast<Socket> (sock);
+    Ptr<TcpSocketBase> tcp = DynamicCast<TcpSocketBase> (sock);
+    if (tcp)
+    {
+        tcp->TraceConnectWithoutContext ("Rx", MakeCallback (&TraceCubicRx));
+    }
+}
+
+void TracePragueAppRx (uint32_t flowIdx, Ptr<const Packet> pkt,
+                  const Address&, const Address&)
+ {
+     g_pragueData += pkt->GetSize ();
+     g_pragueFlowData [flowIdx] += pkt->GetSize ();
+     g_pragueTotalData[flowIdx] += pkt->GetSize ();
+ }
+ 
+void TraceCubicAppRx  (uint32_t flowIdx, Ptr<const Packet> pkt,
+                  const Address&, const Address&)
+ {
+     g_cubicData += pkt->GetSize ();
+     g_cubicFlowData [flowIdx]  += pkt->GetSize ();
+     g_cubicTotalData[flowIdx]  += pkt->GetSize ();
+ }
