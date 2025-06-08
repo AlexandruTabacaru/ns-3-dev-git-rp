@@ -1,0 +1,21 @@
+RQ3 Loss-Sensitivity Statistics: C-WLS1
+==================================================
+
+Algorithm: cubic
+Description: Cubic with 1% loss
+
+THROUGHPUT PERFORMANCE:
+  Mean: 36.12 Mbps
+  Std Dev: 3.09 Mbps
+  Coefficient of Variation: 0.086
+  Range: 0.00 - 39.39 Mbps
+  95th percentile: 38.69 Mbps
+  99th percentile: 39.16 Mbps
+
+RESILIENCE METRICS:
+  Stability score: 0.921 (1.0 = perfect)
+  Efficiency score: 0.361
+  Resilience score: 0.947
+  Worst variability: 0.229
+  Best variability: 0.040
+

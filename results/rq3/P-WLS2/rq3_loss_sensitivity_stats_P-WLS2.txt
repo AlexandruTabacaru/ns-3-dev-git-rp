@@ -1,0 +1,21 @@
+RQ3 Loss-Sensitivity Statistics: P-WLS2
+==================================================
+
+Algorithm: prague
+Description: Prague with 5% loss
+
+THROUGHPUT PERFORMANCE:
+  Mean: 32.05 Mbps
+  Std Dev: 2.26 Mbps
+  Coefficient of Variation: 0.070
+  Range: 23.17 - 36.84 Mbps
+  95th percentile: 34.87 Mbps
+  99th percentile: 35.79 Mbps
+
+RESILIENCE METRICS:
+  Stability score: 0.934 (1.0 = perfect)
+  Efficiency score: 0.321
+  Resilience score: 0.935
+  Worst variability: 0.083
+  Best variability: 0.046
+

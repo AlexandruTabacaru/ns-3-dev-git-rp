@@ -1,0 +1,105 @@
+RQ3 SUMMARY STATISTICS
+==================================================
+
+FAIRNESS ANALYSIS RESULTS:
+------------------------------
+
+P-FC1: 1 Prague vs 1 Cubic
+  Jain's Fairness Index: 0.6777 (Moderate)
+  Prague/Cubic Throughput Ratio: 5.44
+  Prague Mean: 81.44 Mbps
+  Cubic Mean: 14.96 Mbps
+  L4S Mean Delay: 0.06 ms
+  Classic Mean Delay: 14.10 ms
+
+P-FC4: 1 Prague vs 4 Cubic
+  Jain's Fairness Index: 0.5997 (Poor)
+  Prague/Cubic Throughput Ratio: 4.45
+  Prague Mean: 50.77 Mbps
+  Cubic Mean: 11.41 Mbps
+  L4S Mean Delay: 0.06 ms
+  Classic Mean Delay: 15.13 ms
+
+P-FC8: 1 Prague vs 8 Cubic
+  Jain's Fairness Index: 0.6349 (Moderate)
+  Prague/Cubic Throughput Ratio: 4.29
+  Prague Mean: 33.63 Mbps
+  Cubic Mean: 7.85 Mbps
+  L4S Mean Delay: 0.06 ms
+  Classic Mean Delay: 15.10 ms
+
+P-FMIX: Mixed Prague+Cubic
+  Jain's Fairness Index: 0.6842 (Moderate)
+  Prague/Cubic Throughput Ratio: 5.24
+  Prague Mean: 40.48 Mbps
+  Cubic Mean: 7.73 Mbps
+  L4S Mean Delay: 0.08 ms
+  Classic Mean Delay: 15.21 ms
+
+P-FMIX2: Mixed Prague+Cubic
+  Jain's Fairness Index: 0.6844 (Moderate)
+  Prague/Cubic Throughput Ratio: 5.17
+  Prague Mean: 26.93 Mbps
+  Cubic Mean: 5.21 Mbps
+  L4S Mean Delay: 0.11 ms
+  Classic Mean Delay: 15.18 ms
+
+P-FMIX3: Mixed Prague+Cubic
+  Jain's Fairness Index: 0.8203 (Good)
+  Prague/Cubic Throughput Ratio: 3.94
+  Prague Mean: 21.38 Mbps
+  Cubic Mean: 5.43 Mbps
+  L4S Mean Delay: 0.31 ms
+  Classic Mean Delay: 14.91 ms
+
+P-FP2: 2 Prague flows
+  Jain's Fairness Index: 1.0000 (Excellent)
+  L4S Mean Delay: 0.50 ms
+
+P-FP4: 4 Prague flows
+  Jain's Fairness Index: 1.0000 (Excellent)
+  L4S Mean Delay: 0.41 ms
+
+P-FP8: 8 Prague flows
+  Jain's Fairness Index: 0.9999 (Excellent)
+  L4S Mean Delay: 0.48 ms
+
+
+LOSS-SENSITIVITY ANALYSIS RESULTS:
+-----------------------------------
+
+C-WLS1: Cubic 1% loss
+  Loss Rate: 1.0%
+  Mean Throughput: 36.12 Mbps
+  P95 Throughput: 38.69 Mbps
+  P99 Throughput: 39.16 Mbps
+
+C-WLS2: Cubic 5% loss
+  Loss Rate: 5.0%
+  Mean Throughput: 34.60 Mbps
+  P95 Throughput: 37.42 Mbps
+  P99 Throughput: 38.34 Mbps
+
+C-WLS3: Cubic 10% loss
+  Loss Rate: 10.0%
+  Mean Throughput: 32.40 Mbps
+  P95 Throughput: 35.68 Mbps
+  P99 Throughput: 36.49 Mbps
+
+P-WLS1: Prague 1% loss
+  Loss Rate: 1.0%
+  Mean Throughput: 33.99 Mbps
+  P95 Throughput: 36.49 Mbps
+  P99 Throughput: 37.07 Mbps
+
+P-WLS2: Prague 5% loss
+  Loss Rate: 5.0%
+  Mean Throughput: 32.05 Mbps
+  P95 Throughput: 34.87 Mbps
+  P99 Throughput: 35.79 Mbps
+
+P-WLS3: Prague 10% loss
+  Loss Rate: 10.0%
+  Mean Throughput: 29.76 Mbps
+  P95 Throughput: 32.79 Mbps
+  P99 Throughput: 33.59 Mbps

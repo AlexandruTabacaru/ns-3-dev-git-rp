@@ -28,7 +28,7 @@ run_wired_experiment() {
     # Run analysis for this experiment
     echo "Analyzing results for $test_id..."
     cd results/scripts
-    python3 analyze_rq3.py --exp-dir "../rq3/$test_id" --test-type wired
+    python3 analyze_rq3.py --exp-dir "../rq3/$test_id"
     cd ../..
 }
 
@@ -56,7 +56,7 @@ run_wifi_experiment() {
     error_decimal="$error_rate"
     
     # Run the simulation with RQ3 WiFi defaults
-    ./ns3 run "l4s-wifi-rq3 --numPrague=$num_prague --numCubic=$num_cubic --numBytes=0 --duration=60 --wanLinkDelay=10ms --mcs=2 --channelWidth=20 --spatialStreams=1 --errorRate=$error_decimal --testName=$test_id --showProgress=true --rngRun=1 --enableTraces=true"
+    ./ns3 run "l4s-wifi-rq3 --numPrague=$num_prague --numCubic=$num_cubic --numBytes=0 --duration=60 --wanLinkDelay=10ms --mcs=4 --channelWidth=20 --spatialStreams=1 --errorRate=$error_decimal --testName=$test_id --showProgress=true --rngRun=1 --enableTraces=true"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then
@@ -72,7 +72,7 @@ run_wifi_experiment() {
     # Run analysis for this experiment
     echo "Analyzing results for $test_id..."
     cd results/scripts
-    python3 analyze_rq3.py --exp-dir "../rq3/$test_id" --test-type wifi
+    python3 analyze_rq3.py --exp-dir "../rq3/$test_id"
     cd ../..
 }
 
@@ -86,19 +86,19 @@ echo
 echo "=== Wired Fairness Experiments ==="
 
 # Prague vs Cubic coexistence tests
-#run_wired_experiment "P-FC1" 1 1   # 1 Prague vs 1 Cubic
-#run_wired_experiment "P-FC4" 1 4   # 1 Prague vs 4 Cubic  
-#run_wired_experiment "P-FC8" 1 8   # 1 Prague vs 8 Cubic
+run_wired_experiment "P-FC1" 1 1   # 1 Prague vs 1 Cubic
+run_wired_experiment "P-FC4" 1 4   # 1 Prague vs 4 Cubic  
+run_wired_experiment "P-FC8" 1 8   # 1 Prague vs 8 Cubic
 
 # Prague-only fairness tests
-#run_wired_experiment "P-FP2" 2 0   # 2 Prague flows
-#run_wired_experiment "P-FP4" 4 0   # 4 Prague flows
-#run_wired_experiment "P-FP8" 8 0   # 8 Prague flows
+run_wired_experiment "P-FP2" 2 0   # 2 Prague flows
+run_wired_experiment "P-FP4" 4 0   # 4 Prague flows
+run_wired_experiment "P-FP8" 8 0   # 8 Prague flows
 
 # Mixed scenarios
-#run_wired_experiment "P-FMIX"  2 2  # 2 Prague + 2 Cubic
-#run_wired_experiment "P-FMIX2" 3 3  # 3 Prague + 3 Cubic  
-#run_wired_experiment "P-FMIX3" 4 2  # 4 Prague + 2 Cubic
+run_wired_experiment "P-FMIX"  2 2  # 2 Prague + 2 Cubic
+run_wired_experiment "P-FMIX2" 3 3  # 3 Prague + 3 Cubic  
+run_wired_experiment "P-FMIX3" 4 2  # 4 Prague + 2 Cubic
 
 echo "Wired fairness experiments completed!"
 echo
@@ -109,12 +109,16 @@ echo
 echo "=== WiFi Loss-Sensitivity Experiments ==="
 
 # Prague loss-sensitivity tests
-run_wifi_experiment "P-WLS1" "Prague" "0.001"  # Prague with 0.1% loss
-run_wifi_experiment "P-WLS2" "Prague" "0.01"    # Prague with 1% loss
+run_wifi_experiment "P-WLS1" "Prague" "0.01"  # Prague with 1% loss
+run_wifi_experiment "P-WLS2" "Prague" "0.05"    # Prague with 5% loss
+run_wifi_experiment "P-WLS3" "Prague" "0.1"    # Prague with 10% loss
+
 
 # Cubic loss-sensitivity tests
-run_wifi_experiment "C-WLS1" "Cubic" "0.001"   # Cubic with 0.1% loss
-run_wifi_experiment "C-WLS2" "Cubic" "0.01"     # Cubic with 1% loss
+run_wifi_experiment "C-WLS1" "Cubic" "0.01"   # Cubic with 1% loss
+run_wifi_experiment "C-WLS2" "Cubic" "0.05"     # Cubic with 5% loss
+run_wifi_experiment "C-WLS3" "Cubic" "0.1"     # Cubic with 10% loss
+
 
 echo "WiFi loss-sensitivity experiments completed!"
 echo
@@ -125,13 +129,9 @@ echo
 echo "=== Running Combined Analysis ==="
 cd results/scripts
 
-# Run combined fairness analysis for all wired experiments
-echo "Analyzing wired fairness results..."
-python3 analyze_rq3.py --exp-dir "../rq3" --test-type wired --combined
-
-# Run combined loss-sensitivity analysis for all WiFi experiments  
-echo "Analyzing WiFi loss-sensitivity results..."
-python3 analyze_rq3.py --exp-dir "../rq3" --test-type wifi --combined
+# Run combined analysis for all experiments
+echo "Analyzing all RQ3 results..."
+python3 analyze_rq3.py --base-dir "../rq3"
 
 cd ../..
 

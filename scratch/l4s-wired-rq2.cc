@@ -150,7 +150,7 @@ main(int argc, char* argv[])
     uint32_t numBackground = 0;
     uint32_t numBytes = 0;             // default to unlimited transfer
     Time duration = Seconds(0);           // By default, close one second after last TCP flow closes
-    Time wanLinkDelay = MilliSecon  ds(20); // base RTT is 40ms
+    Time wanLinkDelay = MilliSeconds(20); // base RTT is 40ms
     DataRate initRate = DataRate("100Mbps"); // Initial bottleneck rate
     DataRate stepRate = DataRate("25Mbps");  // Rate to change to at t=10s
     bool useReno = false;

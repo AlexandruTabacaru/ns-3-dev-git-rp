@@ -306,7 +306,7 @@ main(int argc, char* argv[])
     Config::SetDefault("ns3::DualPi2QueueDisc::Target", TimeValue(MilliSeconds(30)));
     // Set AC_BE max AMPDU to maximum 802.11ax value
     Config::SetDefault("ns3::WifiMac::BE_MaxAmpduSize", UintegerValue(6500631));
-
+    Config::SetDefault("ns3::TcpSocketBase::UseEcn", StringValue("On"));
     CommandLine cmd;
     cmd.Usage("The l4s-wifi program experiments with TCP flows over L4S Wi-Fi configuration");
     cmd.AddValue("numCubic", "Number of foreground Cubic flows", numCubic);
