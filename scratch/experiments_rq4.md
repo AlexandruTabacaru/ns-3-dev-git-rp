@@ -7,7 +7,7 @@ How do competing scalable controllers (TCP Prague and ECN-enabled BBRv3) interac
 
 ## 1. Wired (ns-3 “l4s-wired”)
 
-Tests use a 100 Mb/s bottleneck link with fixed 10 ms one-way delay (≈ 20 ms RTT), no jitter. All flows are long-lived bulk transfers (`MaxBytes = 0`), run for 60 s.
+Tests use a 100 Mb/s bottleneck link with fixed 10 ms one-way delay (≈ 20 ms RTT), no jitter. All flows are long-lived bulk transfers (`MaxBytes = 0`), run for 30 s.
 
 ### 1.1 Fairness & Coexistence
 
@@ -22,7 +22,7 @@ Tests use a 100 Mb/s bottleneck link with fixed 10 ms one-way delay (≈ 20 ms R
 | 7  | 4            | 4           | P4-B4    |
 
 > **Notes (wired):**  
-> – QueueDisc: DualPI2 only (both Prague and BBRv3 share a single DualPI2)  
+> – QueueDisc: DualPI2 only (both Prague and BBRv3 share a single DualPI2, both in the LL queue of dualpi2)  
 > – Measure per-flow steady-state throughput and queue sojourn time  
 > – Each flow is a `BulkSendApplication` with `MaxBytes = 0`, start at t=1 s  
 

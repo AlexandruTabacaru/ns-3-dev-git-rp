@@ -16,7 +16,7 @@ run_rq4_experiment() {
     echo "Running RQ4 fairness experiment $test_id (Prague: $num_prague, BBRv3: $num_bbr)..."
     
     # Run the simulation with RQ4 defaults
-    ./ns3 run "l4s-wired-rq4 --numPrague=$num_prague --numBbr=$num_bbr --numBytes=0 --duration=60s --wanLinkDelay=10ms --bottleneckRate=100Mbps --testName=$test_id --showProgress=true --rngRun=1"
+    ./ns3 run "l4s-wired-rq4 --numPrague=$num_prague --numBbr=$num_bbr --numBytes=0 --duration=30s --wanLinkDelay=10ms --bottleneckRate=100Mbps --testName=$test_id --showProgress=true --rngRun=1"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then

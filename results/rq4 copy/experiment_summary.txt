@@ -1,0 +1,40 @@
+RQ4: Prague vs BBRv3 Fairness in L4S - Experiment Summary
+==========================================================
+
+Research Question:
+How do competing scalable controllers (TCP Prague and ECN-enabled BBRv3) 
+interact within the L4S framework in terms of fairness when sharing a 
+wired bottleneck link?
+
+Test Configuration:
+- Bottleneck: 100 Mbps, 20ms RTT (10ms one-way delay)
+- Duration: 60 seconds
+- Traffic: Long-lived bulk transfers (MaxBytes = 0)
+- Queue: Single DualPI2 (both algorithms use L4S queue)
+- Random seed: 1
+
+Experiments Conducted:
+======================
+
+Test ID  | Prague Flows | BBRv3 Flows | Description
+---------|--------------|-------------|---------------------------
+P1-B1    | 1            | 1           | Balanced competition
+P1-B2    | 1            | 2           | Prague minority
+P2-B1    | 2            | 1           | BBRv3 minority  
+P1-B4    | 1            | 4           | Heavy BBRv3 load
+P4-B1    | 4            | 1           | Heavy Prague load
+P2-B2    | 2            | 2           | Balanced multiple flows
+P4-B4    | 4            | 4           | Heavy mixed load
+
+Analysis Focus:
+- Jain's Fairness Index between algorithms
+- Per-flow throughput distribution
+- Queueing delay comparison (enhanced analytics)
+- Algorithm-specific behavior patterns
+
+Expected Outcomes:
+- Both algorithms should achieve good fairness (JFI > 0.8)
+- Similar queueing delay characteristics (both use L4S)
+- Stable coexistence without starvation
+
+Generated: Mon Jun  9 08:05:08 CEST 2025

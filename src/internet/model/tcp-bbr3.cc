@@ -79,7 +79,17 @@ TcpBbr3::GetTypeId()
                 "Max allowed val for m_ackEpochAcked, after which sampling epoch is reset",
                 UintegerValue(1 << 12),
                 MakeUintegerAccessor(&TcpBbr3::m_ackEpochAckedResetThresh),
-                MakeUintegerChecker<uint32_t>());
+                MakeUintegerChecker<uint32_t>())
+            .AddAttribute("Ecngain",
+                          "EWMA gain for CE fraction α",
+                          DoubleValue(0.0625),
+                          MakeDoubleAccessor(&TcpBbr3::m_g),
+                          MakeDoubleChecker<double>(0, 1))
+            .AddAttribute("AlphaInit",
+                          "Initial DCTCP α value", 
+                          DoubleValue(0.0625),
+                          MakeDoubleAccessor(&TcpBbr3::m_alpha),
+                          MakeDoubleChecker<double>(0, 1));
     return tid;
 }
 
@@ -88,6 +98,13 @@ TcpBbr3::TcpBbr3()
 {
     NS_LOG_FUNCTION(this);
     m_uv = CreateObject<UniformRandomVariable>();
+    
+    // Initialize DCTCP-style ECN state
+    m_ackedBytesTotal = 0;
+    m_ackedBytesEce = 0;
+    m_alpha = 0.0625;      // or pick from AlphaInit
+    m_g = 0.0625;          // or pick from Ecngain
+    m_nextSeqInit = false;
 }
 
 TcpBbr3::TcpBbr3(const TcpBbr3& sock)
@@ -130,7 +147,13 @@ TcpBbr3::TcpBbr3(const TcpBbr3& sock)
       m_extraAckedIdx(sock.m_extraAckedIdx),
       m_ackEpochTime(sock.m_ackEpochTime),
       m_ackEpochAcked(sock.m_ackEpochAcked),
-      m_hasSeenRtt(sock.m_hasSeenRtt)
+      m_hasSeenRtt(sock.m_hasSeenRtt),
+      m_ackedBytesTotal(sock.m_ackedBytesTotal),
+      m_ackedBytesEce(sock.m_ackedBytesEce),
+      m_alpha(sock.m_alpha),
+      m_g(sock.m_g),
+      m_nextSeq(sock.m_nextSeq),
+      m_nextSeqInit(sock.m_nextSeqInit)
 {
     NS_LOG_FUNCTION(this);
 }
@@ -266,15 +289,25 @@ TcpBbr3::bbr_inflight(Ptr<TcpSocketState> tcb, DataRate bw, double gain)
         return tcb->m_initialCWnd * tcb->m_segmentSize;
     }    
     
-    // BBRv3 standard behavior with slight L4S consideration
-    double quanta = 3 * m_sendQuantum;  // Standard BBRv3 value
-    
     double estimatedBdp = bbr_bdp(tcb, bw, gain);
-    if (m_state == BbrMode_t::BBR_PROBE_BW && m_cycleIndex == 0)
+    
+    // L4S mode: Always use minimal buffering for ultra-low delay
+    if (m_ecnEligible)
     {
-        return (estimatedBdp) + quanta + (2 * tcb->m_segmentSize);
+        // L4S mode: minimal extra buffering for ultra-low delay
+        double quanta = 1 * m_sendQuantum;  // Minimal quanta for L4S
+        return (estimatedBdp) + quanta;
     }
-    return (estimatedBdp) + quanta;
+    else
+    {
+        // Fallback: Standard BBRv3 behavior (should rarely be used)
+        double quanta = 3 * m_sendQuantum;  // Standard BBRv3 value
+        if (m_state == BbrMode_t::BBR_PROBE_BW && m_cycleIndex == 0)
+        {
+            return (estimatedBdp) + quanta + (2 * tcb->m_segmentSize);
+        }
+        return (estimatedBdp) + quanta;
+    }
 }
 
 bool 
@@ -660,6 +693,10 @@ TcpBbr3::bbr_update_min_rtt(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRateSa
     {
         m_rtProp = m_probeRttMin;
         m_rtPropStamp = m_probeRttMinStamp;
+        
+        // L4S mode: Always keep ECN enabled for ultra-low delay
+        m_ecnEligible = true;
+        NS_LOG_DEBUG("BBRv3 L4S mode: ECN always enabled for ultra-low delay");
     }
 
 
@@ -1080,9 +1117,12 @@ TcpBbr3::bbr_update_congestion_signals(Ptr<TcpSocketState> tcb, const TcpRateOps
     if (!m_lossRoundStart)
         return;
 
+    // **KERNEL STYLE**: Do per-round-trip updates
     bbr_adapt_lower_bounds(tcb, rs);
 
+    // **KERNEL STYLE**: Reset congestion signals after processing
     m_lossInRound = 0;
+    m_ecnInRound = 0;  // Reset ECN signal like kernel
 }
 
 void
@@ -1238,6 +1278,7 @@ TcpBbr3::bbr_main(Ptr<TcpSocketState> tcb,
     NS_LOG_FUNCTION(this << tcb << rs);
 
     struct bbr_context ctx = { 0 };
+    int ce_ratio = -1;
     
     m_delivered = rc.m_delivered;
     m_txItemDelivered = rc.m_txItemDelivered;
@@ -1245,6 +1286,20 @@ TcpBbr3::bbr_main(Ptr<TcpSocketState> tcb,
     maxBw = bbr_max_bw().GetBitRate();
 
     bbr_update_round_start(tcb, rs);
+
+    // **KERNEL STYLE**: Update ECN alpha once per round when round starts
+    if (m_roundStart) {
+        m_roundsSinceProbe = std::min<uint32_t>(m_roundsSinceProbe + 1, 255);
+        ce_ratio = bbr_update_ecn_alpha(tcb);  // Kernel-style alpha update
+    }
+
+    // **KERNEL STYLE**: Track ECN in round from rate sample  
+    m_ecnInRound |= (m_ecnEligible && tcb->m_ecnState == TcpSocketState::ECN_ECE_RCVD);
+    
+    // Track ECN bytes for alpha calculation
+    if (tcb->m_ecnState == TcpSocketState::ECN_ECE_RCVD && rs.m_ackedSacked > 0) {
+        m_ackedBytesEce += rs.m_ackedSacked * tcb->m_segmentSize;
+    }
   
     bbr_calculate_bw_sample(tcb, rs, &ctx);
     
@@ -1324,48 +1379,21 @@ TcpBbr3::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t e
     }
     else if (event == TcpSocketState::CA_EVENT_ECN_IS_CE)
     {
-        NS_LOG_INFO("BBRv3 ECN CE mark detected - L4S response");
+        NS_LOG_INFO("BBRv3 ECN CE mark detected - KERNEL-STYLE response");
+        
+        // **KERNEL STYLE**: Just mark ECN in round, don't immediately reduce cwnd
         m_ecnInRound = true;
+        m_ecn_in_cycle = true;
         m_ecnEligible = true;
         
-        // BBRv3 ECN response with L4S consideration
-        // Exit aggressive probing immediately
+        // Exit aggressive probing immediately like kernel
         if (m_state == BbrMode_t::BBR_PROBE_BW && m_cycleIndex == BBR_BW_PROBE_UP)
         {
             NS_LOG_INFO("BBRv3 exiting PROBE_UP due to ECN");
             bbr_start_bw_probe_down();
         }
         
-        // Standard BBRv3 cwnd reduction (~30% similar to Prague)
-        if (tcb->m_cWnd > m_minPipeCwnd)
-        {
-            uint32_t newCwnd = std::max<uint32_t>(tcb->m_cWnd * 70 / 100, m_minPipeCwnd);
-            NS_LOG_INFO("BBRv3 cwnd reduction from " << tcb->m_cWnd << " to " << newCwnd);
-            tcb->m_cWnd = newCwnd;
-        }
-        
-        // Moderate inflightHi reduction for stability
-        if (m_inflightHi != std::numeric_limits<uint32_t>::max() && m_inflightHi > m_minPipeCwnd)
-        {
-            m_inflightHi = std::max<uint32_t>(m_inflightHi * 70 / 100, m_minPipeCwnd);
-            NS_LOG_INFO("BBRv3 inflightHi reduction to " << m_inflightHi);
-        }
-        
-        // Moderate bandwidth estimate adjustment
-        if (bw_hi[1].GetBitRate() > 0)
-        {
-            bw_hi[1] = DataRate(bw_hi[1].GetBitRate() * 85 / 100);
-            NS_LOG_INFO("BBRv3 bandwidth estimate adjustment");
-        }
-        
-        // Stop aggressive probing
-        m_bwProbeSamples = 0;
-        m_prevProbeTooHigh = true;
-        
-        // Moderate pacing rate reduction
-        DataRate currentRate = tcb->m_pacingRate;
-        tcb->m_pacingRate = DataRate(currentRate.GetBitRate() * 80 / 100);
-        NS_LOG_INFO("BBRv3 pacing rate adjustment from " << currentRate << " to " << tcb->m_pacingRate);
+        NS_LOG_INFO("BBRv3 ECN marked in round - will adapt lower bounds");
     }
     else if (event == TcpSocketState::CA_EVENT_ECN_NO_CE)
     {
@@ -1389,6 +1417,60 @@ TcpBbr3::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::TcpCAEvent_t e
     }
 }
 
+void
+TcpBbr3::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
+{
+    NS_LOG_FUNCTION(this << tcb << segmentsAcked << rtt);
+    
+    // **KERNEL STYLE**: Just track delivered data, don't update alpha here
+    // Alpha updates happen once per round in bbr_main()
+    
+    // Call the parent implementation for any base TCP functionality
+    TcpCongestionOps::PktsAcked(tcb, segmentsAcked, rtt);
+}
+
+// **NEW**: Kernel-style ECN alpha update (once per round)
+int
+TcpBbr3::bbr_update_ecn_alpha(Ptr<TcpSocketState> tcb)
+{
+    // Use ns-3's delivered tracking from rate ops if available, 
+    // otherwise use our manual tracking
+    uint64_t delivered = m_delivered;
+    uint64_t delivered_ce = 0;  // We'll track this manually for now
+    
+    // Manual tracking: count ECN bytes since last alpha update
+    if (m_alphaLastDelivered == 0) {
+        m_alphaLastDelivered = delivered;
+        m_alphaLastDeliveredCe = 0;
+        return -1;  // Not enough data yet
+    }
+    
+    uint64_t new_delivered = delivered - m_alphaLastDelivered;
+    uint64_t new_delivered_ce = m_ackedBytesEce; // Reset each round
+    
+    if (new_delivered == 0) {
+        return -1;  // Avoid divide by zero
+    }
+    
+    // **KERNEL FORMULA**: ce_ratio = delivered_ce << scale / delivered
+    double ce_ratio = double(new_delivered_ce) / double(new_delivered);
+    
+    // **KERNEL ALPHA UPDATE**: α ← (1-g)·α + g·ce_ratio  
+    double gain = m_g;  // ECN alpha gain
+    m_alpha = (1.0 - gain) * m_alpha + gain * ce_ratio;
+    
+    // Update tracking for next round
+    m_alphaLastDelivered = delivered;
+    m_alphaLastDeliveredCe = 0;
+    m_ackedBytesEce = 0;  // Reset for next round
+    
+    NS_LOG_INFO("BBRv3 KERNEL-STYLE alpha update: ce_ratio=" << ce_ratio 
+               << " alpha=" << m_alpha << " delivered=" << new_delivered 
+               << " ce=" << new_delivered_ce);
+    
+    return (int)(ce_ratio * 256);  // Return ce_ratio scaled like kernel
+}
+
 uint32_t
 TcpBbr3::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t bytesInFlight)
 {
@@ -1408,8 +1490,27 @@ void
 TcpBbr3::bbr_ecn_lower_bounds(Ptr<TcpSocketState> tcb)
 {
     NS_LOG_FUNCTION(this << tcb);
-    m_bwLo = std::max<DataRate>(m_bwLatest, DataRate(m_bwLo.GetBitRate() * 70 / 100));
-    m_inflightLo = std::max<uint32_t>(m_inflightLatest, m_inflightLo.Get() * 70 / 100);
+    
+    // **KERNEL STYLE**: Use ecn_cut formula 
+    double ecn_cut = bbr_ecn_cut();
+    
+    uint32_t new_inflight_lo = (uint64_t)m_inflightLo.Get() * ecn_cut;
+    m_inflightLo = new_inflight_lo;
+    
+    NS_LOG_INFO("BBRv3 ECN lower bounds: alpha=" << m_alpha 
+               << " ecn_cut=" << ecn_cut << " inflight_lo=" << m_inflightLo.Get());
+}
+
+// **NEW**: Kernel-style ECN cut function
+double 
+TcpBbr3::bbr_ecn_cut()
+{
+    // **KERNEL FORMULA**: BBR_UNIT - ((ecn_alpha * ecn_factor) >> BBR_SCALE)
+    // ecn_factor is typically 256 (1.0 in fixed point)
+    // We'll use 1.0 as ecn_factor for now
+    double ecn_factor = 1.0;
+    
+    return 1.0 - (m_alpha * ecn_factor);
 }
 
 } // namespace ns3

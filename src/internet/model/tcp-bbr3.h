@@ -104,6 +104,14 @@ class TcpBbr3 : public TcpCongestionOps
      */
     void Init(Ptr<TcpSocketState> tcb) override;
 
+    /**
+     * \brief Process the received ACK and update ECN state (DCTCP-style)
+     * \param tcb the socket state.
+     * \param segmentsAcked number of segments acked.
+     * \param rtt round trip time
+     */
+    void PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt) override;
+
     void bbr_update_gains();
 
     /**
@@ -123,6 +131,19 @@ class TcpBbr3 : public TcpCongestionOps
      * \param tcb the socket state.
      */
     void bbr_ecn_lower_bounds(Ptr<TcpSocketState> tcb);
+
+    /**
+     * \brief Kernel-style ECN alpha update (once per round).
+     * \param tcb the socket state.
+     * \return ce_ratio scaled like kernel, or -1 if not available
+     */
+    int bbr_update_ecn_alpha(Ptr<TcpSocketState> tcb);
+
+    /**
+     * \brief Kernel-style ECN cut function.
+     * \return multiplicative cut factor for ECN response
+     */
+    double bbr_ecn_cut();
 
    
   protected:
@@ -514,6 +535,17 @@ class TcpBbr3 : public TcpCongestionOps
     TracedValue<uint32_t> maxBw{0};
     TracedValue<uint32_t> wildcard{0};
 
+    // ECN smooth-reaction state (DCTCP style)
+    uint64_t            m_ackedBytesTotal;   //!< Total bytes acked this RTT
+    uint64_t            m_ackedBytesEce;     //!< Of those, how many carried CE
+    double              m_alpha;             //!< EWMA of CE fraction
+    double              m_g;                 //!< EWMA gain (e.g. 1/16)
+    SequenceNumber32    m_nextSeq;           //!< Next-round boundary
+    bool                m_nextSeqInit;       //!< Have we set m_nextSeq yet?
+
+    // **NEW**: Kernel-style ECN tracking 
+    uint64_t            m_alphaLastDelivered{0};    //!< tp->delivered at alpha update
+    uint64_t            m_alphaLastDeliveredCe{0};  //!< tp->delivered_ce at alpha update
 };
 
 } // namespace ns3

@@ -85,6 +85,7 @@ set(source_files
     model/ripng.cc
     model/rtt-estimator.cc
     model/tcp-bbr.cc
+    model/tcp-bbr2.cc
     model/tcp-bbr3.cc
     model/tcp-bic.cc
     model/tcp-congestion-ops.cc
@@ -213,6 +214,7 @@ set(header_files
     model/ripng.h
     model/rtt-estimator.h
     model/tcp-bbr.h
+    model/tcp-bbr2.h
     model/tcp-bbr3.h
     model/tcp-bic.h
     model/tcp-congestion-ops.h
