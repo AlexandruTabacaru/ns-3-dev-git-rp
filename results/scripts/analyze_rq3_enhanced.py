@@ -415,6 +415,135 @@ def calculate_loss_sensitivity_statistics(exp_name, algorithm, description, thro
     
     return stats
 
+def create_fairness_jfi_ratio_plot(base_dir, fairness_stats):
+    """Create a figure with Jain's Fairness Index and Prague/Cubic Throughput Ratio"""
+    if not fairness_stats:
+        return
+    print("📈 Creating fairness JFI/ratio plot...")
+    fairness_stats = sorted(fairness_stats, key=lambda x: x['experiment'])
+    exp_names = [s['experiment'] for s in fairness_stats]
+    colors = []
+    for name in exp_names:
+        if 'FP' in name:
+            colors.append('#1f77b4')
+        elif 'FC' in name:
+            colors.append('#ff7f0e')
+        else:
+            colors.append('#2ca02c')
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 8))
+    fig.suptitle('RQ3 Fairness: JFI and Throughput Ratio', fontsize=20, y=0.97)
+    # Plot 1: Jain's Fairness Index
+    jfi_values = [s.get('jains_fairness_index', 0) for s in fairness_stats]
+    bars = ax1.bar(range(len(exp_names)), jfi_values, color=colors, alpha=0.8, edgecolor='black')
+    ax1.set_title("Jain's Fairness Index", fontweight='bold', fontsize=17)
+    ax1.set_ylabel('Fairness Index', fontsize=15)
+    ax1.set_xticks(range(len(exp_names)))
+    ax1.set_xticklabels(exp_names, rotation=45, ha='right', fontsize=14)
+    ax1.set_ylim(0, 1.05)
+    ax1.grid(True, alpha=0.3, axis='y')
+    ax1.axhline(y=0.9, color='green', linestyle='--', alpha=0.7, label='Good (≥0.9)')
+    ax1.axhline(y=0.8, color='orange', linestyle='--', alpha=0.7, label='Acceptable (≥0.8)')
+    ax1.legend(fontsize=14)
+    for bar, value in zip(bars, jfi_values):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
+                f'{value:.3f}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+    # Plot 2: Prague vs Cubic Throughput Ratio
+    ratios = []
+    ratio_labels = []
+    ratio_colors = []
+    for s, color in zip(fairness_stats, colors):
+        if 'prague_vs_cubic_ratio' in s and s['prague_vs_cubic_ratio'] != float('inf'):
+            ratios.append(s['prague_vs_cubic_ratio'])
+            ratio_labels.append(s['experiment'])
+            ratio_colors.append(color)
+    if ratios:
+        bars = ax2.bar(range(len(ratio_labels)), ratios, color=ratio_colors, alpha=0.8, edgecolor='black')
+        ax2.set_title('Prague/Cubic Throughput Ratio', fontweight='bold', fontsize=17)
+        ax2.set_ylabel('Ratio (Prague/Cubic)', fontsize=15)
+        ax2.set_xticks(range(len(ratio_labels)))
+        ax2.set_xticklabels(ratio_labels, rotation=45, ha='right', fontsize=14)
+        ax2.axhline(y=1.0, color='black', linestyle='--', alpha=0.7, label='Equal (1.0)')
+        ax2.grid(True, alpha=0.3, axis='y')
+        ax2.legend(fontsize=14)
+        for bar, value in zip(bars, ratios):
+            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
+                    f'{value:.2f}', ha='center', va='bottom', fontsize=15, fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 1, 0.93])
+    output_file = base_dir / 'rq3_fairness_jfi_ratio.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
+
+def create_fairness_throughput_delay_plot(base_dir, fairness_stats):
+    """Create a figure with Mean Throughput by Algorithm and Mean Queue Delays"""
+    if not fairness_stats:
+        return
+    print("📈 Creating fairness throughput/delay plot...")
+    fairness_stats = sorted(fairness_stats, key=lambda x: x['experiment'])
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 8))
+    fig.suptitle('RQ3 Fairness: Throughput and Queue Delays', fontsize=20, y=0.97)
+    # Plot 1: Mean Throughput by Algorithm
+    prague_means = []
+    cubic_means = []
+    mixed_labels = []
+    for s in fairness_stats:
+        if 'prague_mean_tput' in s and 'cubic_mean_tput' in s:
+            prague_means.append(s['prague_mean_tput'])
+            cubic_means.append(s['cubic_mean_tput'])
+            mixed_labels.append(s['experiment'])
+    if prague_means and cubic_means:
+        x = np.arange(len(mixed_labels))
+        width = 0.35
+        bars1 = ax1.bar(x - width/2, prague_means, width, label='Prague', 
+                       color='#1f77b4', alpha=0.8, edgecolor='black')
+        bars2 = ax1.bar(x + width/2, cubic_means, width, label='Cubic', 
+                       color='#d62728', alpha=0.8, edgecolor='black')
+        ax1.set_title('Mean Throughput by Algorithm', fontweight='bold', fontsize=17)
+        ax1.set_ylabel('Mean Throughput (Mbps)', fontsize=15)
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(mixed_labels, rotation=45, ha='right', fontsize=14)
+        ax1.legend(fontsize=14)
+        ax1.grid(True, alpha=0.3, axis='y')
+        ax1.set_ylim(bottom=0)
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2, height + 0.5,
+                        f'{height:.1f}', ha='center', va='bottom', fontsize=15)
+    # Plot 2: Mean Queue Delays (log scale)
+    l4s_delays = []
+    classic_delays = []
+    delay_labels = []
+    for s in fairness_stats:
+        if 'l4s_mean_delay' in s and 'classic_mean_delay' in s:
+            l4s_delays.append(s['l4s_mean_delay'])
+            classic_delays.append(s['classic_mean_delay'])
+            delay_labels.append(s['experiment'])
+    if l4s_delays and classic_delays:
+        x = np.arange(len(delay_labels))
+        width = 0.35
+        bars1 = ax2.bar(x - width/2, l4s_delays, width, label='L4S Queue', 
+                       color='#1f77b4', alpha=0.8, edgecolor='black')
+        bars2 = ax2.bar(x + width/2, classic_delays, width, label='Classic Queue', 
+                       color='#d62728', alpha=0.8, edgecolor='black')
+        ax2.set_title('Mean Queue Delays (Log Scale)', fontweight='bold', fontsize=17)
+        ax2.set_ylabel('Mean Delay (ms)', fontsize=15)
+        ax2.set_yscale('log')
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(delay_labels, rotation=45, ha='right', fontsize=14)
+        ax2.legend(fontsize=14)
+        ax2.grid(True, alpha=0.3, which='both')
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                ax2.text(bar.get_x() + bar.get_width()/2, height * 1.1,
+                        f'{height:.1f}', ha='center', va='bottom', fontsize=15)
+    plt.tight_layout(rect=[0, 0, 1, 0.93])
+    output_file = base_dir / 'rq3_fairness_throughput_delay.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ Saved: {output_file.name}")
+
 def create_fairness_summary_plot(base_dir, fairness_stats):
     """Create publication-ready fairness summary focusing on key metrics"""
     if not fairness_stats:
@@ -446,7 +575,7 @@ def create_fairness_summary_plot(base_dir, fairness_stats):
     ax1.set_title('Jain\'s Fairness Index', fontweight='bold', fontsize=12)
     ax1.set_ylabel('Fairness Index')
     ax1.set_xticks(range(len(exp_names)))
-    ax1.set_xticklabels(exp_names, rotation=45, ha='right')
+    ax1.set_xticklabels(exp_names, rotation=45, ha='right', fontsize=12)
     ax1.set_ylim(0, 1.05)
     ax1.grid(True, alpha=0.3, axis='y')
     ax1.axhline(y=0.9, color='green', linestyle='--', alpha=0.7, label='Good (≥0.9)')
@@ -474,7 +603,7 @@ def create_fairness_summary_plot(base_dir, fairness_stats):
         ax2.set_title('Prague/Cubic Throughput Ratio', fontweight='bold', fontsize=12)
         ax2.set_ylabel('Ratio (Prague/Cubic)')
         ax2.set_xticks(range(len(ratio_labels)))
-        ax2.set_xticklabels(ratio_labels, rotation=45, ha='right')
+        ax2.set_xticklabels(ratio_labels, rotation=45, ha='right', fontsize=12)
         ax2.axhline(y=1.0, color='black', linestyle='--', alpha=0.7, label='Equal (1.0)')
         ax2.grid(True, alpha=0.3, axis='y')
         ax2.legend()
@@ -507,7 +636,7 @@ def create_fairness_summary_plot(base_dir, fairness_stats):
         ax3.set_title('Mean Throughput by Algorithm', fontweight='bold', fontsize=12)
         ax3.set_ylabel('Mean Throughput (Mbps)')
         ax3.set_xticks(x)
-        ax3.set_xticklabels(mixed_labels, rotation=45, ha='right')
+        ax3.set_xticklabels(mixed_labels, rotation=45, ha='right', fontsize=12)
         ax3.legend()
         ax3.grid(True, alpha=0.3, axis='y')
         ax3.set_ylim(bottom=0)
@@ -543,7 +672,7 @@ def create_fairness_summary_plot(base_dir, fairness_stats):
         ax4.set_ylabel('Mean Delay (ms)')
         ax4.set_yscale('log')
         ax4.set_xticks(x)
-        ax4.set_xticklabels(delay_labels, rotation=45, ha='right')
+        ax4.set_xticklabels(delay_labels, rotation=45, ha='right', fontsize=12)
         ax4.legend()
         ax4.grid(True, alpha=0.3, which='both')
         
@@ -573,7 +702,7 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
     cubic_stats = sorted([s for s in loss_stats if s['algorithm'] == 'Cubic'], 
                         key=lambda x: x.get('loss_rate', 0))
     
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     fig.suptitle('RQ3 Loss-Sensitivity Analysis Summary', fontsize=16, y=0.98)
     
     # Plot 1: Mean Throughput vs Loss Rate
@@ -585,7 +714,7 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
         
         # Add value labels
         for x, y in zip(prague_loss_rates, prague_means):
-            ax1.text(x, y + 2, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+            ax1.text(x, y + 0.5, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     if cubic_stats:
         cubic_loss_rates = [s.get('loss_rate', 0) * 100 for s in cubic_stats]
@@ -595,7 +724,7 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
         
         # Add value labels
         for x, y in zip(cubic_loss_rates, cubic_means):
-            ax1.text(x, y + 2, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+            ax1.text(x, y + 0.5, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     ax1.set_title('Mean Throughput vs Loss Rate', fontweight='bold', fontsize=12)
     ax1.set_xlabel('Packet Loss Rate (%)')
@@ -612,7 +741,7 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
         
         # Add value labels
         for x, y in zip(prague_loss_rates, prague_p95s):
-            ax2.text(x, y + 2, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+            ax2.text(x, y + 0.5, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     if cubic_stats:
         cubic_p95s = [s.get('p95_throughput', 0) for s in cubic_stats]
@@ -621,7 +750,7 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
         
         # Add value labels
         for x, y in zip(cubic_loss_rates, cubic_p95s):
-            ax2.text(x, y + 2, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+            ax2.text(x, y + 0.5, f'{y:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     ax2.set_title('P95 Throughput vs Loss Rate', fontweight='bold', fontsize=12)
     ax2.set_xlabel('Packet Loss Rate (%)')
@@ -630,35 +759,35 @@ def create_loss_sensitivity_summary_plot(base_dir, loss_stats):
     ax2.grid(True, alpha=0.3)
     ax2.set_ylim(bottom=0)
     
-    # Plot 3: Performance Degradation (%)
-    if prague_stats and len(prague_stats) > 1:
-        baseline_prague = max(s.get('mean_throughput', 0) for s in prague_stats)
-        prague_degradation = [(baseline_prague - s.get('mean_throughput', 0)) / baseline_prague * 100 
-                             for s in prague_stats]
-        ax3.plot(prague_loss_rates, prague_degradation, 'bo-', linewidth=3, 
-                label='Prague', markersize=10, markerfacecolor='lightblue', markeredgecolor='blue')
+    # # Plot 3: Performance Degradation (%)
+    # if prague_stats and len(prague_stats) > 1:
+    #     baseline_prague = max(s.get('mean_throughput', 0) for s in prague_stats)
+    #     prague_degradation = [(baseline_prague - s.get('mean_throughput', 0)) / baseline_prague * 100 
+    #                          for s in prague_stats]
+    #     ax3.plot(prague_loss_rates, prague_degradation, 'bo-', linewidth=3, 
+    #             label='Prague', markersize=10, markerfacecolor='lightblue', markeredgecolor='blue')
         
-        # Add value labels
-        for x, y in zip(prague_loss_rates, prague_degradation):
-            ax3.text(x, y + 1, f'{y:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
+    #     # Add value labels
+    #     for x, y in zip(prague_loss_rates, prague_degradation):
+    #         ax3.text(x, y + 0.3, f'{y:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    if cubic_stats and len(cubic_stats) > 1:
-        baseline_cubic = max(s.get('mean_throughput', 0) for s in cubic_stats)
-        cubic_degradation = [(baseline_cubic - s.get('mean_throughput', 0)) / baseline_cubic * 100 
-                            for s in cubic_stats]
-        ax3.plot(cubic_loss_rates, cubic_degradation, 'rs-', linewidth=3, 
-                label='Cubic', markersize=10, markerfacecolor='lightcoral', markeredgecolor='red')
+    # if cubic_stats and len(cubic_stats) > 1:
+    #     baseline_cubic = max(s.get('mean_throughput', 0) for s in cubic_stats)
+    #     cubic_degradation = [(baseline_cubic - s.get('mean_throughput', 0)) / baseline_cubic * 100 
+    #                         for s in cubic_stats]
+    #     ax3.plot(cubic_loss_rates, cubic_degradation, 'rs-', linewidth=3, 
+    #             label='Cubic', markersize=10, markerfacecolor='lightcoral', markeredgecolor='red')
         
-        # Add value labels
-        for x, y in zip(cubic_loss_rates, cubic_degradation):
-            ax3.text(x, y + 1, f'{y:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
+    #     # Add value labels
+    #     for x, y in zip(cubic_loss_rates, cubic_degradation):
+    #         ax3.text(x, y + 0.3, f'{y:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
-    ax3.set_title('Performance Degradation', fontweight='bold', fontsize=12)
-    ax3.set_xlabel('Packet Loss Rate (%)')
-    ax3.set_ylabel('Throughput Degradation (%)')
-    ax3.legend(fontsize=11)
-    ax3.grid(True, alpha=0.3)
-    ax3.set_ylim(bottom=0)
+    # ax3.set_title('Performance Degradation', fontweight='bold', fontsize=12)
+    # ax3.set_xlabel('Packet Loss Rate (%)')
+    # ax3.set_ylabel('Throughput Degradation (%)')
+    # ax3.legend(fontsize=11)
+    # ax3.grid(True, alpha=0.3)
+    # ax3.set_ylim(bottom=0)
     
     plt.tight_layout(rect=[0, 0, 1, 0.92])
     output_file = base_dir / 'rq3_loss_sensitivity_summary.png'
@@ -791,7 +920,8 @@ def main():
         
         # Create summary plots
         if fairness_stats:
-            create_fairness_summary_plot(base_dir, fairness_stats)
+            create_fairness_jfi_ratio_plot(base_dir, fairness_stats)
+            create_fairness_throughput_delay_plot(base_dir, fairness_stats)
         if loss_stats:
             create_loss_sensitivity_summary_plot(base_dir, loss_stats)
         

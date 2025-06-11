@@ -1,0 +1,8 @@
+Experiment,Prague_Flows,BBRv3_Flows,Overall_JFI,Algorithm_JFI,Prague_Avg_Mbps,BBRv3_Avg_Mbps,Mean_Queue_Delay_ms,Fairness_Class
+P1-B1,1,1,1.000,1.000,47.6,47.7,0.59,Excellent
+P1-B2,1,2,0.917,0.977,25.4,34.4,0.26,Excellent
+P1-B4,1,4,0.911,0.999,20.2,18.8,1.16,Excellent
+P2-B1,2,1,0.917,0.923,24.7,44.8,0.26,Excellent
+P2-B2,2,2,0.959,0.988,21.1,26.2,0.90,Excellent
+P4-B1,4,1,0.911,0.936,16.7,28.5,1.16,Excellent
+P4-B4,4,4,0.748,0.995,11.1,12.8,2.01,Moderate

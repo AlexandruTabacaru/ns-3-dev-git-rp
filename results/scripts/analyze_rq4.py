@@ -34,7 +34,7 @@ plt.rcParams.update({
 })
 
 def load_data_safely(filepath, verbose=False):
-    """Load data file with comprehensive error handling"""
+    """Load data file with comprehensive error handling and proper numeric conversion"""
     try:
         if not filepath.exists():
             if verbose:
@@ -46,10 +46,15 @@ def load_data_safely(filepath, verbose=False):
                 print(f"  Empty file: {filepath.name}")
             return None
             
-        data = pd.read_csv(filepath, sep=' ', header=None)
+        # Read CSV with proper numeric conversion
+        data = pd.read_csv(filepath, sep=' ', header=None, dtype=float, na_values=['', 'nan', 'inf', '-inf'])
+        
+        # Drop any rows with NaN values
+        data = data.dropna()
+        
         if data.empty:
             if verbose:
-                print(f"  No data in file: {filepath.name}")
+                print(f"  No valid data in file: {filepath.name}")
             return None
             
         if verbose:
@@ -91,8 +96,6 @@ def check_experiment_files(exp_dir):
         'bbr_cwnd': f"bbr-cwnd.{exp_name}.dat",
         'l4s_sojourn': f"wired-dualpi2-l-sojourn.{exp_name}.dat",
         'dualpi2_bytes': f"wired-dualpi2-bytes.{exp_name}.dat",
-        'prague_sojourn': f"prague-sojourn.{exp_name}.dat",
-        'bbr_sojourn': f"bbr-sojourn.{exp_name}.dat",
         'queueing_analytics': f"queueing-analytics.{exp_name}.dat"
     }
     
@@ -151,19 +154,17 @@ def analyze_rq4_experiment(exp_dir, verbose=True):
     prague_per_flow = load_data_safely(existing_files.get('prague_per_flow'), verbose)
     bbr_per_flow = load_data_safely(existing_files.get('bbr_per_flow'), verbose)
     l4s_sojourn = load_data_safely(existing_files.get('l4s_sojourn'), verbose)
-    prague_sojourn = load_data_safely(existing_files.get('prague_sojourn'), verbose)
-    bbr_sojourn = load_data_safely(existing_files.get('bbr_sojourn'), verbose)
 
     # Analysis parameters
-    warmup_time = 5.0
-    teardown_time = 5.0
+    warmup_time = 8.0
+    teardown_time = 0.0
 
     # Calculate fairness statistics
     print("  Computing RQ4 fairness statistics...")
     stats = calculate_rq4_fairness_statistics(exp_name, description, num_prague, num_bbr,
                                              prague_per_flow, bbr_per_flow,
                                              prague_tput, bbr_tput, 
-                                             l4s_sojourn, prague_sojourn, bbr_sojourn,
+                                             l4s_sojourn,
                                              warmup_time, teardown_time)
     
     if stats:
@@ -184,7 +185,7 @@ def analyze_rq4_experiment(exp_dir, verbose=True):
 def calculate_rq4_fairness_statistics(exp_name, description, num_prague, num_bbr,
                                      prague_per_flow, bbr_per_flow,
                                      prague_tput, bbr_tput, 
-                                     l4s_sojourn, prague_sojourn, bbr_sojourn,
+                                     l4s_sojourn,
                                      warmup_time, teardown_time):
     """Calculate comprehensive RQ4 fairness statistics"""
     
@@ -197,9 +198,9 @@ def calculate_rq4_fairness_statistics(exp_name, description, num_prague, num_bbr
         'total_flows': num_prague + num_bbr if isinstance(num_prague, int) and isinstance(num_bbr, int) else 0
     }
     
-    # Analysis time window
+    # Analysis time window (experiments run for 30 seconds)
     analysis_start = warmup_time
-    analysis_end = 60.0 - teardown_time
+    analysis_end = 30.0 - teardown_time
     
     # Calculate fairness from per-flow data
     if prague_per_flow is not None or bbr_per_flow is not None:
@@ -291,26 +292,9 @@ def calculate_rq4_fairness_statistics(exp_name, description, num_prague, num_bbr
             'queue_name': queue_name
         }
     
-    # Enhanced L4S queueing analysis for RQ4
+    # L4S queueing analysis for RQ4
     if l4s_sojourn is not None:
         stats['l4s_queue'] = extract_queue_stats(l4s_sojourn, 'L4S')
-    
-    # Algorithm-specific queueing delays (RQ4 enhancement)
-    if prague_sojourn is not None:
-        stats['prague_queue'] = extract_queue_stats(prague_sojourn, 'Prague')
-    if bbr_sojourn is not None:
-        stats['bbr_queue'] = extract_queue_stats(bbr_sojourn, 'BBRv3')
-    
-    # Compare Prague vs BBRv3 queueing behavior
-    if 'prague_queue' in stats and 'bbr_queue' in stats:
-        prague_delay = stats['prague_queue']['mean_delay']
-        bbr_delay = stats['bbr_queue']['mean_delay']
-        stats['queueing_comparison'] = {
-            'prague_advantage': (bbr_delay - prague_delay) / bbr_delay if bbr_delay > 0 else 0,
-            'delay_ratio': prague_delay / bbr_delay if bbr_delay > 0 else 0,
-            'delay_difference': abs(prague_delay - bbr_delay),
-            'similar_delays': abs(prague_delay - bbr_delay) < 5.0  # Within 5ms
-        }
     
     # Overall throughput statistics
     def extract_throughput_stats(data, label):
@@ -406,29 +390,7 @@ def save_rq4_statistics(exp_dir, stats):
             f.write(f"  Delay CV: {q['delay_cv']:.3f}\n")
             f.write(f"  Samples: {q['samples']}\n\n")
         
-        # Algorithm-specific queueing
-        if 'prague_queue' in stats:
-            q = stats['prague_queue']
-            f.write(f"PRAGUE QUEUEING DELAYS:\n")
-            f.write(f"  Mean delay: {q['mean_delay']:.2f} ms\n")
-            f.write(f"  95th percentile: {q['p95_delay']:.2f} ms\n")
-            f.write(f"  Samples: {q['samples']}\n\n")
-        
-        if 'bbr_queue' in stats:
-            q = stats['bbr_queue']
-            f.write(f"BBRv3 QUEUEING DELAYS:\n")
-            f.write(f"  Mean delay: {q['mean_delay']:.2f} ms\n")
-            f.write(f"  95th percentile: {q['p95_delay']:.2f} ms\n")
-            f.write(f"  Samples: {q['samples']}\n\n")
-        
-        # Queueing comparison
-        if 'queueing_comparison' in stats:
-            qc = stats['queueing_comparison']
-            f.write(f"QUEUEING BEHAVIOR COMPARISON:\n")
-            f.write(f"  Prague advantage: {qc['prague_advantage']:.1%}\n")
-            f.write(f"  Delay ratio (Prague/BBRv3): {qc['delay_ratio']:.3f}\n")
-            f.write(f"  Delay difference: {qc['delay_difference']:.2f} ms\n")
-            f.write(f"  Similar delays: {'Yes' if qc['similar_delays'] else 'No'}\n")
+
 
 def create_rq4_experiment_plot(exp_dir, stats, verbose=True):
     """Create comprehensive plot for a single RQ4 experiment"""
@@ -448,8 +410,7 @@ def create_rq4_experiment_plot(exp_dir, stats, verbose=True):
     bbr_tput = load_data_safely(existing_files.get('bbr_throughput'))
     prague_per_flow = load_data_safely(existing_files.get('prague_per_flow'))
     bbr_per_flow = load_data_safely(existing_files.get('bbr_per_flow'))
-    prague_sojourn = load_data_safely(existing_files.get('prague_sojourn'))
-    bbr_sojourn = load_data_safely(existing_files.get('bbr_sojourn'))
+    l4s_sojourn = load_data_safely(existing_files.get('l4s_sojourn'))
     
     # Create comprehensive plot
     fig = plt.figure(figsize=(16, 12))
@@ -469,9 +430,6 @@ def create_rq4_experiment_plot(exp_dir, stats, verbose=True):
     ax2 = fig.add_subplot(gs[1, 0])
     plot_rq4_individual_flows(ax2, stats)
     
-    # Plot 3: Queueing delay comparison
-    ax3 = fig.add_subplot(gs[1, 1])
-    plot_rq4_queueing_comparison(ax3, prague_sojourn, bbr_sojourn)
     
     # Plot 4: Fairness metrics summary
     ax4 = fig.add_subplot(gs[2, :])
@@ -503,7 +461,7 @@ def plot_rq4_throughput_comparison(ax, prague_tput, bbr_tput, exp_name):
     
     # Add analysis window
     ax.axvspan(0, 5, alpha=0.15, color='gray', label='Excluded periods')
-    ax.axvspan(55, 60, alpha=0.15, color='gray')
+    ax.axvspan(25, 30, alpha=0.15, color='gray')
     
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Throughput (Mbps)')
@@ -544,45 +502,41 @@ def plot_rq4_individual_flows(ax, stats):
         ax.text(0.5, 0.5, 'No flow data available', ha='center', va='center', 
                 transform=ax.transAxes, fontsize=12)
 
-def plot_rq4_queueing_comparison(ax, prague_sojourn, bbr_sojourn):
-    """Plot queueing delay comparison for RQ4"""
-    ax.set_title('Algorithm-Specific Queueing Delays', fontweight='bold', fontsize=12)
+def plot_l4s_queue_delay(ax, l4s_sojourn):
+    """Plot L4S/DualPI2 queue delay distribution"""
+    ax.set_title('DualPI2 Queue Delays', fontweight='bold', fontsize=12)
     
-    delay_data = []
-    labels = []
-    
-    # Prague delays
-    if prague_sojourn is not None:
-        analysis_data = prague_sojourn[
-            (prague_sojourn.iloc[:, 0] >= 5) & 
-            (prague_sojourn.iloc[:, 0] <= 55)
+    if l4s_sojourn is not None:
+        analysis_data = l4s_sojourn[
+            (l4s_sojourn.iloc[:, 0] >= 5) & 
+            (l4s_sojourn.iloc[:, 0] <= 25)  # 30s experiment
         ]
         if len(analysis_data) > 0:
-            delay_data.append(analysis_data.iloc[:, 1].values)
-            labels.append('Prague')
+            delays = analysis_data.iloc[:, 1].values
+            
+            # Create histogram
+            ax.hist(delays, bins=50, alpha=0.7, color='#3498db', edgecolor='black')
+            
+            # Add statistics text
+            mean_delay = np.mean(delays)
+            p95_delay = np.percentile(delays, 95)
+            p99_delay = np.percentile(delays, 99)
+            median_delay = np.median(delays)
+            
+            stats_text = f"Mean: {mean_delay:.2f} ms\nMedian: {median_delay:.2f} ms\n95th: {p95_delay:.2f} ms\n99th: {p99_delay:.2f} ms"
+            ax.text(0.98, 0.98, stats_text, transform=ax.transAxes, 
+                   fontsize=10, va='top', ha='right',
+                   bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        else:
+            ax.text(0.5, 0.5, 'No queue delay data available', ha='center', va='center', 
+                   transform=ax.transAxes, fontsize=12)
+    else:
+        ax.text(0.5, 0.5, 'No queue delay data available', ha='center', va='center', 
+               transform=ax.transAxes, fontsize=12)
     
-    # BBRv3 delays
-    if bbr_sojourn is not None:
-        analysis_data = bbr_sojourn[
-            (bbr_sojourn.iloc[:, 0] >= 5) & 
-            (bbr_sojourn.iloc[:, 0] <= 55)
-        ]
-        if len(analysis_data) > 0:
-            delay_data.append(analysis_data.iloc[:, 1].values)
-            labels.append('BBRv3')
-    
-    if delay_data:
-        bp = ax.boxplot(delay_data, labels=labels, patch_artist=True)
-        
-        # Color boxes
-        colors = ['#1f77b4', '#ff7f0e']
-        for i, patch in enumerate(bp['boxes']):
-            if i < len(colors):
-                patch.set_facecolor(colors[i])
-                patch.set_alpha(0.7)
-    
-    ax.set_ylabel('Queue Delay (ms)')
-    ax.set_yscale('log')
+    ax.set_xlabel('Queue Delay (ms)')
+    ax.set_ylabel('Frequency')
+    ax.set_xscale('log')
     ax.grid(True, alpha=0.3)
 
 def plot_rq4_fairness_summary(ax, stats):
@@ -636,40 +590,6 @@ def plot_rq4_fairness_summary(ax, stats):
         ax.grid(True, alpha=0.3)
         ax.legend(loc='upper right', fontsize=9) 
 
-def create_rq4_comparison_plots(base_dir, all_stats):
-    """Create comprehensive comparison plots across all RQ4 experiments"""
-    
-    print("\n📊 Creating RQ4 comparison plots...")
-    
-    if not all_stats:
-        print("  ⚠️  No statistics available for comparison plots")
-        return
-    
-    # Create overall fairness comparison
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('RQ4 Overall Analysis: Prague vs BBRv3 L4S Fairness', fontsize=16, fontweight='bold')
-    
-    # Plot 1: Overall fairness comparison
-    plot_rq4_overall_fairness(ax1, all_stats)
-    
-    # Plot 2: Algorithm-level fairness
-    plot_rq4_algorithm_fairness(ax2, all_stats)
-    
-    # Plot 3: Throughput comparison
-    plot_rq4_throughput_summary(ax3, all_stats)
-    
-    # Plot 4: Queueing delay comparison
-    plot_rq4_queueing_summary(ax4, all_stats)
-    
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    
-    output_file = base_dir / 'rq4_overall_comparison.png'
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"  ✓ Saved: {output_file.name}")
-    
-    # Create flow ratio analysis
-    create_rq4_flow_ratio_analysis(base_dir, all_stats)
 
 def plot_rq4_overall_fairness(ax, all_stats):
     """Plot overall fairness comparison"""
@@ -780,142 +700,658 @@ def plot_rq4_queueing_summary(ax, all_stats):
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-def create_rq4_flow_ratio_analysis(base_dir, all_stats):
-    """Create flow ratio analysis plot"""
+def create_paper_quality_plots(base_dir, all_stats):
+    """Create publication-quality plots for academic paper"""
     
-    print("  📈 Creating flow ratio analysis...")
-    
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    fig.suptitle('RQ4 Flow Ratio Analysis', fontsize=16, fontweight='bold')
-    
-    # Extract flow ratios and fairness
-    prague_flows = []
-    bbr_flows = []
-    overall_fairness = []
-    algo_fairness = []
-    
-    for stats in all_stats:
-        if isinstance(stats.get('prague_flows'), int) and isinstance(stats.get('bbr_flows'), int):
-            prague_flows.append(stats['prague_flows'])
-            bbr_flows.append(stats['bbr_flows'])
-            overall_fairness.append(stats.get('jains_fairness_index', 0))
-            algo_fairness.append(stats.get('algorithm_fairness', 0))
-    
-    # Plot 1: Flow count vs overall fairness
-    total_flows = [p + b for p, b in zip(prague_flows, bbr_flows)]
-    colors = ['#2ecc71' if jfi > 0.9 else '#f39c12' if jfi > 0.8 else '#e74c3c' for jfi in overall_fairness]
-    
-    scatter1 = ax1.scatter(total_flows, overall_fairness, c=colors, s=100, alpha=0.8, edgecolors='black')
-    ax1.set_title('Total Flows vs Overall Fairness')
-    ax1.set_xlabel('Total Number of Flows')
-    ax1.set_ylabel('Jain\'s Fairness Index')
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(0, 1.05)
-    
-    # Add experiment labels
-    for i, (tf, jfi, p, b) in enumerate(zip(total_flows, overall_fairness, prague_flows, bbr_flows)):
-        ax1.annotate(f'P{p}-B{b}', (tf, jfi), xytext=(5, 5), 
-                    textcoords='offset points', fontsize=8)
-    
-    # Plot 2: Prague ratio vs algorithm fairness
-    prague_ratios = [p / (p + b) for p, b in zip(prague_flows, bbr_flows)]
-    colors2 = ['#2ecc71' if jfi > 0.9 else '#f39c12' if jfi > 0.8 else '#e74c3c' for jfi in algo_fairness]
-    
-    scatter2 = ax2.scatter(prague_ratios, algo_fairness, c=colors2, s=100, alpha=0.8, edgecolors='black')
-    ax2.set_title('Prague Flow Ratio vs Algorithm Fairness')
-    ax2.set_xlabel('Prague Flow Ratio')
-    ax2.set_ylabel('Algorithm Fairness Index')
-    ax2.grid(True, alpha=0.3)
-    ax2.set_ylim(0, 1.05)
-    ax2.axvline(x=0.5, color='gray', linestyle='--', alpha=0.7, label='Balanced (50%)')
-    ax2.legend()
-    
-    # Add experiment labels
-    for i, (pr, jfi, p, b) in enumerate(zip(prague_ratios, algo_fairness, prague_flows, bbr_flows)):
-        ax2.annotate(f'P{p}-B{b}', (pr, jfi), xytext=(5, 5), 
-                    textcoords='offset points', fontsize=8)
-    
-    plt.tight_layout(rect=[0, 0, 1, 0.94])
-    
-    output_file = base_dir / 'rq4_flow_ratio_analysis.png'
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"     ✓ Saved: {output_file.name}")
-
-def create_rq4_summary_table(base_dir, all_stats):
-    """Create comprehensive RQ4 summary table"""
-    
-    print("\n📊 Creating RQ4 summary table...")
+    print("\n📊 Creating publication-quality plots...")
     
     if not all_stats:
-        print("  ⚠️  No statistics to summarize")
+        print("  ⚠️  No statistics available for plotting")
         return
     
-    # Create summary data
-    summary_data = []
+    # Create main comparison figure with subplots - 2x3 layout without fairness panel
+    fig = plt.figure(figsize=(18, 14))
+    gs = fig.add_gridspec(3, 2, height_ratios=[2.5, 2.5, 1.2], width_ratios=[1.8, 1.2], 
+                         hspace=0.4, wspace=0.3)
+    
+    # Main title with overall fairness summary
+    overall_jfi = np.mean([s.get('jains_fairness_index', 0) for s in all_stats])
+    fig.suptitle(f'RQ4: Prague vs BBRv3 Fairness in L4S Environment\nOverall Fairness (JFI): {overall_jfi:.3f}', 
+                 fontsize=18, fontweight='bold', y=0.98)
+    
+    # Plot 1: Per-flow throughput comparison (left column, top)
+    ax1 = fig.add_subplot(gs[0, 0])
+    plot_per_flow_throughput_comparison(ax1, base_dir, all_stats)
+    
+    # Plot 2: Algorithm throughput balance (right column, top - wider now)
+    ax2 = fig.add_subplot(gs[0, 1])
+    plot_algorithm_balance(ax2, all_stats)
+    
+    # Plot 3: DualPI2 queue delay over time (left column, middle)
+    ax3 = fig.add_subplot(gs[1, 0])
+    plot_dualpi2_queue_analysis(ax3, base_dir, all_stats)
+    
+    # Right middle position - leave empty for better spacing
+    ax_empty = fig.add_subplot(gs[1, 1])
+    ax_empty.axis('off')
+    
+    # Plot 4: Summary statistics table (spans all columns, bottom)
+    ax4 = fig.add_subplot(gs[2, :])
+    plot_summary_table_v2(ax4, all_stats)
+    
+    # Save the main figure with more padding
+    output_file = base_dir / 'rq4_paper_quality_analysis.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white', pad_inches=0.2)
+    plt.close()
+    print(f"  ✓ Saved main figure: {output_file.name}")
+    
+    # Create individual detailed plots
+    create_detailed_per_flow_plots(base_dir, all_stats)
+    create_queueing_analysis_plots(base_dir, all_stats)
+
+def plot_per_flow_throughput_comparison(ax, base_dir, all_stats):
+    """Plot per-flow throughput comparison across all experiments"""
+    ax.set_title('Per-Flow Throughput Distribution', fontweight='bold', fontsize=14)
+    
+    x_pos = 0
+    x_labels = []
+    x_positions = []
+    
+    for stats in all_stats:
+        exp_name = stats['experiment']
+        
+        if 'individual_throughputs' in stats and 'flow_labels' in stats:
+            throughputs = stats['individual_throughputs']
+            labels = stats['flow_labels']
+            
+            # Separate Prague and BBR flows
+            prague_tputs = [t for t, l in zip(throughputs, labels) if 'Prague' in l]
+            bbr_tputs = [t for t, l in zip(throughputs, labels) if 'BBRv3' in l]
+            
+            # Plot Prague flows
+            if prague_tputs:
+                prague_x = [x_pos + i*0.8 for i in range(len(prague_tputs))]
+                bars_p = ax.bar(prague_x, prague_tputs, 0.7, label='Prague' if x_pos == 0 else "", 
+                              color='#1f77b4', alpha=0.8, edgecolor='black', linewidth=0.5)
+                x_pos += len(prague_tputs) * 0.8
+            
+            # Plot BBR flows
+            if bbr_tputs:
+                bbr_x = [x_pos + i*0.8 for i in range(len(bbr_tputs))]
+                bars_b = ax.bar(bbr_x, bbr_tputs, 0.7, label='BBRv3' if x_pos <= 1 else "", 
+                              color='#ff7f0e', alpha=0.8, edgecolor='black', linewidth=0.5)
+                x_pos += len(bbr_tputs) * 0.8
+            
+            # Add experiment label
+            center_x = x_pos - (len(throughputs) * 0.8) / 2
+            x_labels.append(exp_name)
+            x_positions.append(center_x)
+            
+            # Add fairness index as text
+            jfi = stats.get('jains_fairness_index', 0)
+            ax.text(center_x, max(throughputs) + 5, f'JFI: {jfi:.3f}', 
+                   ha='center', va='bottom', fontweight='bold', fontsize=10,
+                   bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.7))
+            
+            x_pos += 1.5  # Gap between experiments
+    
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(x_labels, rotation=45, ha='right')
+    ax.set_ylabel('Throughput (Mbps)', fontsize=12)
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.legend(loc='upper left', fontsize=11)
+    ax.set_ylim(bottom=0)
+
+def plot_fairness_numbers_display(ax, all_stats):
+    """Display overall fairness metrics clearly"""
+    ax.set_title('Overall Fairness', fontweight='bold', fontsize=14)
+    ax.axis('off')
+    
+    # Create text display of fairness numbers
+    y_pos = 0.9
+    for i, stats in enumerate(all_stats):
+        exp_name = stats['experiment']
+        jfi = stats.get('jains_fairness_index', 0)
+        
+        # Color code based on fairness level
+        if jfi > 0.9:
+            color = 'green'
+            fairness_level = 'Excellent'
+        elif jfi > 0.8:
+            color = 'orange'  
+            fairness_level = 'Good'
+        elif jfi > 0.6:
+            color = 'blue'
+            fairness_level = 'Moderate'
+        else:
+            color = 'red'
+            fairness_level = 'Poor'
+        
+        text = f"{exp_name}: {jfi:.3f}"
+        ax.text(0.1, y_pos, text, transform=ax.transAxes, fontsize=14, 
+               fontweight='bold', color=color)
+        
+        y_pos -= 0.15
+    
+    # Add simple explanation
+    ax.text(0.1, 0.15, "Jain's Fairness Index\n(all flows)", 
+           transform=ax.transAxes, fontsize=11, style='italic')
+    ax.text(0.1, 0.05, ">0.9=Excellent, >0.8=Good", 
+           transform=ax.transAxes, fontsize=10, style='italic')
+
+def plot_dualpi2_queue_analysis(ax, base_dir, all_stats):
+    """Plot DualPI2 queue delay over time with statistics overlay"""
+    ax.set_title('DualPI2 Queue Delay Over Time', fontweight='bold', fontsize=14)
+    
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+    
+    # Collect statistics for text overlay
+    delay_stats = []
+    
+    for i, stats in enumerate(all_stats):
+        exp_name = stats['experiment']
+        exp_dir = Path(f"{base_dir}/{exp_name}")
+        
+        if exp_dir.exists():
+            existing_files, _ = check_experiment_files(exp_dir)
+            l4s_sojourn = load_data_safely(existing_files.get('l4s_sojourn'))
+            
+            if l4s_sojourn is not None:
+                # Plot delay over time
+                times = l4s_sojourn.iloc[:, 0].values
+                delays = l4s_sojourn.iloc[:, 1].values
+                
+                # Use a rolling mean to smooth the data
+                if len(delays) > 100:
+                    window = len(delays) // 50  # Adaptive window size
+                    delays_smooth = pd.Series(delays).rolling(window=window, center=True).mean()
+                    ax.plot(times, delays_smooth, label=exp_name, 
+                           color=colors[i % len(colors)], linewidth=2, alpha=0.8)
+                else:
+                    ax.plot(times, delays, label=exp_name, 
+                           color=colors[i % len(colors)], linewidth=2, alpha=0.8)
+                
+                # Calculate statistics for analysis period (excluding warmup/teardown)
+                analysis_data = l4s_sojourn[
+                    (l4s_sojourn.iloc[:, 0] >= 8) & 
+                    (l4s_sojourn.iloc[:, 0] <= 30)
+                ]
+                if len(analysis_data) > 0:
+                    analysis_delays = analysis_data.iloc[:, 1].values
+                    delay_stats.append({
+                        'exp': exp_name,
+                        'mean': np.mean(analysis_delays),
+                        'median': np.median(analysis_delays),
+                        'p95': np.percentile(analysis_delays, 95),
+                        'p99': np.percentile(analysis_delays, 99)
+                    })
+    
+    # Add analysis window shading
+    ax.axvspan(0, 8, alpha=0.15, color='gray', label='Warmup')
+    
+    ax.set_xlabel('Time (s)', fontsize=12)
+    ax.set_ylabel('Queue Delay (ms)', fontsize=12)
+    ax.set_yscale('log')
+    ax.legend(loc='upper right', fontsize=9, ncol=2)  # Smaller font, 2 columns
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(0, 30)
+    
+    # Add compact statistics text overlay
+    if delay_stats:
+        stats_text = "Stats (mean/median/95th/99th ms):\n"
+        for stat in delay_stats:
+            stats_text += f"{stat['exp']}: {stat['mean']:.1f}/{stat['median']:.1f}/{stat['p95']:.1f}/{stat['p99']:.1f}\n"
+        
+        ax.text(0.02, 0.55, stats_text, transform=ax.transAxes, 
+               fontsize=8, va='top', ha='left',
+               bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.9))
+
+def plot_fairness_metrics_comparison(ax, all_stats):
+    """Plot fairness metrics with clear numerical values"""
+    ax.set_title('Fairness Metrics', fontweight='bold', fontsize=14)
+    
+    exp_names = [stats['experiment'] for stats in all_stats]
+    jfi_values = [stats.get('jains_fairness_index', 0) for stats in all_stats]
+    algo_jfi_values = [stats.get('algorithm_fairness', 0) for stats in all_stats]
+    
+    x = np.arange(len(exp_names))
+    width = 0.35
+    
+    # Overall fairness bars
+    bars1 = ax.bar(x - width/2, jfi_values, width, label='Overall JFI', 
+                   color='#2ecc71', alpha=0.8, edgecolor='black')
+    
+    # Algorithm fairness bars
+    bars2 = ax.bar(x + width/2, algo_jfi_values, width, label='Algorithm JFI', 
+                   color='#3498db', alpha=0.8, edgecolor='black')
+    
+    # Add value labels on bars
+    for i, (bar1, bar2, jfi, algo_jfi) in enumerate(zip(bars1, bars2, jfi_values, algo_jfi_values)):
+        ax.text(bar1.get_x() + bar1.get_width()/2., bar1.get_height() + 0.01,
+               f'{jfi:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=9)
+        ax.text(bar2.get_x() + bar2.get_width()/2., bar2.get_height() + 0.01,
+               f'{algo_jfi:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=9)
+    
+    # Reference lines
+    ax.axhline(y=0.9, color='green', linestyle='--', alpha=0.7, linewidth=2, label='Excellent (≥0.9)')
+    ax.axhline(y=0.8, color='orange', linestyle='--', alpha=0.7, linewidth=2, label='Good (≥0.8)')
+    
+    ax.set_xticks(x)
+    ax.set_xticklabels(exp_names, rotation=45, ha='right')
+    ax.set_ylabel('Fairness Index', fontsize=12)
+    ax.set_ylim(0, 1.05)
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.legend(loc='lower right', fontsize=9)
+
+def plot_queueing_delay_comparison(ax, base_dir, all_stats):
+    """Plot queueing delay comparison with box plots"""
+    ax.set_title('Queueing Delay Distribution by Algorithm', fontweight='bold', fontsize=14)
+    
+    # Collect delay data for each experiment
+    prague_delays_all = []
+    bbr_delays_all = []
+    exp_labels = []
+    
+    for stats in all_stats:
+        exp_name = stats['experiment']
+        exp_dir = Path(f"{base_dir}/{exp_name}")
+        
+        if exp_dir.exists():
+            existing_files, _ = check_experiment_files(exp_dir)
+            
+            prague_sojourn = load_data_safely(existing_files.get('prague_sojourn'))
+            bbr_sojourn = load_data_safely(existing_files.get('bbr_sojourn'))
+            
+            # Extract delay data for analysis period
+            if prague_sojourn is not None:
+                analysis_data = prague_sojourn[
+                    (prague_sojourn.iloc[:, 0] >= 5) & 
+                    (prague_sojourn.iloc[:, 0] <= 55)
+                ]
+                if len(analysis_data) > 0:
+                    prague_delays_all.append(analysis_data.iloc[:, 1].values)
+                else:
+                    prague_delays_all.append([])
+            else:
+                prague_delays_all.append([])
+            
+            if bbr_sojourn is not None:
+                analysis_data = bbr_sojourn[
+                    (bbr_sojourn.iloc[:, 0] >= 5) & 
+                    (bbr_sojourn.iloc[:, 0] <= 55)
+                ]
+                if len(analysis_data) > 0:
+                    bbr_delays_all.append(analysis_data.iloc[:, 1].values)
+                else:
+                    bbr_delays_all.append([])
+            else:
+                bbr_delays_all.append([])
+            
+            exp_labels.append(exp_name)
+    
+    # Create grouped box plots
+    all_delays = []
+    all_labels = []
+    positions = []
+    colors = []
+    
+    pos = 1
+    for i, exp in enumerate(exp_labels):
+        if len(prague_delays_all[i]) > 0:
+            all_delays.append(prague_delays_all[i])
+            all_labels.append(f'{exp}\nPrague')
+            positions.append(pos)
+            colors.append('#1f77b4')
+            pos += 1
+        
+        if len(bbr_delays_all[i]) > 0:
+            all_delays.append(bbr_delays_all[i])
+            all_labels.append(f'{exp}\nBBRv3')
+            positions.append(pos)
+            colors.append('#ff7f0e')
+            pos += 1
+        
+        pos += 0.5  # Gap between experiments
+    
+    if all_delays:
+        bp = ax.boxplot(all_delays, positions=positions, patch_artist=True, 
+                       showfliers=False, widths=0.8)
+        
+        # Color the boxes
+        for i, (patch, color) in enumerate(zip(bp['boxes'], colors)):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+    
+    ax.set_xticks(positions)
+    ax.set_xticklabels(all_labels, rotation=45, ha='right', fontsize=9)
+    ax.set_ylabel('Queue Delay (ms)', fontsize=12)
+    ax.set_yscale('log')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add legend
+    from matplotlib.patches import Patch
+    legend_elements = [Patch(facecolor='#1f77b4', alpha=0.7, label='Prague'),
+                      Patch(facecolor='#ff7f0e', alpha=0.7, label='BBRv3')]
+    ax.legend(handles=legend_elements, loc='upper right')
+
+def plot_algorithm_balance(ax, all_stats):
+    """Plot algorithm throughput balance"""
+    ax.set_title('Algorithm Throughput Balance', fontweight='bold', fontsize=14)
+    
+    prague_tputs = []
+    bbr_tputs = []
+    exp_names = []
+    
+    for stats in all_stats:
+        prague_avg = stats.get('prague_avg_throughput', 0)
+        bbr_avg = stats.get('bbr_avg_throughput', 0)
+        
+        if prague_avg > 0 and bbr_avg > 0:
+            prague_tputs.append(prague_avg)
+            bbr_tputs.append(bbr_avg)
+            exp_names.append(stats['experiment'])
+    
+    if prague_tputs and bbr_tputs:
+        x = np.arange(len(exp_names))
+        width = 0.35
+        
+        bars1 = ax.bar(x - width/2, prague_tputs, width, label='Prague Avg', 
+                       color='#1f77b4', alpha=0.8, edgecolor='black')
+        bars2 = ax.bar(x + width/2, bbr_tputs, width, label='BBRv3 Avg', 
+                       color='#ff7f0e', alpha=0.8, edgecolor='black')
+        
+        # Add value labels
+        for bar1, bar2, p_tput, b_tput in zip(bars1, bars2, prague_tputs, bbr_tputs):
+            ax.text(bar1.get_x() + bar1.get_width()/2., bar1.get_height() + 1,
+                   f'{p_tput:.1f}', ha='center', va='bottom', fontweight='bold', fontsize=9)
+            ax.text(bar2.get_x() + bar2.get_width()/2., bar2.get_height() + 1,
+                   f'{b_tput:.1f}', ha='center', va='bottom', fontweight='bold', fontsize=9)
+        
+        ax.set_xticks(x)
+        ax.set_xticklabels(exp_names, rotation=45, ha='right')
+        ax.set_ylabel('Throughput (Mbps)', fontsize=12)
+        ax.legend(loc='upper left', fontsize=10)
+        ax.grid(True, alpha=0.3, axis='y')
+
+def plot_summary_table_v2(ax, all_stats):
+    """Plot summary statistics table"""
+    ax.set_title('Experimental Results Summary', fontweight='bold', fontsize=12, pad=10)
+    ax.axis('off')
+    
+    # Create table data
+    table_data = []
+    headers = ['Experiment', 'Prague\nFlows', 'BBRv3\nFlows', 'Overall\nJFI', 'Algorithm\nJFI', 
+              'Prague Avg\n(Mbps)', 'BBRv3 Avg\n(Mbps)', 'Fairness\nClass']
+    
     for stats in all_stats:
         exp = stats['experiment']
-        desc = stats.get('description', '')
-        
-        # Extract key metrics
-        jfi = stats.get('jains_fairness_index', 0)
-        algo_jfi = stats.get('algorithm_fairness', 0)
         prague_flows = stats.get('prague_flows', 0)
         bbr_flows = stats.get('bbr_flows', 0)
-        
-        # Throughput metrics
+        jfi = stats.get('jains_fairness_index', 0)
+        algo_jfi = stats.get('algorithm_fairness', 0)
         prague_tput = stats.get('prague_avg_throughput', 0)
         bbr_tput = stats.get('bbr_avg_throughput', 0)
-        tput_ratio = stats.get('throughput_ratio', 0)
-        
-        # Queueing delays
-        prague_delay = stats.get('prague_queue', {}).get('mean_delay', 0) if 'prague_queue' in stats else 0
-        bbr_delay = stats.get('bbr_queue', {}).get('mean_delay', 0) if 'bbr_queue' in stats else 0
         
         # Fairness classification
         if jfi > 0.9:
             fairness_class = "Excellent"
         elif jfi > 0.8:
-            fairness_class = "Good"  
+            fairness_class = "Good"
         elif jfi > 0.6:
             fairness_class = "Moderate"
         else:
             fairness_class = "Poor"
         
-        summary_data.append({
-            'Experiment': exp,
-            'Description': desc,
-            'Prague_Flows': prague_flows,
-            'BBRv3_Flows': bbr_flows,
-            'Overall_JFI': f"{jfi:.3f}",
-            'Algorithm_JFI': f"{algo_jfi:.3f}",
-            'Fairness_Class': fairness_class,
-            'Prague_Tput_Mbps': f"{prague_tput:.1f}" if prague_tput > 0 else "N/A",
-            'BBRv3_Tput_Mbps': f"{bbr_tput:.1f}" if bbr_tput > 0 else "N/A",
-            'Tput_Ratio': f"{tput_ratio:.3f}" if tput_ratio > 0 else "N/A",
-            'Prague_Delay_ms': f"{prague_delay:.2f}" if prague_delay > 0 else "N/A",
-            'BBRv3_Delay_ms': f"{bbr_delay:.2f}" if bbr_delay > 0 else "N/A"
-        })
+        row = [exp, str(prague_flows), str(bbr_flows), f'{jfi:.3f}', f'{algo_jfi:.3f}',
+               f'{prague_tput:.1f}' if prague_tput > 0 else 'N/A',
+               f'{bbr_tput:.1f}' if bbr_tput > 0 else 'N/A', fairness_class]
+        table_data.append(row)
     
-    # Save as CSV
+    # Create table
+    table = ax.table(cellText=table_data, colLabels=headers, loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 2)
+    
+    # Style the table
+    for i in range(len(headers)):
+        table[(0, i)].set_facecolor('#4CAF50')
+        table[(0, i)].set_text_props(weight='bold', color='white')
+    
+    # Color code fairness classes
+    for i, row in enumerate(table_data, 1):
+        fairness = row[-1]
+        if fairness == 'Excellent':
+            color = '#90EE90'  # Light green
+        elif fairness == 'Good':
+            color = '#FFE55C'  # Light yellow
+        elif fairness == 'Moderate':
+            color = '#FFB347'  # Light orange
+        else:
+            color = '#FFB3BA'  # Light red
+        
+        # Check if the cell exists before setting color
+        if (i, -1) in table._cells:
+            table[(i, -1)].set_facecolor(color)
+
+def create_detailed_per_flow_plots(base_dir, all_stats):
+    """Create detailed per-flow analysis plots"""
+    print("  📈 Creating detailed per-flow plots...")
+    
+    # Create individual experiment plots
+    for stats in all_stats:
+        exp_name = stats['experiment']
+        exp_dir = Path(f"{base_dir}/{exp_name}")
+        
+        if exp_dir.exists():
+            create_individual_experiment_plot(exp_dir, stats)
+
+def create_individual_experiment_plot(exp_dir, stats):
+    """Create detailed plot for individual experiment"""
+    exp_name = stats['experiment']
+    
+    # Load data
+    existing_files, _ = check_experiment_files(exp_dir)
+    prague_per_flow = load_data_safely(existing_files.get('prague_per_flow'))
+    bbr_per_flow = load_data_safely(existing_files.get('bbr_per_flow'))
+    
+    if prague_per_flow is None and bbr_per_flow is None:
+        return
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    fig.suptitle(f'Detailed Analysis: {exp_name} ({stats.get("description", "")})', 
+                 fontsize=14, fontweight='bold')
+    
+    # Plot 1: Per-flow throughput over time
+    ax1.set_title('Individual Flow Throughput Over Time')
+    
+    if prague_per_flow is not None:
+        for port in prague_per_flow.iloc[:, 1].unique():
+            port_data = prague_per_flow[prague_per_flow.iloc[:, 1] == port]
+            ax1.plot(port_data.iloc[:, 0], port_data.iloc[:, 2], 
+                    label=f'Prague-{int(port)-100}', color='#1f77b4', alpha=0.7, linewidth=2)
+    
+    if bbr_per_flow is not None:
+        for port in bbr_per_flow.iloc[:, 1].unique():
+            port_data = bbr_per_flow[bbr_per_flow.iloc[:, 1] == port]
+            ax1.plot(port_data.iloc[:, 0], port_data.iloc[:, 2], 
+                    label=f'BBRv3-{int(port)-200}', color='#ff7f0e', alpha=0.7, linewidth=2)
+    
+    ax1.axvspan(0, 5, alpha=0.15, color='gray', label='Warmup/Teardown')
+    ax1.axvspan(55, 60, alpha=0.15, color='gray')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Throughput (Mbps)')
+    ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Final throughput comparison
+    ax2.set_title('Final Throughput Distribution')
+    
+    if 'individual_throughputs' in stats and 'flow_labels' in stats:
+        throughputs = stats['individual_throughputs']
+        labels = stats['flow_labels']
+        colors = ['#1f77b4' if 'Prague' in label else '#ff7f0e' for label in labels]
+        
+        bars = ax2.bar(range(len(throughputs)), throughputs, color=colors, alpha=0.8, 
+                      edgecolor='black', linewidth=0.5)
+        
+        # Add value labels
+        for bar, tput in zip(bars, throughputs):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height + 1,
+                    f'{tput:.1f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax2.set_xticks(range(len(labels)))
+        ax2.set_xticklabels(labels, rotation=45, ha='right')
+        ax2.set_ylabel('Throughput (Mbps)')
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # Add fairness info
+        jfi = stats.get('jains_fairness_index', 0)
+        ax2.text(0.02, 0.98, f'Overall JFI: {jfi:.3f}', transform=ax2.transAxes, 
+                fontsize=12, fontweight='bold', va='top',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.8))
+    
+    plt.tight_layout()
+    output_file = exp_dir / f'{exp_name}_detailed_analysis.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+
+def create_queueing_analysis_plots(base_dir, all_stats):
+    """Create detailed queueing analysis plots"""
+    print("  📊 Creating queueing analysis plots...")
+    
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Detailed Queueing Delay Analysis', fontsize=16, fontweight='bold')
+    
+    # Collect all queueing data
+    all_prague_delays = []
+    all_bbr_delays = []
+    delay_stats = []
+    
+    for stats in all_stats:
+        exp_name = stats['experiment']
+        exp_dir = Path(f"{base_dir}/{exp_name}")
+        
+        if exp_dir.exists():
+            existing_files, _ = check_experiment_files(exp_dir)
+            l4s_sojourn = load_data_safely(existing_files.get('l4s_sojourn'))
+            
+            if l4s_sojourn is not None:
+                analysis_data = l4s_sojourn[
+                    (l4s_sojourn.iloc[:, 0] >= 5) & 
+                    (l4s_sojourn.iloc[:, 0] <= 25)  # 30s experiment
+                ]
+                if len(analysis_data) > 0:
+                    delays = analysis_data.iloc[:, 1].values
+                    all_prague_delays.extend(delays)  # Combined L4S data
+                    all_bbr_delays.extend(delays)     # Same data
+                    
+                    delay_stats.append({
+                        'exp': exp_name,
+                        'prague_mean': np.mean(delays),
+                        'bbr_mean': np.mean(delays),    # Same for both since it's L4S combined
+                        'prague_p95': np.percentile(delays, 95),
+                        'bbr_p95': np.percentile(delays, 95)
+                    })
+    
+    # Plot 2: Mean delays by experiment
+    if delay_stats:
+        exp_names = [d['exp'] for d in delay_stats]
+        mean_delays = [d['prague_mean'] for d in delay_stats]
+        
+        ax2.bar(exp_names, mean_delays, color='#3498db', alpha=0.8)
+        ax2.set_xticklabels(exp_names, rotation=45, ha='right')
+        ax2.set_ylabel('Mean Delay (ms)')
+        ax2.set_title('Mean L4S Queueing Delays by Experiment')
+        ax2.set_yscale('log')
+        ax2.grid(True, alpha=0.3)
+        
+        # Add value labels
+        for bar, delay in zip(ax2.patches, mean_delays):
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height * 1.1,
+                    f'{delay:.1f}ms', ha='center', va='bottom', fontweight='bold', fontsize=9)
+    
+    # Plot 3: 95th percentile delays
+    if delay_stats:
+        p95_delays = [d['prague_p95'] for d in delay_stats]
+        
+        ax3.bar(exp_names, p95_delays, color='#e74c3c', alpha=0.8)
+        ax3.set_xticklabels(exp_names, rotation=45, ha='right')
+        ax3.set_ylabel('95th Percentile Delay (ms)')
+        ax3.set_title('95th Percentile L4S Queueing Delays')
+        ax3.set_yscale('log')
+        ax3.grid(True, alpha=0.3)
+        
+        # Add value labels
+        for bar, delay in zip(ax3.patches, p95_delays):
+            height = bar.get_height()
+            ax3.text(bar.get_x() + bar.get_width()/2., height * 1.1,
+                    f'{delay:.1f}ms', ha='center', va='bottom', fontweight='bold', fontsize=9)
+    
+    # Plot 4: Delay statistics summary
+    if delay_stats:
+        ax4.axis('off')
+        ax4.set_title('L4S Queueing Summary Statistics', fontweight='bold')
+        
+        # Create text summary
+        y_pos = 0.9
+        ax4.text(0.1, y_pos, "Experiment | Mean (ms) | 95th (ms)", 
+                fontweight='bold', transform=ax4.transAxes, fontsize=12)
+        y_pos -= 0.15
+        
+        for stat in delay_stats:
+            text = f"{stat['exp']:8} | {stat['prague_mean']:8.1f} | {stat['prague_p95']:8.1f}"
+            ax4.text(0.1, y_pos, text, transform=ax4.transAxes, 
+                    fontsize=11, fontfamily='monospace')
+            y_pos -= 0.12
+    
+    plt.tight_layout()
+    output_file = base_dir / 'rq4_queueing_analysis.png'
+    plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"     ✓ Saved: {output_file.name}")
+
+def create_rq4_summary_table(base_dir, all_stats):
+    """Create CSV summary table of RQ4 results"""
+    print("  📊 Creating summary table...")
+    
+    # Create summary data
+    summary_data = []
+    for stats in all_stats:
+        exp = stats['experiment']
+        prague_flows = stats.get('prague_flows', 0)
+        bbr_flows = stats.get('bbr_flows', 0)
+        jfi = stats.get('jains_fairness_index', 0)
+        algo_jfi = stats.get('algorithm_fairness', 0)
+        prague_tput = stats.get('prague_avg_throughput', 0)
+        bbr_tput = stats.get('bbr_avg_throughput', 0)
+        
+        # Fairness classification
+        if jfi > 0.9:
+            fairness_class = "Excellent"
+        elif jfi > 0.8:
+            fairness_class = "Good"
+        elif jfi > 0.6:
+            fairness_class = "Moderate"
+        else:
+            fairness_class = "Poor"
+        
+        summary_data.append([
+            exp, prague_flows, bbr_flows, f'{jfi:.3f}', f'{algo_jfi:.3f}',
+            f'{prague_tput:.1f}' if prague_tput > 0 else 'N/A',
+            f'{bbr_tput:.1f}' if bbr_tput > 0 else 'N/A', fairness_class
+        ])
+    
+    # Save to CSV
     output_file = base_dir / 'rq4_summary.csv'
-    df = pd.DataFrame(summary_data)
-    df.to_csv(output_file, index=False)
+    with open(output_file, 'w') as f:
+        f.write("Experiment,Prague_Flows,BBRv3_Flows,Overall_JFI,Algorithm_JFI,Prague_Avg_Mbps,BBRv3_Avg_Mbps,Fairness_Class\n")
+        for row in summary_data:
+            f.write(','.join(map(str, row)) + '\n')
     
-    # Print formatted table
-    print(f"\n{'='*100}")
-    print(f"{'RQ4 PRAGUE vs BBRv3 L4S FAIRNESS ANALYSIS SUMMARY':^100}")
-    print(f"{'='*100}")
-    
-    for row in summary_data:
-        print(f"\n🎯 {row['Experiment']:8} | {row['Description']}")
-        print(f"   Flow config: {row['Prague_Flows']} Prague + {row['BBRv3_Flows']} BBRv3")
-        print(f"   Overall fairness: {row['Fairness_Class']:10} (JFI: {row['Overall_JFI']})")
-        print(f"   Algorithm fairness: {row['Algorithm_JFI']} (Prague vs BBRv3)")
-        print(f"   Throughput: Prague {row['Prague_Tput_Mbps']:>6} Mbps, BBRv3 {row['BBRv3_Tput_Mbps']:>6} Mbps")
-        print(f"   Queue delay: Prague {row['Prague_Delay_ms']:>6} ms, BBRv3 {row['BBRv3_Delay_ms']:>6} ms")
-    
-    print(f"\n✅ RQ4 summary saved: {output_file.name}")
+    print(f"     ✓ Saved: {output_file.name}")
 
 def main():
     parser = argparse.ArgumentParser(description='RQ4 Analysis: Prague vs BBRv3 L4S Fairness')
@@ -938,6 +1374,11 @@ def main():
         '--plots-only',
         action='store_true',
         help='Only create plots, skip individual analysis'
+    )
+    parser.add_argument(
+        '--paper-plots',
+        action='store_true',
+        help='Create only publication-quality plots for paper'
     )
     
     args = parser.parse_args()
@@ -963,7 +1404,6 @@ def main():
             sys.exit(1)
 
         print("🚀 === RQ4 COMPREHENSIVE ANALYSIS === 🚀")
-        print(f"Base directory: {base_dir}")
         
         # Find all RQ4 experiment directories
         exp_dirs = [d for d in sorted(base_dir.iterdir()) 
@@ -1004,9 +1444,16 @@ def main():
             print("❌ No valid experiments found to analyze!")
             sys.exit(1)
         
+        # Handle paper plots only option
+        if args.paper_plots:
+            print("\n📊 === CREATING PAPER-QUALITY PLOTS ONLY ===")
+            create_paper_quality_plots(base_dir, all_stats)
+            print("✅ Paper-quality plots created!")
+            return
+        
         # Comparison plots and summary
         print("\n📈 === CREATING COMPARISON ANALYSIS ===")
-        create_rq4_comparison_plots(base_dir, all_stats)
+        create_paper_quality_plots(base_dir, all_stats)
         create_rq4_summary_table(base_dir, all_stats)
         
         # Final summary
@@ -1035,13 +1482,7 @@ def main():
         print(f"\n🎉 === RQ4 ANALYSIS COMPLETE === 🎉")
         print(f"📁 Results saved in: {base_dir}")
         print(f"📊 Individual plots: {len(all_stats)} experiments")
-        print(f"🔄 Comparison plots: Generated")
-        print(f"📄 Summary: rq4_summary.csv")
-        print("\n🚀 Key Findings for Publication:")
-        print("   - Prague-BBRv3 fairness in L4S environment")
-        print("   - Algorithm-specific queueing behavior analysis")
-        print("   - Scalability across different flow ratios")
-        print("   - L4S framework effectiveness for mixed scalable traffic")
+        
 
 if __name__ == '__main__':
     main() 
