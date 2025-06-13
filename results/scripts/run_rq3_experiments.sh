@@ -56,7 +56,7 @@ run_wifi_experiment() {
     error_decimal="$error_rate"
     
     # Run the simulation with RQ3 WiFi defaults
-    ./ns3 run "l4s-wifi-rq3 --numPrague=$num_prague --numCubic=$num_cubic --numBytes=0 --duration=60 --wanLinkDelay=10ms --mcs=4 --channelWidth=20 --spatialStreams=1 --errorRate=$error_decimal --testName=$test_id --showProgress=true --rngRun=1 --enableTraces=true"
+    ./ns3 run "l4s-wifi-rq5 --numPrague=$num_prague --numCubic=$num_cubic --numBytes=0 --duration=60 --wanLinkDelay=10ms --mcs=4 --channelWidth=20 --spatialStreams=1 --errorRate=$error_decimal --testName=$test_id --showProgress=true --rngRun=1 --enableTraces=true"
     
     # Check if simulation completed successfully
     if [ $? -ne 0 ]; then
